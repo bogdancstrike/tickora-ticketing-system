@@ -16,6 +16,7 @@ import {
   createComment, deleteAttachment, deleteComment, downloadAttachmentUrl, getMe,
   getTicket, getTicketOptions, listAssignableUsers, listAttachments, listComments,
   listTicketAudit, listTickets, markDone, registerAttachment, reopenTicket, requestAttachmentUpload,
+  deleteTicket,
   type AttachmentDto,
   type AuditEventDto, type TicketDto,
 } from '@/api/tickets'
@@ -136,6 +137,7 @@ function WorkflowActions({ ticket }: { ticket: TicketDto }) {
   const [form] = Form.useForm()
   const [modal, setModal] = useState<string | null>(null)
   const [msg, holder] = message.useMessage()
+  const navigate = useNavigate()
   const queryClient = useQueryClient()
   const user = useSessionStore((s) => s.user)
   const options = useQuery({
@@ -149,6 +151,8 @@ function WorkflowActions({ ticket }: { ticket: TicketDto }) {
     enabled: !!ticket.current_sector_code,
     staleTime: 60_000,
   })
+
+  const isClosed = ['done', 'closed', 'cancelled'].includes(ticket.status)
 
   const finish = async () => {
     setModal(null)
@@ -167,11 +171,16 @@ function WorkflowActions({ ticket }: { ticket: TicketDto }) {
       if (action === 'reopen') return reopenTicket(ticket.id, values.reason)
       if (action === 'cancel') return cancelTicket(ticket.id, values.reason)
       if (action === 'priority') return changePriority(ticket.id, values.priority, values.reason)
+      if (action === 'delete') return deleteTicket(ticket.id)
       throw new Error('Unknown action')
     },
-    onSuccess: async () => {
-      msg.success('Ticket updated')
-      await finish()
+    onSuccess: async (_, vars) => {
+      msg.success(`Ticket ${vars.action === 'delete' ? 'deleted' : 'updated'}`)
+      if (vars.action === 'delete') {
+        navigate('/tickets')
+      } else {
+        await finish()
+      }
     },
     onError: (err) => msg.error(err.message),
   })
@@ -201,17 +210,30 @@ function WorkflowActions({ ticket }: { ticket: TicketDto }) {
           <Button icon={<CheckCircleOutlined />} onClick={() => setModal('mark_done')}>Mark done</Button>
         )}
         {canClose(ticket, user) && (
-          <Button icon={<CloseCircleOutlined />} onClick={() => run.mutate({ action: 'close', values: {} })}>
-            Close
+          <Button danger icon={<CloseCircleOutlined />} onClick={() => run.mutate({ action: 'close', values: {} })}>
+            Close Ticket
           </Button>
         )}
         {canReopen(ticket, user) && (
-          <Button icon={<ReloadOutlined />} onClick={() => setModal('reopen')}>Reopen</Button>
+          <Button type="primary" icon={<ReloadOutlined />} onClick={() => setModal('reopen')}>Reopen Ticket</Button>
         )}
         {canCancel(ticket, user) && (
           <Button danger icon={<StopOutlined />} onClick={() => setModal('cancel')}>Cancel</Button>
         )}
-        <Button icon={<EditOutlined />} onClick={() => setModal('priority')}>Priority</Button>
+        {!isClosed && (
+          <Button icon={<EditOutlined />} onClick={() => setModal('priority')}>Priority</Button>
+        )}
+        {user?.roles.includes('tickora_admin') && (
+           <Button danger type="dashed" loading={run.isPending} onClick={() => {
+             Modal.confirm({
+               title: 'Delete ticket?',
+               content: 'This will soft-delete the ticket. It will not appear in lists.',
+               okText: 'Yes, Delete',
+               okType: 'danger',
+               onOk: () => run.mutate({ action: 'delete', values: {} })
+             })
+           }}>Delete</Button>
+        )}
       </Flex>
       <Modal
         title={modal?.split('_').join(' ')}
@@ -254,8 +276,8 @@ function WorkflowActions({ ticket }: { ticket: TicketDto }) {
             </Form.Item>
           )}
           {modal === 'mark_done' && (
-            <Form.Item name="resolution" label="Resolution" rules={[{ required: true, min: 5 }]}>
-              <Input.TextArea rows={4} />
+            <Form.Item name="resolution" label="Resolution (optional)">
+              <Input.TextArea rows={4} placeholder="How was this ticket resolved?" />
             </Form.Item>
           )}
           {['assign_sector', 'assign_to_user', 'priority', 'reopen', 'cancel'].includes(modal || '') && (
@@ -269,7 +291,7 @@ function WorkflowActions({ ticket }: { ticket: TicketDto }) {
   )
 }
 
-function CommentBox({ ticketId }: { ticketId: string }) {
+function CommentBox({ ticketId, disabled }: { ticketId: string; disabled?: boolean }) {
   const [form] = Form.useForm()
   const [msg, holder] = message.useMessage()
   const queryClient = useQueryClient()
@@ -296,17 +318,20 @@ function CommentBox({ ticketId }: { ticketId: string }) {
   return (
     <div style={{ display: 'grid', gap: 16 }}>
       {holder}
-      <Form form={form} layout="vertical" initialValues={{ is_public: true }} onFinish={(v) => add.mutate(v)}>
-        <Form.Item name="body" rules={[{ required: true, min: 2 }]}>
-          <Input.TextArea rows={3} placeholder="Add a comment" />
-        </Form.Item>
-        <Flex justify="space-between" align="center">
-          <Form.Item name="is_public" valuePropName="checked" style={{ marginBottom: 0 }}>
-            <Checkbox>Public comment</Checkbox>
+      {!disabled && (
+        <Form form={form} layout="vertical" initialValues={{ is_public: true }} onFinish={(v) => add.mutate(v)}>
+          <Form.Item name="body" rules={[{ required: true, min: 2 }]}>
+            <Input.TextArea rows={3} placeholder="Add a comment" />
           </Form.Item>
-          <Button htmlType="submit" type="primary" loading={add.isPending}>Post</Button>
-        </Flex>
-      </Form>
+          <Flex justify="space-between" align="center">
+            <Form.Item name="is_public" valuePropName="checked" style={{ marginBottom: 0 }}>
+              <Checkbox>Public comment</Checkbox>
+            </Form.Item>
+            <Button htmlType="submit" type="primary" loading={add.isPending}>Post</Button>
+          </Flex>
+        </Form>
+      )}
+      {disabled && <Alert type="info" message="Comments are disabled for closed tickets." />}
       <List
         loading={comments.isLoading}
         dataSource={comments.data?.items || []}
@@ -330,7 +355,7 @@ function CommentBox({ ticketId }: { ticketId: string }) {
   )
 }
 
-function AttachmentUploader({ ticketId }: { ticketId: string }) {
+function AttachmentUploader({ ticketId, disabled }: { ticketId: string; disabled?: boolean }) {
   const [visibility, setVisibility] = useState<AttachmentDto['visibility']>('private')
   const [msg, holder] = message.useMessage()
   const queryClient = useQueryClient()
@@ -364,26 +389,28 @@ function AttachmentUploader({ ticketId }: { ticketId: string }) {
   return (
     <div style={{ display: 'grid', gap: 16 }}>
       {holder}
-      <Flex wrap="wrap" gap={8} align="center">
-        <Select value={visibility} onChange={setVisibility} style={{ width: 130 }} options={[
-          { value: 'public', label: 'Public' },
-          { value: 'private', label: 'Private' },
-        ]} />
-        <Button icon={<PaperClipOutlined />} loading={upload.isPending}>
-          <label style={{ cursor: 'pointer' }}>
-            Upload
-            <input
-              type="file"
-              hidden
-              onChange={(event) => {
-                const file = event.target.files?.[0]
-                event.target.value = ''
-                if (file) upload.mutate(file)
-              }}
-            />
-          </label>
-        </Button>
-      </Flex>
+      {!disabled && (
+        <Flex wrap="wrap" gap={8} align="center">
+          <Select value={visibility} onChange={setVisibility} style={{ width: 130 }} options={[
+            { value: 'public', label: 'Public' },
+            { value: 'private', label: 'Private' },
+          ]} />
+          <Button icon={<PaperClipOutlined />} loading={upload.isPending}>
+            <label style={{ cursor: 'pointer' }}>
+              Upload
+              <input
+                type="file"
+                hidden
+                onChange={(event) => {
+                  const file = event.target.files?.[0]
+                  event.target.value = ''
+                  if (file) upload.mutate(file)
+                }}
+              />
+            </label>
+          </Button>
+        </Flex>
+      )}
       <List
         loading={attachments.isLoading}
         dataSource={attachments.data?.items || []}
@@ -448,6 +475,9 @@ function TicketDetails({ ticketId }: { ticketId?: string }) {
     enabled: !!ticketId,
   })
 
+  const user = useSessionStore(s => s.user)
+  const isClosed = ticket ? ['done', 'closed', 'cancelled'].includes(ticket.status) : false
+
   return (
     <div style={{ padding: 24, display: 'grid', gap: 16 }}>
       <Flex justify="space-between" align="center" wrap="wrap" gap={12}>
@@ -486,10 +516,19 @@ function TicketDetails({ ticketId }: { ticketId?: string }) {
 
           <Tabs
             items={[
-              { key: 'comments', label: 'Comments', children: <CommentBox ticketId={ticket.id} /> },
-              { key: 'attachments', label: 'Attachments', children: <AttachmentUploader ticketId={ticket.id} /> },
+              { key: 'comments', label: 'Comments', children: <CommentBox ticketId={ticket.id} disabled={isClosed} /> },
+              { key: 'attachments', label: 'Attachments', children: <AttachmentUploader ticketId={ticket.id} disabled={isClosed} /> },
               { key: 'audit', label: 'Audit', children: <TicketAudit ticketId={ticket.id} /> },
-            ]}
+            ].filter(item => {
+              if (item.key === 'audit') {
+                 const isAdmin = user?.roles.includes('tickora_admin')
+                 const isAuditor = user?.roles.includes('tickora_auditor')
+                 const isDistributor = user?.roles.includes('tickora_distributor')
+                 const isStaff = !!user?.sectors?.some(s => s.sectorCode === ticket.current_sector_code)
+                 return isAdmin || isAuditor || isDistributor || isStaff
+              }
+              return true
+            })}
           />
 
           <Descriptions bordered size="small" column={1}>
@@ -542,37 +581,44 @@ export function TicketsPage() {
     {
       title: 'Code',
       dataIndex: 'ticket_code',
-      width: 150,
+      width: 140,
       render: (value) => <Typography.Text strong>{value}</Typography.Text>,
     },
     {
       title: 'Title',
       dataIndex: 'title',
+      width: 320,
       ellipsis: true,
       render: (value, row) => value || row.txt?.slice(0, 90) || '-',
     },
     {
       title: 'Status',
       dataIndex: 'status',
-      width: 170,
+      width: 160,
       render: (value) => <Tag color={STATUS_COLORS[value]}>{value}</Tag>,
     },
     {
       title: 'Priority',
       dataIndex: 'priority',
-      width: 120,
+      width: 110,
       render: (value) => <Tag color={PRIORITY_COLORS[value]}>{value}</Tag>,
     },
     {
       title: 'Sector',
       dataIndex: 'current_sector_code',
-      width: 110,
+      width: 100,
       render: (value) => value ? <Tag>{value}</Tag> : '-',
+    },
+    {
+      title: 'Created',
+      dataIndex: 'created_at',
+      width: 150,
+      render: fmt,
     },
     {
       title: 'Updated',
       dataIndex: 'updated_at',
-      width: 170,
+      width: 150,
       render: fmt,
     },
   ], [])

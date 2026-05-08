@@ -16,6 +16,7 @@ import { AuditExplorerPage } from '@/pages/AuditExplorerPage'
 import { CreateTicketPage } from '@/pages/CreateTicketPage'
 import { ReviewTicketsPage } from '@/pages/ReviewTicketsPage'
 import { DashboardPage } from '@/pages/DashboardPage'
+import { ProfilePage } from '@/pages/ProfilePage'
 import { RequireRole } from '@/auth/RequireRole'
 import { NotificationDropdown } from '@/components/common/NotificationDropdown'
 

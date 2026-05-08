@@ -97,7 +97,7 @@ export function AuditExplorerPage() {
       <Form layout="inline" onFinish={onFilter}>
         <Form.Item name="range"><RangePicker /></Form.Item>
         <Form.Item name="action"><Input allowClear placeholder="Action" /></Form.Item>
-        <Form.Item name="actor_username"><Input allowClear placeholder="Actor username" /></Form.Item>
+        <Form.Item name="actor_username"><Input allowClear placeholder="username" /></Form.Item>
         <Form.Item name="ticket_id"><Input allowClear placeholder="Ticket ID" /></Form.Item>
         <Form.Item>
           <Space>
