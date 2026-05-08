@@ -1,29 +1,108 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Dropdown, Modal, Form, Input, Button, Space, message } from 'antd'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { DownOutlined } from '@ant-design/icons'
+import { DownOutlined, SwapOutlined } from '@ant-design/icons'
 import { changeTicketStatus, type TicketDto } from '@/api/tickets'
+import { useSessionStore } from '@/stores/sessionStore'
 import { StatusTag } from './StatusTag'
 
-const ALLOWED_TRANSITIONS: Record<string, Array<{ to: string; label: string }>> = {
-  pending:            [{ to: 'in_progress', label: 'Take ownership' }, { to: 'cancelled', label: 'Cancel' }],
-  assigned_to_sector: [{ to: 'in_progress', label: 'Take ownership' }, { to: 'cancelled', label: 'Cancel' }],
-  in_progress:        [{ to: 'done', label: 'Mark done' }, { to: 'assigned_to_sector', label: 'Unassign · back to sector' }],
-  reopened:           [{ to: 'in_progress', label: 'Take ownership' }, { to: 'done', label: 'Mark done' }],
-  done:               [{ to: 'closed', label: 'Close ticket' }, { to: 'reopened', label: 'Reopen' }],
-  closed:             [{ to: 'reopened', label: 'Reopen' }],
+interface Transition { to: string; label: string }
+
+const STAFF_TRANSITIONS: Record<string, Transition[]> = {
+  pending: [
+    { to: 'in_progress', label: 'Take ownership' },
+    { to: 'cancelled',   label: 'Cancel' },
+  ],
+  assigned_to_sector: [
+    { to: 'in_progress', label: 'Take ownership' },
+    { to: 'cancelled',   label: 'Cancel' },
+  ],
+  in_progress: [
+    { to: 'done',               label: 'Mark done' },
+    { to: 'closed',             label: 'Close ticket' },
+    { to: 'assigned_to_sector', label: 'Unassign · back to sector' },
+    { to: 'cancelled',          label: 'Cancel' },
+  ],
+  reopened: [
+    { to: 'in_progress', label: 'Take ownership' },
+    { to: 'done',        label: 'Mark done' },
+    { to: 'closed',      label: 'Close ticket' },
+    { to: 'cancelled',   label: 'Cancel' },
+  ],
+  done: [
+    { to: 'closed',   label: 'Close ticket' },
+    { to: 'reopened', label: 'Reopen' },
+  ],
+  closed: [
+    { to: 'reopened', label: 'Reopen' },
+  ],
+  cancelled: [
+    { to: 'reopened', label: 'Reopen' },
+  ],
+}
+
+// Beneficiaries (the requester / external user) only acknowledge or reopen.
+const REQUESTER_TRANSITIONS: Record<string, Transition[]> = {
+  done:   [{ to: 'closed', label: 'Acknowledge & close' }, { to: 'reopened', label: 'Reopen' }],
+  closed: [{ to: 'reopened', label: 'Reopen' }],
 }
 
 const REQUIRES_REASON = new Set(['cancelled', 'reopened'])
+// Optional but prompted: ask the operator to leave a closing note even though
+// the backend is happy with empty.
+const OPTIONAL_REASON = new Set(['done', 'closed', 'assigned_to_sector'])
 
-export function StatusChanger({ ticket, size = 'middle' }: { ticket: TicketDto; size?: 'small' | 'middle' }) {
+const REASON_LABELS: Record<string, { label: string; placeholder?: string }> = {
+  done:               { label: 'Resolution (optional)',         placeholder: 'How was this ticket resolved?' },
+  closed:             { label: 'Closing note (optional)',       placeholder: 'Anything to add before closing?' },
+  cancelled:          { label: 'Cancellation reason',           placeholder: 'Why is this ticket being cancelled?' },
+  reopened:           { label: 'Reopen reason',                 placeholder: 'Why is this ticket being reopened?' },
+  assigned_to_sector: { label: 'Reason (optional)',             placeholder: 'Why are you releasing this ticket?' },
+}
+
+export function StatusChanger({
+  ticket,
+  size = 'middle',
+  mode = 'tag',
+}: {
+  ticket: TicketDto
+  size?: 'small' | 'middle'
+  /** 'tag' shows the StatusTag with a chevron; 'button' shows a labeled "Status" Button. */
+  mode?: 'tag' | 'button'
+}) {
   const [pending, setPending] = useState<string | null>(null)
   const [step, setStep] = useState<1 | 2>(1)
   const [form] = Form.useForm<{ reason?: string }>()
   const [msg, holder] = message.useMessage()
   const queryClient = useQueryClient()
+  const user = useSessionStore((s) => s.user)
 
-  const transitions = ALLOWED_TRANSITIONS[ticket.status] || []
+  const transitions = useMemo<Transition[]>(() => {
+    if (!user) return []
+    const isAdmin = user.roles.includes('tickora_admin')
+    const isDistributor = user.roles.includes('tickora_distributor')
+    const sectorCode = ticket.current_sector_code
+    const isChiefHere = !!sectorCode && !!user.sectors?.some((s) => s.sectorCode === sectorCode && s.role === 'chief')
+    const isAssignee = ticket.assignee_user_id === user.id
+    const isRequester = (
+      ticket.created_by_user_id === user.id
+      || (ticket.beneficiary_type === 'external' && !!user.email && ticket.requester_email === user.email)
+    )
+
+    // Operators must be assigned (or chief / admin) to drive the workflow.
+    const canDriveAsStaff = isAdmin || isChiefHere || isAssignee
+    if (canDriveAsStaff) return STAFF_TRANSITIONS[ticket.status] || []
+
+    // Distributors triage but only at pending/assigned_to_sector — they can cancel.
+    if (isDistributor && ['pending', 'assigned_to_sector'].includes(ticket.status)) {
+      return [{ to: 'cancelled', label: 'Cancel' }]
+    }
+
+    // Requester / beneficiary path
+    if (isRequester) return REQUESTER_TRANSITIONS[ticket.status] || []
+
+    return []
+  }, [ticket, user])
 
   const change = useMutation({
     mutationFn: ({ status, reason }: { status: string; reason?: string }) =>
@@ -41,12 +120,24 @@ export function StatusChanger({ ticket, size = 'middle' }: { ticket: TicketDto; 
   })
 
   if (transitions.length === 0) {
+    if (mode === 'button') return null
     return (
       <span onClick={(e) => e.stopPropagation()}>
         <StatusTag status={ticket.status} />
       </span>
     )
   }
+
+  const trigger = mode === 'button' ? (
+    <Button icon={<SwapOutlined />} size={size}>
+      Status <DownOutlined />
+    </Button>
+  ) : (
+    <span style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+      <StatusTag status={ticket.status} />
+      <DownOutlined style={{ fontSize: 10, opacity: 0.6 }} />
+    </span>
+  )
 
   return (
     <span onClick={(e) => e.stopPropagation()}>
@@ -66,10 +157,7 @@ export function StatusChanger({ ticket, size = 'middle' }: { ticket: TicketDto; 
           onClick: ({ key }) => { setPending(key); setStep(1) },
         }}
       >
-        <span style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-          <StatusTag status={ticket.status} />
-          <DownOutlined style={{ fontSize: 10, opacity: 0.6 }} />
-        </span>
+        {trigger}
       </Dropdown>
 
       {/* Confirmation modal: two-step (review + reason) */}
@@ -87,27 +175,36 @@ export function StatusChanger({ ticket, size = 'middle' }: { ticket: TicketDto; 
               <span>→</span>
               <StatusTag status={pending} />
             </Space>
-            {step === 1 && (
-              <>
-                <p>You are about to change <code>{ticket.ticket_code}</code> from <b>{ticket.status}</b> to <b>{pending}</b>.</p>
-                {REQUIRES_REASON.has(pending) && (
-                  <Form form={form} layout="vertical">
-                    <Form.Item name="reason" label="Reason" rules={[{ required: true, min: 3 }]}>
-                      <Input.TextArea rows={3} />
-                    </Form.Item>
-                  </Form>
-                )}
-                <Space style={{ marginTop: 8 }}>
-                  <Button onClick={() => { setPending(null); form.resetFields() }}>Cancel</Button>
-                  <Button type="primary" onClick={async () => {
-                    if (REQUIRES_REASON.has(pending)) {
-                      try { await form.validateFields() } catch { return }
-                    }
-                    setStep(2)
-                  }}>Continue</Button>
-                </Space>
-              </>
-            )}
+            {step === 1 && (() => {
+              const reasonMeta = REASON_LABELS[pending]
+              const showField = REQUIRES_REASON.has(pending) || OPTIONAL_REASON.has(pending)
+              const required = REQUIRES_REASON.has(pending)
+              return (
+                <>
+                  <p>You are about to change <code>{ticket.ticket_code}</code> from <b>{ticket.status}</b> to <b>{pending}</b>.</p>
+                  {showField && (
+                    <Form form={form} layout="vertical">
+                      <Form.Item
+                        name="reason"
+                        label={reasonMeta?.label || (required ? 'Reason' : 'Reason (optional)')}
+                        rules={required ? [{ required: true, min: 3 }] : []}
+                      >
+                        <Input.TextArea rows={3} placeholder={reasonMeta?.placeholder} />
+                      </Form.Item>
+                    </Form>
+                  )}
+                  <Space style={{ marginTop: 8 }}>
+                    <Button onClick={() => { setPending(null); form.resetFields() }}>Cancel</Button>
+                    <Button type="primary" onClick={async () => {
+                      if (required) {
+                        try { await form.validateFields() } catch { return }
+                      }
+                      setStep(2)
+                    }}>Continue</Button>
+                  </Space>
+                </>
+              )
+            })()}
             {step === 2 && (
               <>
                 <p>Are you sure? This action will be recorded in the audit log.</p>

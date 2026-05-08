@@ -106,21 +106,117 @@ def notify_assignee(payload: Dict[str, Any]):
 
 @register_task("notify_beneficiary")
 def notify_beneficiary(payload: Dict[str, Any]):
-    """Notify the beneficiary about a status change."""
+    """Notify everyone with skin in the game about a status change.
+
+    Targets: requester (creator), current assignee, sector members.
+    The actor (whoever triggered the change) is excluded.
+    """
     ticket_id = payload.get("ticket_id")
+    actor_user_id = payload.get("actor_user_id")
     with get_db() as db:
         ticket = db.get(Ticket, ticket_id)
-        if not ticket or not ticket.created_by_user_id:
+        if not ticket:
             return
 
-        _create_in_app_notification(
-            db,
-            user_id=ticket.created_by_user_id,
-            type="status_changed",
-            title=f"Ticket {ticket.ticket_code} Update",
-            body=f"The status of your ticket has changed to {ticket.status}.",
-            ticket_id=ticket.id
-        )
+        recipients: set[str] = set()
+        if ticket.created_by_user_id:
+            recipients.add(ticket.created_by_user_id)
+        if ticket.assignee_user_id:
+            recipients.add(ticket.assignee_user_id)
+        if ticket.current_sector_id:
+            members = db.scalars(
+                select(SectorMembership.user_id)
+                .where(SectorMembership.sector_id == ticket.current_sector_id, SectorMembership.is_active.is_(True))
+            ).all()
+            recipients.update(members)
+        recipients.discard(actor_user_id)
+
+        for uid in recipients:
+            _create_in_app_notification(
+                db,
+                user_id=uid,
+                type="status_changed",
+                title=f"Ticket {ticket.ticket_code} · {ticket.status.replace('_', ' ')}",
+                body=f"Status changed to {ticket.status}.",
+                ticket_id=ticket.id,
+            )
+        db.commit()
+
+
+@register_task("notify_comment")
+def notify_comment(payload: Dict[str, Any]):
+    """Notify ticket participants about a new comment.
+
+    Public comments reach the requester + assignee + sector members.
+    Private comments stay inside staff (sector members + assignee).
+    The author is excluded.
+    """
+    ticket_id     = payload.get("ticket_id")
+    actor_user_id = payload.get("actor_user_id")
+    visibility    = payload.get("visibility", "public")
+
+    with get_db() as db:
+        ticket = db.get(Ticket, ticket_id)
+        if not ticket:
+            return
+
+        recipients: set[str] = set()
+        if ticket.assignee_user_id:
+            recipients.add(ticket.assignee_user_id)
+        if ticket.current_sector_id:
+            members = db.scalars(
+                select(SectorMembership.user_id)
+                .where(SectorMembership.sector_id == ticket.current_sector_id, SectorMembership.is_active.is_(True))
+            ).all()
+            recipients.update(members)
+        if visibility == "public" and ticket.created_by_user_id:
+            recipients.add(ticket.created_by_user_id)
+        recipients.discard(actor_user_id)
+
+        for uid in recipients:
+            _create_in_app_notification(
+                db,
+                user_id=uid,
+                type="comment_created",
+                title=f"New comment on {ticket.ticket_code}",
+                body=f"A {visibility} comment was posted.",
+                ticket_id=ticket.id,
+            )
+        db.commit()
+
+
+@register_task("notify_unassigned")
+def notify_unassigned(payload: Dict[str, Any]):
+    """Notify the previously-assigned user (if not the actor) plus the sector
+    chief that the ticket is back in the queue."""
+    ticket_id     = payload.get("ticket_id")
+    prev_user_id  = payload.get("previous_user_id")
+    actor_user_id = payload.get("actor_user_id")
+    with get_db() as db:
+        ticket = db.get(Ticket, ticket_id)
+        if not ticket:
+            return
+
+        recipients: set[str] = set()
+        if prev_user_id and prev_user_id != actor_user_id:
+            recipients.add(prev_user_id)
+        if ticket.current_sector_id:
+            members = db.scalars(
+                select(SectorMembership.user_id)
+                .where(SectorMembership.sector_id == ticket.current_sector_id, SectorMembership.is_active.is_(True))
+            ).all()
+            recipients.update(members)
+        recipients.discard(actor_user_id)
+
+        for uid in recipients:
+            _create_in_app_notification(
+                db,
+                user_id=uid,
+                type="ticket_unassigned",
+                title=f"Ticket {ticket.ticket_code} unassigned",
+                body="Back in the sector queue — open to claim.",
+                ticket_id=ticket.id,
+            )
         db.commit()
 
 @register_task("notify_sla_approaching")

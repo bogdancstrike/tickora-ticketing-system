@@ -47,9 +47,11 @@ TRANSITIONS: list[Transition] = [
     Transition(ACTION_REASSIGN,        frozenset({IN_PROGRESS, REOPENED, ASSIGNED_TO_SECTOR}),            IN_PROGRESS),
     Transition(ACTION_UNASSIGN,        frozenset({IN_PROGRESS, REOPENED, ASSIGNED_TO_SECTOR}),            ASSIGNED_TO_SECTOR),
     Transition(ACTION_MARK_DONE,       frozenset({IN_PROGRESS, REOPENED}),                                DONE),
-    Transition(ACTION_CLOSE,           frozenset({DONE}),                                                 CLOSED),
-    Transition(ACTION_REOPEN,          frozenset({DONE, CLOSED}),                                         REOPENED),
-    Transition(ACTION_CANCEL,          frozenset({PENDING, ASSIGNED_TO_SECTOR}),                          CANCELLED),
+    # Close skips the explicit acknowledgement step when staff knows the work
+    # is wrapped up — supports the common "mark closed" UX.
+    Transition(ACTION_CLOSE,           frozenset({DONE, IN_PROGRESS, REOPENED}),                          CLOSED),
+    Transition(ACTION_REOPEN,          frozenset({DONE, CLOSED, CANCELLED}),                              REOPENED),
+    Transition(ACTION_CANCEL,          frozenset({PENDING, ASSIGNED_TO_SECTOR, IN_PROGRESS, REOPENED}),   CANCELLED),
 ]
 
 _BY_ACTION: dict[str, Transition] = {t.action: t for t in TRANSITIONS}

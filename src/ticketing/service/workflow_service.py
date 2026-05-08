@@ -24,7 +24,9 @@ from src.ticketing.models import (
     Sector,
     SectorMembership as ORMSectorMembership,
     Ticket,
+    TicketAssignee,
     TicketAssignmentHistory,
+    TicketSectorAssignment,
     TicketSectorHistory,
     TicketStatusHistory,
 )
@@ -88,6 +90,83 @@ def _no_returned_row(result) -> bool:
     return result.first() is None
 
 
+# ── Multi-assignment helpers ─────────────────────────────────────────────────
+
+def _add_sector_assignment(db: Session, ticket_id: str, sector_id: str,
+                           *, by_user_id: str | None, primary: bool) -> None:
+    """Idempotent add to ``ticket_sectors``; promotes ``primary`` if asked."""
+    existing = db.scalar(
+        select(TicketSectorAssignment).where(
+            TicketSectorAssignment.ticket_id == ticket_id,
+            TicketSectorAssignment.sector_id == sector_id,
+        )
+    )
+    if existing is None:
+        db.add(TicketSectorAssignment(
+            ticket_id=ticket_id, sector_id=sector_id,
+            is_primary=primary, added_by_user_id=by_user_id,
+        ))
+    elif primary and not existing.is_primary:
+        existing.is_primary = True
+    if primary:
+        db.execute(
+            update(TicketSectorAssignment)
+            .where(
+                TicketSectorAssignment.ticket_id == ticket_id,
+                TicketSectorAssignment.sector_id != sector_id,
+            )
+            .values(is_primary=False)
+        )
+
+
+def _add_user_assignment(db: Session, ticket_id: str, user_id: str,
+                         *, by_user_id: str | None, primary: bool) -> None:
+    existing = db.scalar(
+        select(TicketAssignee).where(
+            TicketAssignee.ticket_id == ticket_id,
+            TicketAssignee.user_id == user_id,
+        )
+    )
+    if existing is None:
+        db.add(TicketAssignee(
+            ticket_id=ticket_id, user_id=user_id,
+            is_primary=primary, added_by_user_id=by_user_id,
+        ))
+    elif primary and not existing.is_primary:
+        existing.is_primary = True
+    if primary:
+        db.execute(
+            update(TicketAssignee)
+            .where(
+                TicketAssignee.ticket_id == ticket_id,
+                TicketAssignee.user_id != user_id,
+            )
+            .values(is_primary=False)
+        )
+
+
+def _remove_user_assignment(db: Session, ticket_id: str, user_id: str) -> None:
+    db.execute(
+        TicketAssignee.__table__.delete()
+        .where(TicketAssignee.ticket_id == ticket_id, TicketAssignee.user_id == user_id)
+    )
+
+
+def _promote_remaining_assignee(db: Session, ticket_id: str) -> str | None:
+    """After removing a primary, pick the oldest remaining assignee (if any)
+    and promote them. Returns the new primary user id (or None)."""
+    row = db.scalar(
+        select(TicketAssignee)
+        .where(TicketAssignee.ticket_id == ticket_id)
+        .order_by(TicketAssignee.added_at.asc())
+        .limit(1)
+    )
+    if row is None:
+        return None
+    row.is_primary = True
+    return row.user_id
+
+
 # ── Transitions ──────────────────────────────────────────────────────────────
 
 def assign_sector(db: Session, p: Principal, ticket_id: str, sector_code: str, *, reason: str | None = None) -> Ticket:
@@ -134,6 +213,7 @@ def _assign_sector(db: Session, p: Principal, ticket_id: str, sector_code: str, 
 
     _record_sector_change(db, ticket_id, old_sector_id, sector.id, p.user_id, reason)
     _record_status_change(db, ticket_id, t.status, new_status, p.user_id, reason)
+    _add_sector_assignment(db, ticket_id, sector.id, by_user_id=p.user_id, primary=True)
     audit_service.record(
         db, actor=p, action=audit_events.TICKET_ASSIGNED_TO_SECTOR,
         entity_type="ticket", entity_id=ticket_id, ticket_id=ticket_id,
@@ -183,6 +263,7 @@ def _assign_to_me(db: Session, p: Principal, ticket_id: str) -> Ticket:
 
     _record_assignment_change(db, ticket_id, None, p.user_id, p.user_id, None)
     _record_status_change(db, ticket_id, t.status, sm.IN_PROGRESS, p.user_id, None)
+    _add_user_assignment(db, ticket_id, p.user_id, by_user_id=p.user_id, primary=True)
     audit_service.record(
         db, actor=p, action=audit_events.TICKET_ASSIGNED_TO_USER,
         entity_type="ticket", entity_id=ticket_id, ticket_id=ticket_id,
@@ -247,6 +328,7 @@ def _assign_to_user(db: Session, p: Principal, ticket_id: str, target_user_id: s
     _record_assignment_change(db, ticket_id, old_assignee, target_user_id, p.user_id, reason)
     if t.status != new_status:
         _record_status_change(db, ticket_id, t.status, new_status, p.user_id, reason)
+    _add_user_assignment(db, ticket_id, target_user_id, by_user_id=p.user_id, primary=True)
     audit_service.record(
         db, actor=p,
         action=audit_events.TICKET_REASSIGNED if old_assignee else audit_events.TICKET_ASSIGNED_TO_USER,
@@ -274,6 +356,16 @@ def change_status(
     up an inline status switcher.
     """
     with span("workflow.change_status", username=p.username, user_id=p.user_id, ticket_id=ticket_id, target_status=target_status):
+        t = _load(db, ticket_id)
+        _check_visible(p, t)
+
+        # Operator-side transitions require the caller to actually be working
+        # the ticket (or be admin / sector chief). Close / reopen / cancel use
+        # their own predicates further down.
+        if target_status in (sm.IN_PROGRESS, sm.ASSIGNED_TO_SECTOR, sm.DONE):
+            if not rbac.can_drive_status(p, t):
+                _denied("change_status", p, ticket_id, db, "not allowed to drive ticket status")
+
         if target_status == sm.IN_PROGRESS:
             return _assign_to_me(db, p, ticket_id)
         if target_status == sm.ASSIGNED_TO_SECTOR:
@@ -281,6 +373,12 @@ def change_status(
         if target_status == sm.DONE:
             return _mark_done(db, p, ticket_id, resolution=reason)
         if target_status == sm.CLOSED:
+            # Allow close from any active status (state machine permits it).
+            # If the ticket isn't already done, the operator must be entitled
+            # to drive workflow changes; the requester path (acknowledge a
+            # done ticket) is permitted by `can_close` directly.
+            if t.status != sm.DONE and not rbac.can_drive_status(p, t):
+                _denied("change_status", p, ticket_id, db, "not allowed to close this ticket")
             return _close(db, p, ticket_id)
         if target_status == sm.REOPENED:
             if not reason:
@@ -323,6 +421,12 @@ def _unassign(db: Session, p: Principal, ticket_id: str, *, reason: str | None =
         new_status = t.status
 
     old_assignee = t.assignee_user_id
+    # Remove from the join table first; if there are still other assignees,
+    # promote the oldest remaining one as the new primary instead of dropping
+    # back to "no assignee".
+    _remove_user_assignment(db, ticket_id, old_assignee)
+    new_primary = _promote_remaining_assignee(db, ticket_id)
+
     res = db.execute(
         update(Ticket)
         .where(
@@ -331,8 +435,8 @@ def _unassign(db: Session, p: Principal, ticket_id: str, *, reason: str | None =
             Ticket.assignee_user_id == old_assignee,
         )
         .values(
-            assignee_user_id=None,
-            status=new_status,
+            assignee_user_id=new_primary,
+            status=new_status if new_primary is None else sm.IN_PROGRESS,
         )
         .returning(Ticket.id)
     )
@@ -350,6 +454,11 @@ def _unassign(db: Session, p: Principal, ticket_id: str, *, reason: str | None =
         new_value={"assignee_user_id": None, "status": new_status},
         metadata={"reason": reason, "self": is_self} if reason or is_self else None,
     )
+    publish("notify_unassigned", {
+        "ticket_id":        ticket_id,
+        "previous_user_id": old_assignee,
+        "actor_user_id":    p.user_id,
+    })
     return _load(db, ticket_id)
 
 
@@ -369,8 +478,6 @@ def _mark_done(db: Session, p: Principal, ticket_id: str, *, resolution: str | N
     new_status = sm.target_status(sm.ACTION_MARK_DONE, t.status)
     if new_status is None:
         raise BusinessRuleError(f"cannot mark done while status is {t.status}")
-    if not (resolution or t.resolution):
-        raise BusinessRuleError("resolution is required to mark a ticket done")
 
     res = db.execute(
         update(Ticket)
@@ -395,7 +502,7 @@ def _mark_done(db: Session, p: Principal, ticket_id: str, *, resolution: str | N
         entity_type="ticket", entity_id=ticket_id, ticket_id=ticket_id,
         old_value={"status": t.status}, new_value={"status": new_status},
     )
-    publish("notify_beneficiary", {"ticket_id": ticket_id})
+    publish("notify_beneficiary", {"ticket_id": ticket_id, "actor_user_id": p.user_id})
     return _load(db, ticket_id)
 
 
@@ -409,8 +516,17 @@ def close(db: Session, p: Principal, ticket_id: str, *, feedback: dict | None = 
 def _close(db: Session, p: Principal, ticket_id: str, *, feedback: dict | None = None) -> Ticket:
     t = _load(db, ticket_id)
     _check_visible(p, t)
-    if not rbac.can_close(p, t):
-        _denied(sm.ACTION_CLOSE, p, ticket_id, db, "only the beneficiary or admin can close")
+
+    # Two distinct paths:
+    #   1. Requester acknowledges a done ticket → can_close() applies.
+    #   2. Operator forces close from in_progress / reopened / done → must be
+    #      able to drive workflow status (admin / sector chief / assignee).
+    if t.status == sm.DONE:
+        if not (rbac.can_close(p, t) or rbac.can_drive_status(p, t)):
+            _denied(sm.ACTION_CLOSE, p, ticket_id, db, "only the beneficiary, admin or assignee can close")
+    else:
+        if not rbac.can_drive_status(p, t):
+            _denied(sm.ACTION_CLOSE, p, ticket_id, db, "not allowed to close this ticket from current state")
 
     new_status = sm.target_status(sm.ACTION_CLOSE, t.status)
     if new_status is None:
@@ -418,7 +534,11 @@ def _close(db: Session, p: Principal, ticket_id: str, *, feedback: dict | None =
 
     res = db.execute(
         update(Ticket)
-        .where(Ticket.id == ticket_id, Ticket.status == "done", Ticket.is_deleted.is_(False))
+        .where(
+            Ticket.id == ticket_id,
+            Ticket.status.in_(tuple(sm._BY_ACTION[sm.ACTION_CLOSE].from_statuses)),
+            Ticket.is_deleted.is_(False),
+        )
         .values(status=new_status, closed_at=datetime.now(timezone.utc))
         .returning(Ticket.id)
     )
@@ -432,7 +552,7 @@ def _close(db: Session, p: Principal, ticket_id: str, *, feedback: dict | None =
         old_value={"status": t.status}, new_value={"status": new_status},
         metadata={"feedback": feedback} if feedback else None,
     )
-    publish("notify_beneficiary", {"ticket_id": ticket_id})
+    publish("notify_beneficiary", {"ticket_id": ticket_id, "actor_user_id": p.user_id})
     return _load(db, ticket_id)
 
 
@@ -527,7 +647,7 @@ def _cancel(db: Session, p: Principal, ticket_id: str, *, reason: str) -> Ticket
         old_value={"status": t.status}, new_value={"status": new_status},
         metadata={"reason": reason},
     )
-    publish("notify_beneficiary", {"ticket_id": ticket_id})
+    publish("notify_beneficiary", {"ticket_id": ticket_id, "actor_user_id": p.user_id})
     return _load(db, ticket_id)
 
 

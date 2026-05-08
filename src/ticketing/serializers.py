@@ -4,7 +4,10 @@ from typing import Any
 
 from src.iam import rbac
 from src.iam.principal import Principal
-from src.ticketing.models import AuditEvent, Ticket, TicketAttachment, TicketComment, TicketMetadata
+from src.ticketing.models import (
+    AuditEvent, Ticket, TicketAssignee, TicketAttachment, TicketComment,
+    TicketMetadata, TicketSectorAssignment,
+)
 
 
 def _iso(d: datetime | None) -> str | None:
@@ -29,6 +32,10 @@ def serialize_ticket(t: Ticket, p: Principal, *, full: bool = True) -> dict[str,
         "beneficiary_type": t.beneficiary_type,
         "title":            t.title,
         "current_sector_code": sector_code,
+        # Multi-assignment lists hydrated by the service. Empty = falls back to
+        # the legacy single-valued primary fields below.
+        "sector_codes":     list(getattr(t, "sector_codes", []) or []),
+        "assignee_user_ids": list(getattr(t, "assignee_user_ids", []) or []),
         "created_at":       _iso(t.created_at),
         "updated_at":       _iso(t.updated_at),
         "done_at":          _iso(t.done_at),

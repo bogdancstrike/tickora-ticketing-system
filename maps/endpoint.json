@@ -420,6 +420,22 @@
       "request_method": ["GET"],
       "api_url": "/api/notifications/stream",
       "exec_method": { "module_name": "api.notifications", "method_name": "stream" }
+    },
+    {
+      "namespace": "tickora",
+      "operation_name": "notifications_list",
+      "model_name": "Empty",
+      "request_method": ["GET"],
+      "api_url": "/api/notifications",
+      "exec_method": { "module_name": "api.notifications", "method_name": "list_notifications" }
+    },
+    {
+      "namespace": "tickora",
+      "operation_name": "notifications_mark_read",
+      "model_name": "Empty",
+      "request_method": ["POST"],
+      "api_url": "/api/notifications/mark-read",
+      "exec_method": { "module_name": "api.notifications", "method_name": "mark_notifications_read" }
     }
   ]
 }

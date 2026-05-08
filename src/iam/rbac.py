@@ -143,6 +143,24 @@ def can_change_priority(p: Principal, t: _TicketLike) -> bool:
     return False
 
 
+def can_drive_status(p: Principal, t: _TicketLike) -> bool:
+    """True if `p` may push the ticket through operator-side transitions
+    (assign, in_progress, mark_done, etc.).
+
+    Admins and the chief of the current sector always can. Otherwise the
+    caller must be the current assignee — i.e. the operator working the
+    ticket. Distributors only get a narrow lane (cancel during triage),
+    handled by `can_cancel`/`can_assign_sector`.
+    """
+    if p.is_admin:
+        return True
+    if t.current_sector_code and p.is_chief_of(t.current_sector_code):
+        return True
+    if t.assignee_user_id and t.assignee_user_id == p.user_id:
+        return True
+    return False
+
+
 # ── Comments ─────────────────────────────────────────────────────────────────
 
 def can_see_private_comments(p: Principal, t: _TicketLike) -> bool:
@@ -154,8 +172,22 @@ def can_see_private_comments(p: Principal, t: _TicketLike) -> bool:
 
 
 def can_post_public_comment(p: Principal, t: _TicketLike) -> bool:
-    # Beneficiaries can comment publicly on their own tickets; staff with view rights too.
-    if can_view_ticket(p, t):
+    """Public comments are limited to participants:
+       admin / distributor / chief of the sector / current assignee /
+       creator / requester-by-email. Other readers (auditors, sector
+       members not assigned) can read but can't post.
+    """
+    if p.is_admin or p.is_distributor:
+        return True
+    if t.current_sector_code and p.is_chief_of(t.current_sector_code):
+        return True
+    if t.assignee_user_id and t.assignee_user_id == p.user_id:
+        return True
+    if t.created_by_user_id and t.created_by_user_id == p.user_id:
+        return True
+    if t.beneficiary_user_id and t.beneficiary_user_id == p.user_id:
+        return True
+    if _is_requester_by_email(p, t):
         return True
     return False
 

@@ -13,7 +13,9 @@ from src.core.spans import set_attr, span
 from src.iam.principal import Principal
 from src.iam import rbac
 from src.ticketing import events
-from src.ticketing.models import Beneficiary, Sector, Ticket
+from src.ticketing.models import (
+    Beneficiary, Sector, Ticket, TicketAssignee, TicketSectorAssignment,
+)
 from src.ticketing.service import audit_service, beneficiary_service, sla_service
 from src.tasking.producer import publish
 
@@ -169,6 +171,8 @@ def get(db: Session, principal: Principal, ticket_id: str) -> Ticket:
             raise NotFoundError("ticket not found")
         setattr(t, "current_sector_code", _sector_code(db, t.current_sector_id))
         setattr(t, "beneficiary_user_id", _beneficiary_user_id(db, t.beneficiary_id))
+        setattr(t, "sector_codes", _sector_codes_for_ticket(db, t.id))
+        setattr(t, "assignee_user_ids", _assignees_for_ticket(db, t.id))
         set_attr(current, "ticket.found", True)
         set_attr(current, "ticket.code", t.ticket_code)
         set_attr(current, "ticket.status", t.status)
@@ -336,9 +340,13 @@ def _list(
     # Hydrate sector_code / beneficiary_user_id for downstream RBAC/serializer.
     sector_codes = _sector_codes_map(db, [r.current_sector_id for r in rows if r.current_sector_id])
     ben_user_ids = _beneficiary_user_ids_map(db, [r.beneficiary_id for r in rows if r.beneficiary_id])
+    multi_sectors = _sector_codes_per_ticket(db, [r.id for r in rows])
+    multi_assignees = _assignees_per_ticket(db, [r.id for r in rows])
     for r in rows:
         setattr(r, "current_sector_code", sector_codes.get(r.current_sector_id))
         setattr(r, "beneficiary_user_id", ben_user_ids.get(r.beneficiary_id))
+        setattr(r, "sector_codes", multi_sectors.get(r.id, []))
+        setattr(r, "assignee_user_ids", multi_assignees.get(r.id, []))
     return rows, next_token
 
 
@@ -396,3 +404,55 @@ def _beneficiary_user_ids_map(db: Session, ids: Iterable[str]) -> dict[str, str 
         return {}
     rows = db.execute(select(Beneficiary.id, Beneficiary.user_id).where(Beneficiary.id.in_(ids))).all()
     return {bid: uid for bid, uid in rows}
+
+
+# ── Multi-assignment hydration ───────────────────────────────────────────────
+
+def _sector_codes_for_ticket(db: Session, ticket_id: str) -> list[str]:
+    rows = db.execute(
+        select(Sector.code)
+        .join(TicketSectorAssignment, TicketSectorAssignment.sector_id == Sector.id)
+        .where(TicketSectorAssignment.ticket_id == ticket_id)
+        .order_by(TicketSectorAssignment.is_primary.desc(), Sector.code.asc())
+    ).all()
+    return [code for (code,) in rows]
+
+
+def _assignees_for_ticket(db: Session, ticket_id: str) -> list[str]:
+    rows = db.execute(
+        select(TicketAssignee.user_id)
+        .where(TicketAssignee.ticket_id == ticket_id)
+        .order_by(TicketAssignee.is_primary.desc(), TicketAssignee.added_at.asc())
+    ).all()
+    return [uid for (uid,) in rows]
+
+
+def _sector_codes_per_ticket(db: Session, ticket_ids: list[str]) -> dict[str, list[str]]:
+    if not ticket_ids:
+        return {}
+    rows = db.execute(
+        select(TicketSectorAssignment.ticket_id, Sector.code, TicketSectorAssignment.is_primary)
+        .join(Sector, Sector.id == TicketSectorAssignment.sector_id)
+        .where(TicketSectorAssignment.ticket_id.in_(ticket_ids))
+    ).all()
+    out: dict[str, list[tuple[bool, str]]] = {}
+    for tid, code, is_primary in rows:
+        out.setdefault(tid, []).append((bool(is_primary), code))
+    # primary first, then alphabetical
+    return {tid: [c for _, c in sorted(items, key=lambda p: (not p[0], p[1]))] for tid, items in out.items()}
+
+
+def _assignees_per_ticket(db: Session, ticket_ids: list[str]) -> dict[str, list[str]]:
+    if not ticket_ids:
+        return {}
+    rows = db.execute(
+        select(TicketAssignee.ticket_id, TicketAssignee.user_id, TicketAssignee.is_primary, TicketAssignee.added_at)
+        .where(TicketAssignee.ticket_id.in_(ticket_ids))
+    ).all()
+    out: dict[str, list[tuple[bool, str, Any]]] = {}
+    for tid, uid, is_primary, added_at in rows:
+        out.setdefault(tid, []).append((bool(is_primary), uid, added_at))
+    return {
+        tid: [u for _, u, _ in sorted(items, key=lambda p: (not p[0], p[2]))]
+        for tid, items in out.items()
+    }

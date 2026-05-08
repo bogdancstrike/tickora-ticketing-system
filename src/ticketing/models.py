@@ -357,6 +357,49 @@ class TicketMetadata(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
 
 
+class TicketSectorAssignment(Base):
+    """Many-to-many sector routing.
+
+    `current_sector_id` on `tickets` stays as the *primary* sector — the one
+    drawn in the UI badge, used by SLA/dashboard rollups, and by the existing
+    visibility filter — while this table tracks every sector the ticket is
+    visible to. Service code keeps the primary in sync with the row marked
+    `is_primary = true`.
+    """
+    __tablename__ = "ticket_sectors"
+    __table_args__ = (
+        Index("idx_ticket_sectors_ticket", "ticket_id"),
+        Index("idx_ticket_sectors_sector", "sector_id"),
+        Index("uq_ticket_sectors_ticket_sector", "ticket_id", "sector_id", unique=True),
+    )
+
+    id:               Mapped[str] = mapped_column(UUID(as_uuid=False), primary_key=True, default=_uuid)
+    ticket_id:        Mapped[str] = mapped_column(UUID(as_uuid=False), ForeignKey("tickets.id", ondelete="CASCADE"), nullable=False)
+    sector_id:        Mapped[str] = mapped_column(UUID(as_uuid=False), ForeignKey("sectors.id"), nullable=False)
+    is_primary:       Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    added_by_user_id: Mapped[str | None] = mapped_column(UUID(as_uuid=False), ForeignKey("users.id"))
+    added_at:         Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+class TicketAssignee(Base):
+    """Many-to-many user assignment. Same primary/secondary contract as
+    `TicketSectorAssignment` — `assignee_user_id` on the ticket is the
+    primary assignee; this table is the full set."""
+    __tablename__ = "ticket_assignees"
+    __table_args__ = (
+        Index("idx_ticket_assignees_ticket", "ticket_id"),
+        Index("idx_ticket_assignees_user",   "user_id"),
+        Index("uq_ticket_assignees_ticket_user", "ticket_id", "user_id", unique=True),
+    )
+
+    id:               Mapped[str] = mapped_column(UUID(as_uuid=False), primary_key=True, default=_uuid)
+    ticket_id:        Mapped[str] = mapped_column(UUID(as_uuid=False), ForeignKey("tickets.id", ondelete="CASCADE"), nullable=False)
+    user_id:          Mapped[str] = mapped_column(UUID(as_uuid=False), ForeignKey("users.id"), nullable=False)
+    is_primary:       Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    added_by_user_id: Mapped[str | None] = mapped_column(UUID(as_uuid=False), ForeignKey("users.id"))
+    added_at:         Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
 class MetadataKeyDefinition(Base):
     """Catalogue of allowed metadata keys with optional fixed value lists."""
     __tablename__ = "metadata_key_definitions"

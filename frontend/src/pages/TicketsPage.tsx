@@ -212,20 +212,7 @@ function WorkflowActions({ ticket }: { ticket: TicketDto }) {
             Unassign
           </Button>
         )}
-        {canMarkDone(ticket, user) && (
-          <Button icon={<CheckCircleOutlined />} onClick={() => setModal('mark_done')}>Mark done</Button>
-        )}
-        {canClose(ticket, user) && (
-          <Button danger icon={<CloseCircleOutlined />} onClick={() => run.mutate({ action: 'close', values: {} })}>
-            Close Ticket
-          </Button>
-        )}
-        {canReopen(ticket, user) && (
-          <Button type="primary" icon={<ReloadOutlined />} onClick={() => setModal('reopen')}>Reopen Ticket</Button>
-        )}
-        {canCancel(ticket, user) && (
-          <Button danger icon={<StopOutlined />} onClick={() => setModal('cancel')}>Cancel</Button>
-        )}
+        <StatusChanger ticket={ticket} mode="button" />
         {!isClosed && (
           <Button icon={<EditOutlined />} onClick={() => setModal('priority')}>Priority</Button>
         )}
@@ -307,18 +294,44 @@ function authorInitials(name: string): string {
   return name.split(/[\s.@]+/).filter(Boolean).slice(0, 2).map(s => s[0]?.toUpperCase()).join('') || '?'
 }
 
-function CommentBox({ ticketId, disabled }: { ticketId: string; disabled?: boolean }) {
+function CommentBox({
+  ticketId, disabled, ticket,
+}: {
+  ticketId: string
+  disabled?: boolean
+  ticket?: TicketDto
+}) {
   const [form] = Form.useForm()
   const [msg, holder] = message.useMessage()
   const queryClient = useQueryClient()
   const user = useSessionStore((s) => s.user)
+
+  // Operators (staff working on the ticket) can post private comments;
+  // beneficiaries / external requesters are public-only.
+  const isAdmin = !!user?.roles.includes('tickora_admin')
+  const isAuditor = !!user?.roles.includes('tickora_auditor')
+  const isDistributor = !!user?.roles.includes('tickora_distributor')
+  const inSector = !!(ticket?.current_sector_code && user?.sectors?.some(s => s.sectorCode === ticket.current_sector_code))
+  const isStaff = isAdmin || isAuditor || isDistributor || inSector
+  const canPostPrivate = isStaff
+
+  // Only assigned operators (or chiefs/admins) can post at all when staff;
+  // requesters always retain public commenting on their own tickets.
+  const isAssignee = !!ticket && ticket.assignee_user_id === user?.id
+  const isChiefOfTicket = !!(ticket?.current_sector_code && user?.sectors?.some(s => s.sectorCode === ticket.current_sector_code && s.role === 'chief'))
+  const isRequester = !!ticket && (
+    (ticket.beneficiary_type === 'external' && !!user?.email && ticket.requester_email === user?.email)
+    || ticket.created_by_user_id === user?.id
+  )
+  const canPostAtAll = isAdmin || isChiefOfTicket || isAssignee || isRequester || isDistributor
+
   const comments = useQuery({
     queryKey: ['comments', ticketId],
     queryFn: () => listComments(ticketId),
   })
   const add = useMutation({
-    mutationFn: (values: { body: string; is_public: boolean }) =>
-      createComment(ticketId, values.body, values.is_public ? 'public' : 'private'),
+    mutationFn: (values: { body: string; is_public?: boolean }) =>
+      createComment(ticketId, values.body, (canPostPrivate ? values.is_public !== false : true) ? 'public' : 'private'),
     onSuccess: async () => {
       form.resetFields()
       await queryClient.invalidateQueries({ queryKey: ['comments', ticketId] })
@@ -335,22 +348,32 @@ function CommentBox({ ticketId, disabled }: { ticketId: string; disabled?: boole
   return (
     <div style={{ display: 'grid', gap: 12 }}>
       {holder}
-      {!disabled && (
+      {!disabled && canPostAtAll && (
         <div style={{ padding: 12, border: '1px solid rgba(0,0,0,0.06)', borderRadius: 8 }}>
           <Form form={form} layout="vertical" initialValues={{ is_public: true }} onFinish={(v) => add.mutate(v)}>
             <Form.Item name="body" rules={[{ required: true, min: 2 }]} style={{ marginBottom: 8 }}>
               <Input.TextArea rows={3} placeholder="Write a comment…" />
             </Form.Item>
             <Flex justify="space-between" align="center">
-              <Form.Item name="is_public" valuePropName="checked" style={{ marginBottom: 0 }}>
-                <Checkbox>Visible to requester (public)</Checkbox>
-              </Form.Item>
+              {canPostPrivate ? (
+                <Form.Item name="is_public" valuePropName="checked" style={{ marginBottom: 0 }}>
+                  <Checkbox>Visible to requester (public)</Checkbox>
+                </Form.Item>
+              ) : (
+                <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                  Posted as a public comment.
+                </Typography.Text>
+              )}
               <Button htmlType="submit" type="primary" loading={add.isPending}>Post comment</Button>
             </Flex>
           </Form>
         </div>
       )}
       {disabled && <Alert type="info" message="Comments are disabled for closed tickets." />}
+      {!disabled && !canPostAtAll && (
+        <Alert type="info" showIcon
+               message="You can read this conversation but only assigned operators (or the requester) can post."  />
+      )}
       {(comments.data?.items || []).length === 0 && !comments.isLoading && (
         <Empty description="No comments yet" image={Empty.PRESENTED_IMAGE_SIMPLE} />
       )}
@@ -629,7 +652,7 @@ function TicketDetails({ ticketId }: { ticketId?: string }) {
           <Tabs
             defaultActiveKey="comments"
             items={[
-              { key: 'comments', label: 'Conversation', children: <CommentBox ticketId={ticket.id} disabled={isClosed} /> },
+              { key: 'comments', label: 'Conversation', children: <CommentBox ticketId={ticket.id} disabled={isClosed} ticket={ticket} /> },
               { key: 'attachments', label: 'Attachments', children: <AttachmentUploader ticketId={ticket.id} disabled={isClosed} /> },
               { key: 'audit', label: 'Activity', children: <TicketAudit ticketId={ticket.id} /> },
             ].filter(item => {

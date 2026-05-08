@@ -13,6 +13,7 @@ from src.iam.principal import Principal
 from src.ticketing import events
 from src.ticketing.models import TicketComment
 from src.ticketing.service import audit_service, ticket_service
+from src.tasking.producer import publish
 
 EDIT_WINDOW = timedelta(minutes=15)
 
@@ -96,6 +97,12 @@ def create(
         ticket_id=ticket.id,
         new_value={"visibility": visibility, "body": body},
     )
+    publish("notify_comment", {
+        "ticket_id":    ticket.id,
+        "comment_id":   comment.id,
+        "actor_user_id": principal.user_id,
+        "visibility":   visibility,
+    })
     return comment
 
 
