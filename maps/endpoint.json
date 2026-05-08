@@ -341,6 +341,14 @@
       "request_method": ["GET"],
       "api_url": "/api/dashboard/timeseries",
       "exec_method": { "module_name": "api.dashboard", "method_name": "timeseries_dashboard" }
+    },
+    {
+      "namespace": "tickora",
+      "operation_name": "notifications_stream",
+      "model_name": "Empty",
+      "request_method": ["GET"],
+      "api_url": "/api/notifications/stream",
+      "exec_method": { "module_name": "api.notifications", "method_name": "stream" }
     }
   ]
 }

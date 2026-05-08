@@ -14,7 +14,8 @@ from src.iam.principal import Principal
 from src.iam import rbac
 from src.ticketing import events
 from src.ticketing.models import Beneficiary, Sector, Ticket
-from src.ticketing.service import audit_service, beneficiary_service
+from src.ticketing.service import audit_service, beneficiary_service, sla_service
+from src.tasking.producer import publish
 
 
 # ── Ticket code generation ───────────────────────────────────────────────────
@@ -139,6 +140,7 @@ def _create(db: Session, principal: Principal, payload: dict[str, Any]) -> Ticke
         priority   = "medium",
         status     = "pending",
     )
+    sla_service.evaluate_sla(db, ticket)
     db.add(ticket)
     db.flush()
     set_ticket_id(ticket.id)
@@ -153,6 +155,9 @@ def _create(db: Session, principal: Principal, payload: dict[str, Any]) -> Ticke
         new_value   = _ticket_audit_snapshot(ticket),
         metadata    = {"source": "api"},
     )
+
+    publish("notify_distributors", {"ticket_id": ticket.id})
+
     return ticket
 
 

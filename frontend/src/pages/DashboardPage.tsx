@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { AreaChart, Area, BarChart, Bar, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
+import ReactECharts from 'echarts-for-react'
 import {
   Alert, Button, Col, Empty, Flex, List, Row, Select, Space, Statistic, Table, Tabs, Tag,
   Typography, theme as antTheme,
@@ -33,21 +33,42 @@ function KpiGrid({ values }: { values: Record<string, number | null | undefined>
   )
 }
 
-function BreakdownChart({ data, color = '#1677ff' }: { data: DashboardBreakdown[]; color?: string }) {
+function BreakdownChart({ data, title, color = '#1677ff' }: { data: DashboardBreakdown[]; title: string; color?: string }) {
+  const { token } = antTheme.useToken()
   if (!data.length) return <Empty description="No data" image={Empty.PRESENTED_IMAGE_SIMPLE} />
-  return (
-    <div style={{ height: 220 }}>
-      <ResponsiveContainer>
-        <BarChart data={data.map((item) => ({ ...item, key: labelize(item.key) }))}>
-          <CartesianGrid strokeDasharray="3 3" vertical={false} />
-          <XAxis dataKey="key" tick={{ fontSize: 12 }} />
-          <YAxis allowDecimals={false} />
-          <Tooltip />
-          <Bar dataKey="count" fill={color} radius={[4, 4, 0, 0]} />
-        </BarChart>
-      </ResponsiveContainer>
-    </div>
-  )
+  
+  const option = {
+    tooltip: {
+      trigger: 'axis',
+      axisPointer: { type: 'shadow' }
+    },
+    grid: {
+      left: '3%',
+      right: '4%',
+      bottom: '3%',
+      top: '10%',
+      containLabel: true
+    },
+    xAxis: {
+      type: 'category',
+      data: data.map(item => labelize(item.key)),
+      axisTick: { alignWithLabel: true }
+    },
+    yAxis: {
+      type: 'value'
+    },
+    series: [
+      {
+        name: title,
+        type: 'bar',
+        barWidth: '60%',
+        data: data.map(item => item.count),
+        itemStyle: { color }
+      }
+    ]
+  }
+
+  return <ReactECharts option={option} style={{ height: 240 }} />
 }
 
 function ChartPanel({ title, children }: { title: string; children: React.ReactNode }) {
@@ -91,8 +112,8 @@ function SectorPanel({ sector }: { sector: DashboardSector }) {
       </div>
       <KpiGrid values={sector.kpis} />
       <Row gutter={[16, 16]}>
-        <Col xs={24} xl={8}><ChartPanel title="Status"><BreakdownChart data={sector.by_status} /></ChartPanel></Col>
-        <Col xs={24} xl={8}><ChartPanel title="Priority"><BreakdownChart data={sector.by_priority} color="#fa8c16" /></ChartPanel></Col>
+        <Col xs={24} xl={8}><ChartPanel title="Status"><BreakdownChart data={sector.by_status} title="Status" /></ChartPanel></Col>
+        <Col xs={24} xl={8}><ChartPanel title="Priority"><BreakdownChart data={sector.by_priority} title="Priority" color="#fa8c16" /></ChartPanel></Col>
         <Col xs={24} xl={8}><ChartPanel title="Oldest Active"><OldestTickets tickets={sector.oldest} /></ChartPanel></Col>
         <Col xs={24}><ChartPanel title="Workload"><Table rowKey="assignee_user_id" size="small" pagination={false} columns={columns} dataSource={sector.workload} /></ChartPanel></Col>
       </Row>
@@ -143,6 +164,40 @@ export function DashboardPage() {
   const activeSector = selectedSector.data || overview.data?.sectors[0]
   const personal = selectedUser.data || overview.data?.personal
 
+  const timeseriesOption = useMemo(() => {
+    if (!overview.data?.timeseries) return null
+    return {
+      tooltip: {
+        trigger: 'axis',
+        axisPointer: { type: 'cross', label: { backgroundColor: '#6a7985' } }
+      },
+      legend: { data: ['Created', 'Closed'] },
+      grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
+      xAxis: [{ type: 'category', boundaryGap: false, data: overview.data.timeseries.map(d => d.date) }],
+      yAxis: [{ type: 'value' }],
+      series: [
+        {
+          name: 'Created',
+          type: 'line',
+          stack: 'Total',
+          areaStyle: {},
+          emphasis: { focus: 'series' },
+          data: overview.data.timeseries.map(d => d.created),
+          itemStyle: { color: '#1677ff' }
+        },
+        {
+          name: 'Closed',
+          type: 'line',
+          stack: 'Total',
+          areaStyle: {},
+          emphasis: { focus: 'series' },
+          data: overview.data.timeseries.map(d => d.closed),
+          itemStyle: { color: '#52c41a' }
+        }
+      ]
+    }
+  }, [overview.data?.timeseries])
+
   const tabs = [
     overview.data?.global && {
       key: 'global',
@@ -151,9 +206,9 @@ export function DashboardPage() {
         <div style={{ display: 'grid', gap: 16 }}>
           <KpiGrid values={overview.data.global.kpis} />
           <Row gutter={[16, 16]}>
-            <Col xs={24} xl={8}><ChartPanel title="Status"><BreakdownChart data={overview.data.global.by_status} /></ChartPanel></Col>
-            <Col xs={24} xl={8}><ChartPanel title="Priority"><BreakdownChart data={overview.data.global.by_priority} color="#fa8c16" /></ChartPanel></Col>
-            <Col xs={24} xl={8}><ChartPanel title="Beneficiary Type"><BreakdownChart data={overview.data.global.by_beneficiary_type} color="#52c41a" /></ChartPanel></Col>
+            <Col xs={24} xl={8}><ChartPanel title="Status"><BreakdownChart data={overview.data.global.by_status} title="Status" /></ChartPanel></Col>
+            <Col xs={24} xl={8}><ChartPanel title="Priority"><BreakdownChart data={overview.data.global.by_priority} title="Priority" color="#fa8c16" /></ChartPanel></Col>
+            <Col xs={24} xl={8}><ChartPanel title="Beneficiary Type"><BreakdownChart data={overview.data.global.by_beneficiary_type} title="Beneficiary Type" color="#52c41a" /></ChartPanel></Col>
           </Row>
         </div>
       ),
@@ -165,7 +220,7 @@ export function DashboardPage() {
         <div style={{ display: 'grid', gap: 16 }}>
           <KpiGrid values={overview.data.distributor.kpis} />
           <Row gutter={[16, 16]}>
-            <Col xs={24} xl={12}><ChartPanel title="Pending Priority"><BreakdownChart data={overview.data.distributor.by_priority} color="#fa8c16" /></ChartPanel></Col>
+            <Col xs={24} xl={12}><ChartPanel title="Pending Priority"><BreakdownChart data={overview.data.distributor.by_priority} title="Priority" color="#fa8c16" /></ChartPanel></Col>
             <Col xs={24} xl={12}><ChartPanel title="Oldest Review Items"><OldestTickets tickets={overview.data.distributor.oldest} /></ChartPanel></Col>
           </Row>
         </div>
@@ -184,7 +239,7 @@ export function DashboardPage() {
           <Typography.Text type="secondary">{personal.username || personal.email || personal.user_id}</Typography.Text>
           <KpiGrid values={personal.kpis} />
           <Row gutter={[16, 16]}>
-            <Col xs={24} xl={12}><ChartPanel title="User Status"><BreakdownChart data={personal.by_status} /></ChartPanel></Col>
+            <Col xs={24} xl={12}><ChartPanel title="User Status"><BreakdownChart data={personal.by_status} title="Status" /></ChartPanel></Col>
             <Col xs={24} xl={12}><ChartPanel title="Oldest Assigned"><OldestTickets tickets={personal.oldest} /></ChartPanel></Col>
           </Row>
         </div>
@@ -196,7 +251,7 @@ export function DashboardPage() {
       children: (
         <div style={{ display: 'grid', gap: 16 }}>
           <KpiGrid values={overview.data.beneficiary.kpis} />
-          <ChartPanel title="Requester Status"><BreakdownChart data={overview.data.beneficiary.by_status} /></ChartPanel>
+          <ChartPanel title="Requester Status"><BreakdownChart data={overview.data.beneficiary.by_status} title="Status" /></ChartPanel>
         </div>
       ),
     },
@@ -246,19 +301,10 @@ export function DashboardPage() {
       {selectedSector.error && <Alert type="error" message={selectedSector.error.message} showIcon />}
       {selectedUser.error && <Alert type="error" message={selectedUser.error.message} showIcon />}
 
-      {overview.data?.timeseries && (
-        <div style={{ border: `1px solid ${token.colorBorderSecondary}`, borderRadius: 8, padding: 16, height: 260 }}>
+      {timeseriesOption && (
+        <div style={{ border: `1px solid ${token.colorBorderSecondary}`, borderRadius: 8, padding: 16, minHeight: 280 }}>
           <Typography.Title level={5} style={{ marginTop: 0 }}>Created vs Closed</Typography.Title>
-          <ResponsiveContainer>
-            <AreaChart data={overview.data.timeseries}>
-              <CartesianGrid strokeDasharray="3 3" vertical={false} />
-              <XAxis dataKey="date" tick={{ fontSize: 12 }} />
-              <YAxis allowDecimals={false} />
-              <Tooltip />
-              <Area type="monotone" dataKey="created" stroke="#1677ff" fill="#1677ff" fillOpacity={0.16} />
-              <Area type="monotone" dataKey="closed" stroke="#52c41a" fill="#52c41a" fillOpacity={0.12} />
-            </AreaChart>
-          </ResponsiveContainer>
+          <ReactECharts option={timeseriesOption} style={{ height: 260 }} />
         </div>
       )}
 

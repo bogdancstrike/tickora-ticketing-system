@@ -95,7 +95,7 @@ Legend: `[x]` done · `[~]` partial · `[ ]` pending
 - [ ] Notification handlers (in-app, email, SSE) with idempotency keys. Emails are enabled on .env (else, do not use email system)
 - [ ] SSE `/api/notifications/stream`. Also send on SSE new tickets in the system for Tickets Reviewers/Distributors.
 - [ ] Dashboard service + materialized views
-- [ ] Frontend dashboards + notification dropdown
+- [ ] Frontend dashboards + notification dropdown. Keep in mind for dashboard the RBAC (admin can see dashboard for all sectors/users, sector admin can see dashboard for their sectors and users, a user can see only his dashboard, and so on)
 
 ## Phase 6 — Admin module
 

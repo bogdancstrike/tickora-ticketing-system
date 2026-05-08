@@ -28,8 +28,9 @@ from src.ticketing.models import (
     TicketSectorHistory,
     TicketStatusHistory,
 )
-from src.ticketing.service import audit_service
+from src.ticketing.service import audit_service, sla_service
 from src.ticketing.service.ticket_service import _sector_code, _beneficiary_user_id
+from src.tasking.producer import publish
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
@@ -140,6 +141,7 @@ def _assign_sector(db: Session, p: Principal, ticket_id: str, sector_code: str, 
         new_value={"current_sector_id": sector.id, "status": new_status},
         metadata={"reason": reason} if reason else None,
     )
+    publish("notify_sector", {"ticket_id": ticket_id, "sector_id": sector.id})
     return _load(db, ticket_id)
 
 
@@ -187,6 +189,7 @@ def _assign_to_me(db: Session, p: Principal, ticket_id: str) -> Ticket:
         old_value={"assignee_user_id": None, "status": t.status},
         new_value={"assignee_user_id": p.user_id, "status": sm.IN_PROGRESS},
     )
+    publish("notify_assignee", {"ticket_id": ticket_id, "user_id": p.user_id})
     return _load(db, ticket_id)
 
 
@@ -252,6 +255,7 @@ def _assign_to_user(db: Session, p: Principal, ticket_id: str, target_user_id: s
         new_value={"assignee_user_id": target_user_id, "status": new_status},
         metadata={"reason": reason} if reason else None,
     )
+    publish("notify_assignee", {"ticket_id": ticket_id, "user_id": target_user_id})
     return _load(db, ticket_id)
 
 
@@ -297,6 +301,7 @@ def _mark_done(db: Session, p: Principal, ticket_id: str, *, resolution: str | N
         entity_type="ticket", entity_id=ticket_id, ticket_id=ticket_id,
         old_value={"status": t.status}, new_value={"status": new_status},
     )
+    publish("notify_beneficiary", {"ticket_id": ticket_id})
     return _load(db, ticket_id)
 
 
@@ -333,6 +338,7 @@ def _close(db: Session, p: Principal, ticket_id: str, *, feedback: dict | None =
         old_value={"status": t.status}, new_value={"status": new_status},
         metadata={"feedback": feedback} if feedback else None,
     )
+    publish("notify_beneficiary", {"ticket_id": ticket_id})
     return _load(db, ticket_id)
 
 
@@ -383,6 +389,8 @@ def _reopen(db: Session, p: Principal, ticket_id: str, *, reason: str) -> Ticket
         new_value={"status": new_status, "assignee_user_id": target_assignee},
         metadata={"reason": reason},
     )
+    if target_assignee:
+        publish("notify_assignee", {"ticket_id": ticket_id, "user_id": target_assignee})
     return _load(db, ticket_id)
 
 
@@ -425,6 +433,7 @@ def _cancel(db: Session, p: Principal, ticket_id: str, *, reason: str) -> Ticket
         old_value={"status": t.status}, new_value={"status": new_status},
         metadata={"reason": reason},
     )
+    publish("notify_beneficiary", {"ticket_id": ticket_id})
     return _load(db, ticket_id)
 
 
@@ -453,6 +462,11 @@ def _change_priority(db: Session, p: Principal, ticket_id: str, priority: str, *
     )
     if _no_returned_row(res):
         raise ConcurrencyConflictError("priority changed; refresh and retry")
+
+    # Reload and evaluate SLA
+    t = _load(db, ticket_id)
+    sla_service.evaluate_sla(db, t)
+    db.add(t)
 
     audit_service.record(
         db, actor=p, action=audit_events.TICKET_PRIORITY_CHANGED,

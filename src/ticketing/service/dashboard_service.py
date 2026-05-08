@@ -9,7 +9,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from framework.commons.logger import logger
-from sqlalchemy import case, func, or_, select
+from sqlalchemy import case, func, or_, select, text as sa_text
 from sqlalchemy.orm import Session
 
 from src.core.errors import NotFoundError, PermissionDeniedError
@@ -53,18 +53,23 @@ def global_(db: Session, principal: Principal) -> dict[str, Any]:
     if not rbac.can_view_global_dashboard(principal):
         raise PermissionDeniedError("not allowed to view global dashboard")
     logger.info("dashboard global requested", username=principal.username)
-    today = _today_start()
+    
+    # Use materialized view for KPIs
+    mv = db.execute(select(sa_text("*")).select_from(sa_text("mv_dashboard_global_kpis"))).first()
+    
+    kpis = {
+        "total_tickets": int(mv.total_tickets) if mv else 0,
+        "active_tickets": int(mv.active_tickets) if mv else 0,
+        "new_today": int(mv.new_today) if mv else 0,
+        "closed_today": int(mv.closed_today) if mv else 0,
+        "sla_breached": int(mv.sla_breached) if mv else 0,
+        "reopened": int(mv.reopened) if mv else 0,
+        "avg_assignment_minutes": round(float(mv.avg_assignment_minutes), 1) if mv and mv.avg_assignment_minutes else None,
+        "avg_resolution_minutes": round(float(mv.avg_resolution_minutes), 1) if mv and mv.avg_resolution_minutes else None,
+    }
+    
     return {
-        "kpis": {
-            "total_tickets": _count(db, select(Ticket).where(Ticket.is_deleted.is_(False))),
-            "active_tickets": _count(db, _ticket_stmt().where(Ticket.status.in_(ACTIVE_STATUSES))),
-            "new_today": _count(db, _ticket_stmt().where(Ticket.created_at >= today)),
-            "closed_today": _count(db, _ticket_stmt().where(Ticket.closed_at >= today)),
-            "sla_breached": _count(db, _ticket_stmt().where(Ticket.sla_status == "breached")),
-            "reopened": _count(db, _ticket_stmt().where(Ticket.reopened_count > 0)),
-            "avg_assignment_minutes": _avg_minutes(db, Ticket.created_at, Ticket.assigned_at),
-            "avg_resolution_minutes": _avg_minutes(db, Ticket.created_at, Ticket.done_at),
-        },
+        "kpis": kpis,
         "by_status": _breakdown(db, Ticket.status),
         "by_priority": _breakdown(db, Ticket.priority),
         "by_beneficiary_type": _breakdown(db, Ticket.beneficiary_type),
@@ -107,18 +112,26 @@ def sector(db: Session, principal: Principal, sector_code: str) -> dict[str, Any
     sector_row = db.scalar(select(Sector).where(Sector.code == sector_code, Sector.is_active.is_(True)))
     if sector_row is None:
         raise NotFoundError("sector not found")
-    base = _ticket_stmt().where(Ticket.current_sector_id == sector_row.id)
+    # Use materialized view for KPIs
+    mv = db.execute(
+        select(sa_text("*"))
+        .select_from(sa_text("mv_dashboard_sector_kpis"))
+        .where(sa_text(f"current_sector_id = '{sector_row.id}'"))
+    ).first()
+
+    kpis = {
+        "active": int(mv.active) if mv else 0,
+        "unassigned": int(mv.unassigned) if mv else 0,
+        "done": int(mv.done) if mv else 0,
+        "sla_breached": int(mv.sla_breached) if mv else 0,
+        "reopened": int(mv.reopened) if mv else 0,
+        "avg_resolution_minutes": round(float(mv.avg_resolution_minutes), 1) if mv and mv.avg_resolution_minutes else None,
+    }
+
     return {
         "sector_code": sector_row.code,
         "sector_name": sector_row.name,
-        "kpis": {
-            "active": _count(db, base.where(Ticket.status.in_(ACTIVE_STATUSES))),
-            "unassigned": _count(db, base.where(Ticket.assignee_user_id.is_(None), Ticket.status.in_(ACTIVE_STATUSES))),
-            "done": _count(db, base.where(Ticket.status.in_(DONE_STATUSES))),
-            "sla_breached": _count(db, base.where(Ticket.sla_status == "breached")),
-            "reopened": _count(db, base.where(Ticket.reopened_count > 0)),
-            "avg_resolution_minutes": _avg_minutes(db, Ticket.created_at, Ticket.done_at, sector_id=sector_row.id),
-        },
+        "kpis": kpis,
         "by_status": _breakdown(db, Ticket.status, sector_id=sector_row.id),
         "by_priority": _breakdown(db, Ticket.priority, sector_id=sector_row.id),
         "by_category": _breakdown(db, Ticket.category, sector_id=sector_row.id),
