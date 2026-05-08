@@ -25,11 +25,6 @@ class CreateTicketIn(BaseModel):
     title:                 str | None = Field(default=None, max_length=500)
     txt:                   str        = Field(min_length=5, max_length=20000)
 
-    suggested_sector_code: str | None = Field(default=None, max_length=50)
-    category:              str | None = Field(default=None, max_length=100)
-    type:                  str | None = Field(default=None, max_length=100)
-    priority:              PRIORITY   = "medium"
-
 
 class ListTicketsQuery(BaseModel):
     model_config = ConfigDict(extra="ignore")

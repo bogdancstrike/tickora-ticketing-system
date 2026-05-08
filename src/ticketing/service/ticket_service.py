@@ -13,11 +13,7 @@ from src.core.spans import set_attr, span
 from src.iam.principal import Principal
 from src.iam import rbac
 from src.ticketing import events
-from src.ticketing.models import (
-    Beneficiary,
-    Sector,
-    Ticket,
-)
+from src.ticketing.models import Beneficiary, Sector, Ticket
 from src.ticketing.service import audit_service, beneficiary_service
 
 
@@ -62,6 +58,14 @@ def _visibility_filter(p: Principal):
             select(Beneficiary.id).where(Beneficiary.user_id == p.user_id)
         )
     )
+    # external beneficiary/requester matched by authenticated email
+    if p.email:
+        clauses.append(
+            and_(
+                Ticket.beneficiary_type == "external",
+                Ticket.requester_email == p.email,
+            )
+        )
     # sector membership (any sector_code in p.all_sectors)
     if p.all_sectors:
         clauses.append(
@@ -105,17 +109,6 @@ def _create(db: Session, principal: Principal, payload: dict[str, Any]) -> Ticke
     else:
         beneficiary = beneficiary_service.create_external(db, payload)
 
-    # Suggested sector lookup (optional)
-    suggested_sector_id = None
-    suggested_code = payload.get("suggested_sector_code")
-    if suggested_code:
-        sector = db.scalar(select(Sector).where(Sector.code == suggested_code))
-        if sector is None:
-            raise ValidationError(f"unknown sector code: {suggested_code}")
-        if not sector.is_active:
-            raise ValidationError(f"sector {suggested_code} is not active")
-        suggested_sector_id = sector.id
-
     # Capture request metadata
     source_ip, user_agent = _request_metadata()
 
@@ -137,13 +130,13 @@ def _create(db: Session, principal: Principal, payload: dict[str, Any]) -> Ticke
         user_agent     = user_agent,
         correlation_id = get_correlation_id(),
 
-        suggested_sector_id = suggested_sector_id,
+        suggested_sector_id = None,
 
         title      = (payload.get("title") or txt[:120]).strip()[:500],
         txt        = txt,
-        category   = payload.get("category"),
-        type       = payload.get("type"),
-        priority   = payload.get("priority", "medium"),
+        category   = None,
+        type       = None,
+        priority   = "medium",
         status     = "pending",
     )
     db.add(ticket)

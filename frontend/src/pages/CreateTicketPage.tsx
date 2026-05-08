@@ -39,7 +39,7 @@ export function CreateTicketPage() {
         <Form
           form={form}
           layout="vertical"
-          initialValues={{ beneficiary_type: 'internal', priority: 'medium' }}
+          initialValues={{ beneficiary_type: 'internal' }}
           onFinish={(values) => create.mutate(values)}
           onValuesChange={(changed) => {
             if (changed.beneficiary_type) setBeneficiaryType(changed.beneficiary_type)
@@ -51,12 +51,6 @@ export function CreateTicketPage() {
                 { value: 'internal', label: 'Internal' },
                 { value: 'external', label: 'External' },
               ]} />
-            </Form.Item>
-            <Form.Item name="priority" label="Priority" rules={[{ required: true }]} style={{ minWidth: 160 }}>
-              <Select options={['low', 'medium', 'high', 'critical'].map((p) => ({ value: p, label: p }))} />
-            </Form.Item>
-            <Form.Item name="suggested_sector_code" label="Suggested sector" style={{ minWidth: 160 }}>
-              <Input placeholder="s10" />
             </Form.Item>
           </Flex>
 
@@ -83,15 +77,6 @@ export function CreateTicketPage() {
               </Flex>
             </>
           )}
-
-          <Flex gap={12} wrap="wrap">
-            <Form.Item name="category" label="Category" style={{ minWidth: 220, flex: 1 }}>
-              <Input placeholder="network_issue" />
-            </Form.Item>
-            <Form.Item name="type" label="Type" style={{ minWidth: 220, flex: 1 }}>
-              <Input placeholder="incident" />
-            </Form.Item>
-          </Flex>
 
           <Form.Item name="title" label="Title" rules={[{ max: 500 }]}>
             <Input placeholder="Short summary" />

@@ -28,7 +28,7 @@ Sector groups:
 |---|---|---|
 | `tickora_admin` | Platform administrator | Can view and administer all tickets, comments, private notes, attachments, audit, users, sectors, and configuration. Can execute all workflow actions. |
 | `tickora_auditor` | Audit/read-only oversight | Can view global audit and dashboards. Can view tickets for audit purposes, including private comments, but should not mutate operational data. |
-| `tickora_distributor` | Initial triage and distribution | Can see pending and sector-assigned tickets, assign tickets to sectors, cancel pending tickets, change priority, and write private triage comments. |
+| `tickora_distributor` | Initial triage and distribution | Can see pending and sector-assigned tickets, review tickets, set triage metadata, assign tickets to sectors/users, cancel pending tickets, change priority, and write private triage comments. |
 | `tickora_internal_user` | Internal beneficiary/requester | Can create tickets, view own tickets, post public comments, close done tickets, and reopen own done/closed tickets. |
 | `tickora_external_user` | External beneficiary/requester | Can create/view own external tickets and interact only through public ticket surfaces. Private comments are hidden. |
 | `tickora_sector_member` | Sector operator | Can view sector tickets, assign eligible tickets to self, comment, upload attachments, and mark assigned work done. |
@@ -55,7 +55,7 @@ Tickora123!
 |---|---|---|---|---|
 | `admin` | Internal | `tickora_admin`, `tickora_internal_user` | none | Full platform administration and global testing |
 | `auditor` | Internal | `tickora_auditor`, `tickora_internal_user` | none | Read-only audit and oversight testing |
-| `distributor` | Internal | `tickora_distributor`, `tickora_internal_user` | none | Triage pending tickets and assign them to sectors |
+| `distributor` | Internal | `tickora_distributor`, `tickora_internal_user` | none | Review pending tickets, set metadata, write private notes, and assign work to sectors/users |
 | `chief.s10` | Internal | `tickora_sector_chief`, `tickora_sector_member`, `tickora_internal_user` | `/tickora/sectors/s10/chiefs` | Coordinate sector `s10` work and reassign sector tickets |
 | `member.s10` | Internal | `tickora_sector_member`, `tickora_internal_user` | `/tickora/sectors/s10/members` | Process `s10` tickets and mark assigned tickets done |
 | `member.s2` | Internal | `tickora_sector_member`, `tickora_internal_user` | `/tickora/sectors/s2/members` | Process `s2` network tickets |
@@ -93,7 +93,8 @@ Backend RBAC is the source of truth. The frontend can hide buttons, but endpoint
 | View pending triage queue | Distributor |
 | Assign sector | Admin, distributor, current sector chief |
 | Assign to self | Admin or user in current sector when ticket is unassigned and assignable |
-| Assign/reassign user | Admin or current sector chief |
+| Assign/reassign user | Admin, distributor, or current sector chief |
+| Review ticket metadata | Admin or distributor |
 | Mark done | Admin, current sector chief, or current assignee |
 | Close/reopen | Admin, ticket creator, or beneficiary user |
 | Cancel pending ticket | Admin, distributor, or current sector chief |

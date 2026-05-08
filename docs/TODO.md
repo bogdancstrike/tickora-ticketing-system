@@ -59,7 +59,7 @@ Legend: `[x]` done · `[~]` partial · `[ ]` pending
 - [x] `ticketing/service/audit_service.py` — single-entry-point ledger
 - [x] Pydantic schemas (`schemas.py`) + permission-aware serializers (`serializers.py`)
 - [x] API: `POST /api/tickets`, `GET /api/tickets`, `GET /api/tickets/{id}`
-- [x] Frontend: tickets list, ticket details, create form
+- [x] Frontend: tickets list, ticket details, create form without distributor-owned triage metadata
 - [ ] Integration tests (testcontainers Postgres)
 
 ---
@@ -86,19 +86,21 @@ Legend: `[x]` done · `[~]` partial · `[ ]` pending
 - [x] Attachment service + endpoints (upload-url, register, list, download, delete)
 - [x] Audit endpoints (`/api/audit`, `/api/tickets/{id}/audit`, `/api/users/{id}/audit`)
 - [x] Frontend: `CommentBox`, `AttachmentUploader`, ticket audit tab, `AuditExplorer`
+- [x] Distributor review flow: `POST /api/tickets/{id}/review` sets sector, assignee, priority, category, type, and private review commentary
+- [x] Dynamic form options: database-backed sectors, assignable users, priorities, categories, and types
 
 ## Phase 5 — Notifications + dashboards
 
-- [ ] Tasking producer/consumer/registry/recovery (port from `rag-poc`)
-- [ ] Notification handlers (in-app, email, SSE) with idempotency keys
-- [ ] SSE `/api/notifications/stream`
+- [ ] Tasking (inspired from `rag-poc`: /home/bogdan/workspace/dev/rag-poc)
+- [ ] Notification handlers (in-app, email, SSE) with idempotency keys. Emails are enabled on .env (else, do not use email system)
+- [ ] SSE `/api/notifications/stream`. Also send on SSE new tickets in the system for Tickets Reviewers/Distributors.
 - [ ] Dashboard service + materialized views
 - [ ] Frontend dashboards + notification dropdown
 
 ## Phase 6 — Admin module
 
-- [ ] Sector / User / Nomenclature CRUD endpoints; Keycloak group sync
-- [ ] Role-specific queue UIs
+- [ ] All sectors/ Sector / User / Nomenclature CRUD endpoints; Keycloak group sync
+- [~] Role-specific queue UIs: distributor `Review Tickets` implemented; remaining role queues pending
 
 ## Phase 7 — Modern features (MVP-3)
 

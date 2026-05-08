@@ -3,20 +3,21 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import dayjs from 'dayjs'
 import {
-  Alert, Button, Descriptions, Drawer, Empty, Flex, Form, Input, List, Modal, Select,
+  Alert, Button, Checkbox, Descriptions, Empty, Flex, Form, Input, List, Modal, Select,
   Space, Table, Tabs, Tag, Typography, message, theme as antTheme,
 } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
 import {
   CheckCircleOutlined, CloseCircleOutlined, EditOutlined, PlayCircleOutlined,
-  PaperClipOutlined, ReloadOutlined, RetweetOutlined, StopOutlined, UserSwitchOutlined,
+  PaperClipOutlined, PlusOutlined, ReloadOutlined, RetweetOutlined, StopOutlined, UserSwitchOutlined,
 } from '@ant-design/icons'
 import {
   assignSector, assignToMe, assignToUser, cancelTicket, changePriority, closeTicket,
   createComment, deleteAttachment, deleteComment, downloadAttachmentUrl, getMe,
-  getTicket, listAttachments, listComments, listTicketAudit, listTickets, markDone,
-  registerAttachment, reopenTicket, requestAttachmentUpload, type AttachmentDto,
-  type AuditEventDto, type CommentDto, type TicketDto,
+  getTicket, getTicketOptions, listAssignableUsers, listAttachments, listComments,
+  listTicketAudit, listTickets, markDone, registerAttachment, reopenTicket, requestAttachmentUpload,
+  type AttachmentDto,
+  type AuditEventDto, type TicketDto,
 } from '@/api/tickets'
 import { useSessionStore } from '@/stores/sessionStore'
 
@@ -86,8 +87,9 @@ function canAssignToMe(ticket: TicketDto, user: ReturnType<typeof useSessionStor
 function canAssignToUser(ticket: TicketDto, user: ReturnType<typeof useSessionStore.getState>['user']) {
   if (!user) return false
   const isAdmin = user.roles.includes('tickora_admin')
+  const isDistributor = user.roles.includes('tickora_distributor')
   const isChief = !!user.sectors?.some((s) => s.sectorCode === ticket.current_sector_code && s.role === 'chief')
-  return (isAdmin || isChief)
+  return (isAdmin || isDistributor || isChief)
     && ['pending', 'assigned_to_sector', 'in_progress', 'reopened', 'on_hold'].includes(ticket.status)
 }
 
@@ -110,14 +112,16 @@ function canMarkDone(ticket: TicketDto, user: ReturnType<typeof useSessionStore.
 
 function canClose(ticket: TicketDto, user: ReturnType<typeof useSessionStore.getState>['user']) {
   if (!user) return false
+  const isRequesterEmail = ticket.beneficiary_type === 'external' && !!user.email && ticket.requester_email === user.email
   return ticket.status === 'done'
-    && (user.roles.includes('tickora_admin') || ticket.created_by_user_id === user.id)
+    && (user.roles.includes('tickora_admin') || ticket.created_by_user_id === user.id || isRequesterEmail)
 }
 
 function canReopen(ticket: TicketDto, user: ReturnType<typeof useSessionStore.getState>['user']) {
   if (!user) return false
+  const isRequesterEmail = ticket.beneficiary_type === 'external' && !!user.email && ticket.requester_email === user.email
   return ['done', 'closed'].includes(ticket.status)
-    && (user.roles.includes('tickora_admin') || ticket.created_by_user_id === user.id)
+    && (user.roles.includes('tickora_admin') || ticket.created_by_user_id === user.id || isRequesterEmail)
 }
 
 function canCancel(ticket: TicketDto, user: ReturnType<typeof useSessionStore.getState>['user']) {
@@ -134,6 +138,17 @@ function WorkflowActions({ ticket }: { ticket: TicketDto }) {
   const [msg, holder] = message.useMessage()
   const queryClient = useQueryClient()
   const user = useSessionStore((s) => s.user)
+  const options = useQuery({
+    queryKey: ['ticketOptions'],
+    queryFn: getTicketOptions,
+    staleTime: 300_000,
+  })
+  const assignable = useQuery({
+    queryKey: ['assignableUsers', ticket.current_sector_code],
+    queryFn: () => listAssignableUsers(ticket.current_sector_code || undefined),
+    enabled: !!ticket.current_sector_code,
+    staleTime: 60_000,
+  })
 
   const finish = async () => {
     setModal(null)
@@ -210,17 +225,32 @@ function WorkflowActions({ ticket }: { ticket: TicketDto }) {
         <Form form={form} layout="vertical">
           {modal === 'assign_sector' && (
             <Form.Item name="sectorCode" label="Sector code" rules={[{ required: true }]}>
-              <Input placeholder="s10" />
+              <Select
+                showSearch
+                optionFilterProp="label"
+                options={(options.data?.sectors || []).map((s) => ({
+                  value: s.code,
+                  label: `${s.code} · ${s.name}`,
+                }))}
+              />
             </Form.Item>
           )}
           {modal === 'assign_to_user' && (
             <Form.Item name="userId" label="User ID" rules={[{ required: true }]}>
-              <Input placeholder="Tickora user UUID" />
+              <Select
+                showSearch
+                optionFilterProp="label"
+                loading={assignable.isLoading}
+                options={(assignable.data?.items || []).map((u) => ({
+                  value: u.id,
+                  label: `${u.username || u.email || u.id} · ${u.sector_code} ${u.membership_role}`,
+                }))}
+              />
             </Form.Item>
           )}
           {modal === 'priority' && (
             <Form.Item name="priority" label="Priority" rules={[{ required: true }]}>
-              <Select options={['low', 'medium', 'high', 'critical'].map((p) => ({ value: p, label: p }))} />
+              <Select options={(options.data?.priorities || ['low', 'medium', 'high', 'critical']).map((p) => ({ value: p, label: p }))} />
             </Form.Item>
           )}
           {modal === 'mark_done' && (
@@ -248,8 +278,8 @@ function CommentBox({ ticketId }: { ticketId: string }) {
     queryFn: () => listComments(ticketId),
   })
   const add = useMutation({
-    mutationFn: (values: { body: string; visibility: CommentDto['visibility'] }) =>
-      createComment(ticketId, values.body, values.visibility),
+    mutationFn: (values: { body: string; is_public: boolean }) =>
+      createComment(ticketId, values.body, values.is_public ? 'public' : 'private'),
     onSuccess: async () => {
       form.resetFields()
       await queryClient.invalidateQueries({ queryKey: ['comments', ticketId] })
@@ -266,16 +296,13 @@ function CommentBox({ ticketId }: { ticketId: string }) {
   return (
     <div style={{ display: 'grid', gap: 16 }}>
       {holder}
-      <Form form={form} layout="vertical" initialValues={{ visibility: 'public' }} onFinish={(v) => add.mutate(v)}>
+      <Form form={form} layout="vertical" initialValues={{ is_public: true }} onFinish={(v) => add.mutate(v)}>
         <Form.Item name="body" rules={[{ required: true, min: 2 }]}>
           <Input.TextArea rows={3} placeholder="Add a comment" />
         </Form.Item>
         <Flex justify="space-between" align="center">
-          <Form.Item name="visibility" style={{ marginBottom: 0 }}>
-            <Select style={{ width: 130 }} options={[
-              { value: 'public', label: 'Public' },
-              { value: 'private', label: 'Private' },
-            ]} />
+          <Form.Item name="is_public" valuePropName="checked" style={{ marginBottom: 0 }}>
+            <Checkbox>Public comment</Checkbox>
           </Form.Item>
           <Button htmlType="submit" type="primary" loading={add.isPending}>Post</Button>
         </Flex>
@@ -412,7 +439,7 @@ function TicketAudit({ ticketId }: { ticketId: string }) {
   )
 }
 
-function TicketDrawer({ ticketId }: { ticketId?: string }) {
+function TicketDetails({ ticketId }: { ticketId?: string }) {
   const navigate = useNavigate()
   const { token } = antTheme.useToken()
   const { data: ticket, isLoading, error } = useQuery({
@@ -422,17 +449,20 @@ function TicketDrawer({ ticketId }: { ticketId?: string }) {
   })
 
   return (
-    <Drawer
-      title={ticket ? `${ticket.ticket_code} · ${ticket.title || 'Ticket'}` : 'Ticket'}
-      open={!!ticketId}
-      size="large"
-      onClose={() => navigate('/tickets')}
-      styles={{ body: { padding: 0 } }}
-    >
-      {error && <Alert type="error" message={error.message} showIcon style={{ margin: 16 }} />}
+    <div style={{ padding: 24, display: 'grid', gap: 16 }}>
+      <Flex justify="space-between" align="center" wrap="wrap" gap={12}>
+        <div>
+          <Typography.Title level={3} style={{ margin: 0 }}>
+            {ticket ? `${ticket.ticket_code} · ${ticket.title || 'Ticket'}` : 'Ticket'}
+          </Typography.Title>
+          <Typography.Text type="secondary">Details, workflow, comments, attachments, and audit trail</Typography.Text>
+        </div>
+        <Button onClick={() => navigate('/tickets')}>Back to Tickets</Button>
+      </Flex>
+      {error && <Alert type="error" message={error.message} showIcon />}
       {!error && !ticket && !isLoading && <Empty style={{ marginTop: 80 }} />}
       {ticket && (
-        <div style={{ display: 'grid', gap: 16, padding: 16 }}>
+        <div style={{ display: 'grid', gap: 16 }}>
           <div style={{
             border: `1px solid ${token.colorBorderSecondary}`,
             borderRadius: 8,
@@ -466,6 +496,7 @@ function TicketDrawer({ ticketId }: { ticketId?: string }) {
             <Descriptions.Item label="Requester">
               {[ticket.requester_first_name, ticket.requester_last_name].filter(Boolean).join(' ') || ticket.requester_email || '-'}
             </Descriptions.Item>
+            <Descriptions.Item label="Requester email">{ticket.requester_email || '-'}</Descriptions.Item>
             <Descriptions.Item label="Created">{fmt(ticket.created_at)}</Descriptions.Item>
             <Descriptions.Item label="Updated">{fmt(ticket.updated_at)}</Descriptions.Item>
             <Descriptions.Item label="Assigned">{fmt(ticket.assigned_at)}</Descriptions.Item>
@@ -476,13 +507,18 @@ function TicketDrawer({ ticketId }: { ticketId?: string }) {
           </Descriptions>
         </div>
       )}
-    </Drawer>
+    </div>
   )
+}
+
+export function TicketDetailPage() {
+  const params = useParams()
+  useSessionBootstrap()
+  return <TicketDetails ticketId={params.ticketId} />
 }
 
 export function TicketsPage() {
   const navigate = useNavigate()
-  const params = useParams()
   const { token } = antTheme.useToken()
   const [status, setStatus] = useState<string | undefined>()
   const [priority, setPriority] = useState<string | undefined>()
@@ -491,6 +527,11 @@ export function TicketsPage() {
   const tickets = useQuery({
     queryKey: ['tickets', status, priority, sector],
     queryFn: () => listTickets({ status, priority, current_sector_code: sector, limit: 100 }),
+  })
+  const options = useQuery({
+    queryKey: ['ticketOptions'],
+    queryFn: getTicketOptions,
+    staleTime: 300_000,
   })
 
   useEffect(() => {
@@ -544,12 +585,16 @@ export function TicketsPage() {
           <Typography.Text type="secondary">Operational queue with workflow actions</Typography.Text>
         </div>
         <Space wrap>
+          <Button type="primary" icon={<PlusOutlined />} onClick={() => navigate('/create')}>
+            Create Ticket
+          </Button>
           <Select allowClear placeholder="Status" value={status} onChange={setStatus} style={{ width: 190 }}
                   options={['pending', 'assigned_to_sector', 'in_progress', 'done', 'closed', 'reopened', 'cancelled'].map((s) => ({ value: s, label: s }))} />
           <Select allowClear placeholder="Priority" value={priority} onChange={setPriority} style={{ width: 130 }}
-                  options={['low', 'medium', 'high', 'critical'].map((p) => ({ value: p, label: p }))} />
-          <Input allowClear placeholder="Sector" value={sector} onChange={(e) => setSector(e.target.value || undefined)}
-                 style={{ width: 110 }} />
+                  options={(options.data?.priorities || ['low', 'medium', 'high', 'critical']).map((p) => ({ value: p, label: p }))} />
+          <Select allowClear showSearch placeholder="Sector" value={sector} onChange={setSector}
+                  style={{ width: 180 }} optionFilterProp="label"
+                  options={(options.data?.sectors || []).map((s) => ({ value: s.code, label: `${s.code} · ${s.name}` }))} />
           <Button icon={<ReloadOutlined />} onClick={() => tickets.refetch()} />
         </Space>
       </Flex>
@@ -569,8 +614,6 @@ export function TicketsPage() {
           scroll={{ x: 860 }}
         />
       </div>
-
-      <TicketDrawer ticketId={params.ticketId} />
     </div>
   )
 }

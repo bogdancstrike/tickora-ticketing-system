@@ -160,6 +160,14 @@
     },
     {
       "namespace": "tickora",
+      "operation_name": "tickets_review",
+      "model_name": "Empty",
+      "request_method": ["POST"],
+      "api_url": "/api/tickets/<ticket_id>/review",
+      "exec_method": { "module_name": "api.review", "method_name": "review_ticket" }
+    },
+    {
+      "namespace": "tickora",
       "operation_name": "comments_list",
       "model_name": "Empty",
       "request_method": ["GET"],
@@ -232,6 +240,22 @@
     },
     {
       "namespace": "tickora",
+      "operation_name": "reference_ticket_options",
+      "model_name": "Empty",
+      "request_method": ["GET"],
+      "api_url": "/api/reference/ticket-options",
+      "exec_method": { "module_name": "api.reference", "method_name": "ticket_options" }
+    },
+    {
+      "namespace": "tickora",
+      "operation_name": "reference_assignable_users",
+      "model_name": "Empty",
+      "request_method": ["GET"],
+      "api_url": "/api/reference/assignable-users",
+      "exec_method": { "module_name": "api.reference", "method_name": "assignable_users" }
+    },
+    {
+      "namespace": "tickora",
       "operation_name": "audit_list",
       "model_name": "Empty",
       "request_method": ["GET"],
@@ -253,6 +277,70 @@
       "request_method": ["GET"],
       "api_url": "/api/users/<user_id>/audit",
       "exec_method": { "module_name": "api.audit", "method_name": "user_audit" }
+    },
+    {
+      "namespace": "tickora",
+      "operation_name": "dashboard_overview",
+      "model_name": "Empty",
+      "request_method": ["GET"],
+      "api_url": "/api/dashboard/overview",
+      "exec_method": { "module_name": "api.dashboard", "method_name": "overview" }
+    },
+    {
+      "namespace": "tickora",
+      "operation_name": "dashboard_global",
+      "model_name": "Empty",
+      "request_method": ["GET"],
+      "api_url": "/api/dashboard/global",
+      "exec_method": { "module_name": "api.dashboard", "method_name": "global_dashboard" }
+    },
+    {
+      "namespace": "tickora",
+      "operation_name": "dashboard_sectors",
+      "model_name": "Empty",
+      "request_method": ["GET"],
+      "api_url": "/api/dashboard/sectors",
+      "exec_method": { "module_name": "api.dashboard", "method_name": "sectors_dashboard" }
+    },
+    {
+      "namespace": "tickora",
+      "operation_name": "dashboard_sector",
+      "model_name": "Empty",
+      "request_method": ["GET"],
+      "api_url": "/api/dashboard/sectors/<sector_id>",
+      "exec_method": { "module_name": "api.dashboard", "method_name": "sector_dashboard" }
+    },
+    {
+      "namespace": "tickora",
+      "operation_name": "dashboard_user",
+      "model_name": "Empty",
+      "request_method": ["GET"],
+      "api_url": "/api/dashboard/users/<user_id>",
+      "exec_method": { "module_name": "api.dashboard", "method_name": "user_dashboard" }
+    },
+    {
+      "namespace": "tickora",
+      "operation_name": "dashboard_beneficiaries",
+      "model_name": "Empty",
+      "request_method": ["GET"],
+      "api_url": "/api/dashboard/beneficiaries",
+      "exec_method": { "module_name": "api.dashboard", "method_name": "beneficiary_dashboard" }
+    },
+    {
+      "namespace": "tickora",
+      "operation_name": "dashboard_sla",
+      "model_name": "Empty",
+      "request_method": ["GET"],
+      "api_url": "/api/dashboard/sla",
+      "exec_method": { "module_name": "api.dashboard", "method_name": "sla_dashboard" }
+    },
+    {
+      "namespace": "tickora",
+      "operation_name": "dashboard_timeseries",
+      "model_name": "Empty",
+      "request_method": ["GET"],
+      "api_url": "/api/dashboard/timeseries",
+      "exec_method": { "module_name": "api.dashboard", "method_name": "timeseries_dashboard" }
     }
   ]
 }

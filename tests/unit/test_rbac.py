@@ -20,6 +20,8 @@ from src.iam.principal import (
 class FakeTicket:
     id: str = "t-1"
     status: str = "in_progress"
+    beneficiary_type: str = "internal"
+    requester_email: Optional[str] = None
     current_sector_code: Optional[str] = "s10"
     assignee_user_id: Optional[str] = None
     last_active_assignee_user_id: Optional[str] = None
@@ -65,6 +67,15 @@ class TestCanViewTicket:
     def test_beneficiary_sees_own(self):
         p = make_principal(user_id="u-ben", roles=(ROLE_EXTERNAL_USER,))
         t = FakeTicket(beneficiary_user_id="u-ben", current_sector_code=None)
+        assert rbac.can_view_ticket(p, t) is True
+
+    def test_external_requester_sees_ticket_by_email(self):
+        p = make_principal(user_id="u-ben", roles=(ROLE_EXTERNAL_USER,), user_type="external")
+        t = FakeTicket(
+            beneficiary_type="external",
+            requester_email="u-ben@x",
+            current_sector_code=None,
+        )
         assert rbac.can_view_ticket(p, t) is True
 
     def test_sector_member_sees_sector_ticket(self):
@@ -154,6 +165,12 @@ class TestCloseAndReopen:
     def test_admin_can(self, fn):
         p = make_principal(roles=(ROLE_ADMIN,))
         assert fn(p, FakeTicket()) is True
+
+    @pytest.mark.parametrize("fn", [rbac.can_close, rbac.can_reopen])
+    def test_external_requester_email_can(self, fn):
+        p = make_principal(user_id="u-ben", roles=(ROLE_EXTERNAL_USER,), user_type="external")
+        t = FakeTicket(beneficiary_type="external", requester_email="u-ben@x")
+        assert fn(p, t) is True
 
 
 class TestPrivateComments:

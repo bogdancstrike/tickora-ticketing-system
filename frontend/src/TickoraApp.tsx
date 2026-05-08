@@ -4,16 +4,19 @@ import {
   ConfigProvider, Layout, Menu, theme as antTheme, Typography, Space, Button, Tooltip, Dropdown,
 } from 'antd'
 import {
-  DashboardOutlined, UnorderedListOutlined, PlusOutlined, AuditOutlined, SettingOutlined,
+  DashboardOutlined, UnorderedListOutlined, CheckSquareOutlined, AuditOutlined, SettingOutlined,
   BgColorsOutlined, MenuFoldOutlined, MenuUnfoldOutlined, UserOutlined, LogoutOutlined,
 } from '@ant-design/icons'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { useKeycloak } from '@react-keycloak/web'
 import { useThemeStore } from '@/stores/themeStore'
 import { useSessionStore } from '@/stores/sessionStore'
-import { TicketsPage } from '@/pages/TicketsPage'
+import { TicketDetailPage, TicketsPage } from '@/pages/TicketsPage'
 import { AuditExplorerPage } from '@/pages/AuditExplorerPage'
 import { CreateTicketPage } from '@/pages/CreateTicketPage'
+import { ReviewTicketsPage } from '@/pages/ReviewTicketsPage'
+import { DashboardPage } from '@/pages/DashboardPage'
+import { RequireRole } from '@/auth/RequireRole'
 
 const { Header, Sider, Content } = Layout
 const { Text } = Typography
@@ -22,12 +25,31 @@ const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: false } },
 })
 
+const ROLE_ADMIN = 'tickora_admin'
+const ROLE_AUDITOR = 'tickora_auditor'
+const ROLE_DISTRIBUTOR = 'tickora_distributor'
+
 const NAV_ITEMS = [
-  { key: '/dashboard', label: 'Dashboard',     icon: <DashboardOutlined /> },
-  { key: '/tickets',   label: 'Tickets',       icon: <UnorderedListOutlined /> },
-  { key: '/create',    label: 'Create Ticket', icon: <PlusOutlined /> },
-  { key: '/audit',     label: 'Audit',         icon: <AuditOutlined /> },
-  { key: '/admin',     label: 'Admin',         icon: <SettingOutlined /> },
+  { key: '/dashboard', label: 'Dashboard', icon: <DashboardOutlined /> },
+  { key: '/tickets', label: 'Tickets', icon: <UnorderedListOutlined /> },
+  {
+    key: '/review',
+    label: 'Review Tickets',
+    icon: <CheckSquareOutlined />,
+    roles: [ROLE_ADMIN, ROLE_DISTRIBUTOR],
+  },
+  {
+    key: '/audit',
+    label: 'Audit',
+    icon: <AuditOutlined />,
+    roles: [ROLE_ADMIN, ROLE_AUDITOR],
+  },
+  {
+    key: '/admin',
+    label: 'Admin',
+    icon: <SettingOutlined />,
+    roles: [ROLE_ADMIN],
+  },
 ]
 
 function AppSidebar() {
@@ -35,8 +57,10 @@ function AppSidebar() {
   const location = useLocation()
   const { token } = antTheme.useToken()
   const [collapsed, setCollapsed] = useState(false)
+  const hasAny = useSessionStore((s) => s.hasAny)
+  const visibleItems = NAV_ITEMS.filter((item) => !item.roles || hasAny(item.roles))
 
-  const selectedKey = NAV_ITEMS.find((n) => location.pathname.startsWith(n.key))?.key || '/dashboard'
+  const selectedKey = visibleItems.find((n) => location.pathname.startsWith(n.key))?.key || '/dashboard'
 
   return (
     <Sider
@@ -58,7 +82,7 @@ function AppSidebar() {
       <Menu
         mode="inline"
         selectedKeys={[selectedKey]}
-        items={NAV_ITEMS}
+        items={visibleItems}
         onClick={({ key }) => navigate(key)}
         style={{ borderRight: 0 }}
       />
@@ -120,12 +144,22 @@ function Shell() {
         <Content style={{ overflow: 'auto' }}>
           <Routes>
             <Route path="/"          element={<Navigate to="/dashboard" replace />} />
-            <Route path="/dashboard" element={<PlaceholderPage title="Dashboard" />} />
+            <Route path="/dashboard" element={<DashboardPage />} />
             <Route path="/tickets"   element={<TicketsPage />} />
-            <Route path="/tickets/:ticketId" element={<TicketsPage />} />
+            <Route path="/tickets/:ticketId" element={<TicketDetailPage />} />
             <Route path="/create"    element={<CreateTicketPage />} />
-            <Route path="/audit"     element={<AuditExplorerPage />} />
-            <Route path="/admin"     element={<PlaceholderPage title="Admin" />} />
+            <Route
+              path="/review"
+              element={<RequireRole roles={[ROLE_ADMIN, ROLE_DISTRIBUTOR]}><ReviewTicketsPage /></RequireRole>}
+            />
+            <Route
+              path="/audit"
+              element={<RequireRole roles={[ROLE_ADMIN, ROLE_AUDITOR]}><AuditExplorerPage /></RequireRole>}
+            />
+            <Route
+              path="/admin"
+              element={<RequireRole roles={[ROLE_ADMIN]}><PlaceholderPage title="Admin" /></RequireRole>}
+            />
             <Route path="*"          element={<Navigate to="/dashboard" replace />} />
           </Routes>
         </Content>

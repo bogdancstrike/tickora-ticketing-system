@@ -11,6 +11,8 @@ from src.iam.principal import Principal
 class _TicketLike(Protocol):
     id: str
     status: str
+    beneficiary_type: str
+    requester_email: str | None
     current_sector_code: str | None
     assignee_user_id: str | None
     last_active_assignee_user_id: str | None
@@ -29,6 +31,8 @@ class _CommentLike(Protocol):
 def can_view_ticket(p: Principal, t: _TicketLike) -> bool:
     """True if `p` may see the existence of ticket `t`."""
     if p.is_admin or p.is_auditor:
+        return True
+    if _is_requester_by_email(p, t):
         return True
     if t.created_by_user_id and t.created_by_user_id == p.user_id:
         return True
@@ -76,8 +80,8 @@ def can_assign_to_me(p: Principal, t: _TicketLike) -> bool:
 
 
 def can_assign_to_user(p: Principal, t: _TicketLike) -> bool:
-    """Manually assign to another user. Chief of current sector or admin."""
-    if p.is_admin:
+    """Manually assign to another user. Distributor, chief of current sector, or admin."""
+    if p.is_admin or p.is_distributor:
         return True
     if t.current_sector_code and p.is_chief_of(t.current_sector_code):
         return True
@@ -101,6 +105,8 @@ def can_mark_done(p: Principal, t: _TicketLike) -> bool:
 def can_close(p: Principal, t: _TicketLike) -> bool:
     if p.is_admin:
         return True
+    if _is_requester_by_email(p, t):
+        return True
     if t.created_by_user_id and t.created_by_user_id == p.user_id:
         return True
     if t.beneficiary_user_id and t.beneficiary_user_id == p.user_id:
@@ -110,6 +116,15 @@ def can_close(p: Principal, t: _TicketLike) -> bool:
 
 def can_reopen(p: Principal, t: _TicketLike) -> bool:
     return can_close(p, t)
+
+
+def _is_requester_by_email(p: Principal, t: _TicketLike) -> bool:
+    return (
+        getattr(t, "beneficiary_type", None) == "external"
+        and bool(p.email)
+        and bool(getattr(t, "requester_email", None))
+        and p.email.casefold() == t.requester_email.casefold()
+    )
 
 
 def can_cancel(p: Principal, t: _TicketLike) -> bool:

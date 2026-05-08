@@ -112,10 +112,97 @@ export interface CreateTicketPayload {
   requester_ip?: string
   title?: string
   txt: string
-  suggested_sector_code?: string
+}
+
+export interface TicketOptionsDto {
+  sectors: Array<{ id: string; code: string; name: string }>
+  priorities: Array<TicketDto['priority']>
+  categories: string[]
+  types: string[]
+}
+
+export interface AssignableUserDto {
+  id: string
+  username?: string | null
+  email?: string | null
+  first_name?: string | null
+  last_name?: string | null
+  sector_code: string
+  membership_role: 'member' | 'chief'
+}
+
+export interface ReviewTicketPayload {
+  sector_code?: string
+  assignee_user_id?: string
+  priority?: TicketDto['priority']
   category?: string
   type?: string
+  private_comment?: string
+  reason?: string
+}
+
+export interface DashboardBreakdown {
+  key: string
+  count: number
+}
+
+export interface DashboardOldTicket {
+  id: string
+  ticket_code: string
+  title?: string | null
+  status: string
   priority: TicketDto['priority']
+  created_at?: string | null
+}
+
+export interface DashboardTimeseriesPoint {
+  date: string
+  created: number
+  closed: number
+}
+
+export interface DashboardSector {
+  sector_code: string
+  sector_name: string
+  kpis: Record<string, number | null>
+  by_status: DashboardBreakdown[]
+  by_priority: DashboardBreakdown[]
+  by_category: DashboardBreakdown[]
+  workload: Array<{ assignee_user_id: string; active: number; done: number }>
+  oldest: DashboardOldTicket[]
+}
+
+export interface DashboardOverview {
+  generated_at: string
+  global?: {
+    kpis: Record<string, number | null>
+    by_status: DashboardBreakdown[]
+    by_priority: DashboardBreakdown[]
+    by_beneficiary_type: DashboardBreakdown[]
+    by_category: DashboardBreakdown[]
+    by_sector: Array<{ sector_code: string; sector_name: string; count: number }>
+    top_backlog_sectors: Array<{ sector_code: string; sector_name: string; count: number }>
+  } | null
+  distributor?: {
+    kpis: Record<string, number | null>
+    by_priority: DashboardBreakdown[]
+    by_category: DashboardBreakdown[]
+    oldest: DashboardOldTicket[]
+  } | null
+  sectors: DashboardSector[]
+  personal: {
+    user_id: string
+    username?: string | null
+    email?: string | null
+    kpis: Record<string, number | null>
+    by_status: DashboardBreakdown[]
+    oldest: DashboardOldTicket[]
+  }
+  beneficiary: {
+    kpis: Record<string, number | null>
+    by_status: DashboardBreakdown[]
+  }
+  timeseries: DashboardTimeseriesPoint[]
 }
 
 export const getMe = async (): Promise<MeDto> => {
@@ -135,6 +222,38 @@ export const getTicket = async (ticketId: string): Promise<TicketDto> => {
 
 export const createTicket = async (payload: CreateTicketPayload): Promise<TicketDto> => {
   const { data } = await apiClient.post('/api/tickets', payload)
+  return data
+}
+
+export const getTicketOptions = async (): Promise<TicketOptionsDto> => {
+  const { data } = await apiClient.get('/api/reference/ticket-options')
+  return data
+}
+
+export const listAssignableUsers = async (sectorCode?: string): Promise<{ items: AssignableUserDto[] }> => {
+  const { data } = await apiClient.get('/api/reference/assignable-users', {
+    params: { sector_code: sectorCode || undefined },
+  })
+  return data
+}
+
+export const reviewTicket = async (ticketId: string, payload: ReviewTicketPayload): Promise<TicketDto> => {
+  const { data } = await apiClient.post(`/api/tickets/${ticketId}/review`, payload)
+  return data
+}
+
+export const getDashboardOverview = async (): Promise<DashboardOverview> => {
+  const { data } = await apiClient.get('/api/dashboard/overview')
+  return data
+}
+
+export const getSectorDashboard = async (sectorCode: string): Promise<DashboardSector> => {
+  const { data } = await apiClient.get(`/api/dashboard/sectors/${sectorCode}`)
+  return data
+}
+
+export const getUserDashboard = async (userId: string): Promise<DashboardOverview['personal']> => {
+  const { data } = await apiClient.get(`/api/dashboard/users/${userId}`)
   return data
 }
 
