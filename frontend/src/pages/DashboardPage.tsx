@@ -133,7 +133,10 @@ export function DashboardPage() {
   const users = useQuery({
     queryKey: ['dashboardAssignableUsers', sectorCode],
     queryFn: () => listAssignableUsers(sectorCode),
-    enabled: !!sectorCode && !!user?.roles.some((role) => ['tickora_admin', 'tickora_auditor', 'tickora_sector_chief'].includes(role)),
+    enabled: !!sectorCode && (
+      !!user?.roles.some((role) => ['tickora_admin', 'tickora_auditor'].includes(role))
+      || !!user?.sectors?.some((sector) => sector.sectorCode === sectorCode && sector.role === 'chief')
+    ),
     staleTime: 60_000,
   })
   const selectedSector = useQuery({

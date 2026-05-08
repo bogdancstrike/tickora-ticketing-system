@@ -156,7 +156,7 @@ export function AuditExplorerPage() {
       key: 'actions',
       width: 120,
       render: (_, row) => row.ticket_id
-        ? <Button size="small" onClick={(e) => { e.stopPropagation(); setGraphTicketId(row.ticket_id!) }}>See graph</Button>
+        ? <Button size="small" onClick={(e) => { e.stopPropagation(); setGraphTicketId(row.ticket_id!) }}>See timeline</Button>
         : null,
     },
   ], [params])
@@ -270,7 +270,7 @@ export function AuditExplorerPage() {
                     </Descriptions.Item>
                   )}
                   <Descriptions.Item label="Request Details">
-                    <Space direction="vertical">
+                    <Space orientation="vertical">
                       <Typography.Text type="secondary">IP: {(row.metadata?.request_ip as string) || '-'}</Typography.Text>
                       <Typography.Text type="secondary" style={{ fontSize: 11 }}>Agent: {(row.metadata?.user_agent as string) || '-'}</Typography.Text>
                     </Space>

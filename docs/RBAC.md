@@ -15,33 +15,37 @@ Clients:
 | `tickora-spa` | Public PKCE | Browser login and access-token acquisition |
 | `tickora-api` | Confidential | Backend API audience and service-account surface |
 
-Tickora uses a tree-shaped group model. A parent group grants the effective
-permissions of its children, so a user can be configured with one broad group
-instead of a long role list.
+Tickora uses realm roles for feature permissions and a tree-shaped group model
+for organizational access. A parent group grants the effective organizational
+access of its children, so a user can be configured with one broad group instead
+of a long membership list.
+
+The organization tree is dynamic. Tickora expects the shape
+`/tickora/sectors/<sector>/{chiefs,members}`, but the `<sector>` nodes are read
+from Keycloak at runtime. Adding `/tickora/sectors/s42` in Keycloak should not
+require a code change.
 
 | Group pattern | Meaning |
 |---|---|
-| `/tickora` | Full Tickora platform access. Equivalent to admin/auditor/distributor/internal plus all sector capabilities. |
+| `/tickora` | Full Tickora platform access. Super-admin root with all sector visibility and admin-level backend access. |
 | `/tickora/sectors/<sector>` | Full sector access for that sector. Equivalent to both chief and member in the sector. |
 | `/tickora/sectors/<sector>/members` | Operational member of the sector. |
 | `/tickora/sectors/<sector>/chiefs` | Sector chief for the sector. |
 | `sector10` or `/tickora/sector10` | Accepted shorthand for sector `s10`; equivalent to `/tickora/sectors/s10`. |
 
-Realm roles are still supported for compatibility and for external-user flags,
-but backend authorization treats the group tree as authoritative for effective
-Tickora permissions.
+Sector membership and sector chief status must come from groups, not realm
+roles. Realm roles decide which feature modules a user can see or use, such as
+Audit or Review Tickets.
 
 ## Roles
 
 | Role | Purpose | Main permissions |
 |---|---|---|
-| `tickora_admin` | Platform administrator | Can view and administer all tickets, comments, private notes, attachments, audit, users, sectors, and configuration. Can execute all workflow actions. Implied by `/tickora`. |
+| `tickora_admin` | Platform administrator feature permission | Can view and administer all tickets, comments, private notes, attachments, audit, users, sectors, and configuration. Can execute all workflow actions. Also implied by `/tickora`. |
 | `tickora_auditor` | Audit/read-only oversight | Can view global audit and dashboards. Can view tickets for audit purposes, including private comments, but should not mutate operational data. |
 | `tickora_distributor` | Initial triage and distribution | Can see pending and sector-assigned tickets, review tickets, set triage metadata, assign tickets to sectors/users, cancel pending tickets, change priority, and write private triage comments. |
 | `tickora_internal_user` | Internal beneficiary/requester | Can create tickets, view own tickets, post public comments, close done tickets, and reopen own done/closed tickets. |
 | `tickora_external_user` | External beneficiary/requester | Can create/view own external tickets and interact only through public ticket surfaces. Private comments are hidden. |
-| `tickora_sector_member` | Sector operator | Can view sector tickets, assign eligible tickets to self, comment, upload attachments, and mark assigned work done. Implied by `/tickora/sectors/<sector>` and `/members`. |
-| `tickora_sector_chief` | Sector coordinator | Can view sector tickets, assign/reassign users in their sector, change priority, cancel pending sector tickets, mark done, and view sector audit. Implied by `/tickora/sectors/<sector>` and `/chiefs`. |
 | `tickora_service_account` | Automation/service role | Reserved for worker/system integrations. Not assigned to human seed users. |
 
 ## Seed Users
@@ -67,8 +71,8 @@ Tickora123!
 | `auditor` | Internal | `tickora_auditor`, `tickora_internal_user` | none | Read-only audit and oversight testing |
 | `distributor` | Internal | `tickora_distributor`, `tickora_internal_user` | none | Review pending tickets, set metadata, write private notes, and assign work to sectors/users |
 | `chief.s10` | Internal | implied by sector parent group | `/tickora/sectors/s10` | Coordinate sector `s10` work and reassign sector tickets |
-| `member.s10` | Internal | `tickora_sector_member`, `tickora_internal_user` | `/tickora/sectors/s10/members` | Process `s10` tickets and mark assigned tickets done |
-| `member.s2` | Internal | `tickora_sector_member`, `tickora_internal_user` | `/tickora/sectors/s2/members` | Process `s2` network tickets |
+| `member.s10` | Internal | `tickora_internal_user` | `/tickora/sectors/s10/members` | Process `s10` tickets and mark assigned tickets done |
+| `member.s2` | Internal | `tickora_internal_user` | `/tickora/sectors/s2/members` | Process `s2` network tickets |
 | `beneficiary` | Internal | `tickora_internal_user` | none | Create internal tickets, view own tickets, close/reopen own work |
 | `external.user` | External | `tickora_external_user` | none | Validate external beneficiary visibility restrictions |
 
@@ -117,8 +121,10 @@ Backend RBAC is the source of truth. The frontend can hide buttons, but endpoint
 ## Profile Visibility
 
 `GET /api/me` returns the authenticated user's effective roles and sector
-memberships after group-tree expansion. The Profile page should render that as
-an access tree:
+memberships after group-tree expansion. For `/tickora` users, the API expands
+sector visibility from the current Keycloak `/tickora/sectors` children and only
+falls back to database sectors if Keycloak is temporarily unavailable. The
+Profile page should render that as an access tree:
 
 - root node: the current user
 - `/tickora` users: full platform access

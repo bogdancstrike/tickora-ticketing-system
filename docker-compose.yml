@@ -4,6 +4,7 @@ networks:
 volumes:
   postgres-data: {}
   redis-data: {}
+  redis-ui-data: {}
   kafka-data: {}
   minio-data: {}
   keycloak-data: {}
@@ -90,6 +91,20 @@ services:
       retries: 10
     restart: unless-stopped
 
+    # ── Redis UI / RedisInsight ─────────────────────────────────────────────────
+  redis-ui:
+    image: redis/redisinsight:latest
+    container_name: tickora-redis-ui
+    networks: [ tickoranet ]
+    depends_on:
+      redis: { condition: service_healthy }
+    ports:
+      - "${REDIS_UI_PORT:-5540}:5540"
+    volumes:
+      - redis-ui-data:/data
+    restart: unless-stopped
+
+
   # ── Kafka (KRaft, single-node) ──────────────────────────────────────────────
   kafka:
     image: confluentinc/cp-kafka:7.6.0
@@ -115,6 +130,21 @@ services:
       timeout: 5s
       retries: 12
       start_period: 30s
+    restart: unless-stopped
+
+  # ── Kafka UI ────────────────────────────────────────────────────────────────
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: tickora-kafka-ui
+    networks: [ tickoranet ]
+    depends_on:
+      kafka: { condition: service_healthy }
+    ports:
+      - "${KAFKA_UI_PORT:-8085}:8080"
+    environment:
+      KAFKA_CLUSTERS_0_NAME: tickora-local
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
+      KAFKA_CLUSTERS_0_PROPERTIES_SECURITY_PROTOCOL: PLAINTEXT
     restart: unless-stopped
 
   # ── MinIO ───────────────────────────────────────────────────────────────────

@@ -127,7 +127,7 @@ Legend: `[x]` done · `[~]` partial · `[ ]` pending
       `remove_assignee` rather than the broad queue-level unassign action.
 - [x] Configurable metadata key catalogue (`metadata_key_definitions`) with per-key option lists
 - [x] Add metadata UI in review (selectable values when key has options, free text otherwise)
-- [x] Audit explorer: per-column filters/sort, quick search, "See graph" with D3 evolution chart
+- [x] Audit explorer: per-column filters/sort, quick search, "See timeline" with D3 evolution chart
 - [~] Multi-assignment API + model support: `ticket_sectors` / `ticket_assignees`, serializer arrays
       (`sector_codes`, `assignee_user_ids`), endpoint map entries, service helpers, and frontend client
       methods are present; remaining UI polish and regression testing are still in progress.

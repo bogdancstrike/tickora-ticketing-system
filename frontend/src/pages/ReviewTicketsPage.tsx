@@ -81,7 +81,7 @@ export function ReviewTicketsPage() {
       dataIndex: 'updated_at',
       width: 180,
       render: (v) => (
-        <Space direction="vertical" size={0}>
+        <Space orientation="vertical" size={0}>
           <span>{fmtDateTime(v)}</span>
           <Typography.Text type="secondary" style={{ fontSize: 11 }}>{fmtRelative(v)}</Typography.Text>
         </Space>

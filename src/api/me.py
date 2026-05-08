@@ -3,9 +3,58 @@ from sqlalchemy import select
 
 from src.core.db import get_db
 from src.iam.decorators import require_authenticated
+from src.iam.keycloak_admin import KeycloakAdminClient
 from src.iam.models import User
 from src.iam.principal import Principal
 from src.ticketing.models import Sector
+from framework.commons.logger import logger as log
+
+
+def _subgroups(group: dict) -> list[dict]:
+    return group.get("subGroups") or group.get("subgroups") or []
+
+
+def _keycloak_sector_codes() -> list[str]:
+    try:
+        client = KeycloakAdminClient.get()
+        sectors_group = client.find_group_by_path("/tickora/sectors")
+        sector_children = client.group_children(sectors_group["id"]) if sectors_group else []
+        if sectors_group and not sector_children:
+            sector_children = _subgroups(
+                _find_group_by_path(client.list_groups(), ["tickora", "sectors"]) or sectors_group
+            )
+        if not sectors_group:
+            return []
+        codes = [
+            (group.get("name") or "").strip().lower()
+            for group in sector_children or _subgroups(sectors_group)
+            if (group.get("name") or "").strip()
+        ]
+        return sorted(set(codes))
+    except Exception as exc:
+        log.warning("keycloak_sector_tree_unavailable", extra={"error": str(exc)})
+        return []
+
+
+def _find_group_by_path(groups: list[dict], parts: list[str]) -> dict | None:
+    if not parts:
+        return None
+    for group in groups:
+        if group.get("name") != parts[0]:
+            continue
+        if len(parts) == 1:
+            return group
+        return _find_group_by_path(_subgroups(group), parts[1:])
+    return None
+
+
+def _db_sector_codes() -> list[str]:
+    with get_db() as db:
+        return db.scalars(
+            select(Sector.code)
+            .where(Sector.is_active.is_(True))
+            .order_by(Sector.code.asc())
+        ).all()
 
 
 def _sector_payload(principal: Principal) -> list[dict[str, str]]:
@@ -14,12 +63,7 @@ def _sector_payload(principal: Principal) -> list[dict[str, str]]:
         for m in principal.sector_memberships
     }
     if principal.is_admin:
-        with get_db() as db:
-            sector_codes = db.scalars(
-                select(Sector.code)
-                .where(Sector.is_active.is_(True))
-                .order_by(Sector.code.asc())
-            ).all()
+        sector_codes = _keycloak_sector_codes() or _db_sector_codes()
         for code in sector_codes:
             memberships.setdefault((code, "chief"), {"sector_code": code, "role": "chief"})
             memberships.setdefault((code, "member"), {"sector_code": code, "role": "member"})

@@ -96,6 +96,12 @@ Tickora123!
 | `beneficiary` | `tickora_internal_user` | Internal requester flow |
 | `external.user` | `tickora_external_user` | External requester visibility checks |
 
+Realm roles gate feature modules; sector membership and sector leadership come
+from Keycloak groups only. The `/tickora` root group is the super-admin
+organization node. Sector codes are dynamic under `/tickora/sectors/<code>`, so
+new sector groups added in Keycloak are reflected by the app without code
+changes.
+
 See [docs/RBAC.md](docs/RBAC.md) for the full authorization model.
 
 ## Repository Layout

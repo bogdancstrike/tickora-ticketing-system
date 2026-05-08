@@ -11,11 +11,6 @@ setTokenProvider(() => keycloak.token)
 
 const FULL_ACCESS_ROLES = [
   'tickora_admin',
-  'tickora_auditor',
-  'tickora_distributor',
-  'tickora_internal_user',
-  'tickora_sector_chief',
-  'tickora_sector_member',
 ]
 
 function normalizeSectorCode(code: string) {
@@ -63,10 +58,12 @@ const onTokens = () => {
   if (!keycloak.tokenParsed) return
   const t = keycloak.tokenParsed as any
   const groups: string[] = t?.groups || []
+  const previous = useSessionStore.getState().user
   const roles = new Set<string>(t?.realm_access?.roles || [])
   if (groups.some((g) => g === '/tickora' || g === 'tickora')) {
     FULL_ACCESS_ROLES.forEach((role) => roles.add(role))
   }
+  const sectors = tokenSectors(groups)
   useSessionStore.getState().setUser({
     id:        t.sub,
     username:  t.preferred_username,
@@ -74,7 +71,7 @@ const onTokens = () => {
     firstName: t.given_name,
     lastName:  t.family_name,
     roles:     Array.from(roles),
-    sectors:   tokenSectors(groups),
+    sectors:   sectors.length ? sectors : previous?.sectors,
   })
 }
 

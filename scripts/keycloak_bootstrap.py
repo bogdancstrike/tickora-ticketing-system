@@ -5,7 +5,7 @@ Run after `docker compose up -d keycloak`. Creates:
 - realm `tickora`
 - confidential client `tickora-api` (service account on)
 - public client `tickora-spa` (PKCE)
-- realm roles per BRD §9.1
+- realm roles for feature permissions
 - hierarchical groups:
   - /tickora for full platform access
   - /tickora/sectors/<sN> for effective sector chief+member access
@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import sys
 import time
+import os
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -28,7 +29,11 @@ from keycloak.exceptions import KeycloakGetError
 from src.config import Config
 
 REALM = Config.KEYCLOAK_REALM
-SECTORS = [f"s{i}" for i in range(1, 11)]
+SECTORS = [
+    code.strip().lower()
+    for code in os.getenv("KEYCLOAK_BOOTSTRAP_SECTORS", ",".join(f"s{i}" for i in range(1, 11))).split(",")
+    if code.strip()
+]
 SPA_ORIGINS = [origin.rstrip("/") for origin in Config.ALLOWED_ORIGINS]
 SPA_REDIRECT_URIS = [f"{origin}/*" for origin in SPA_ORIGINS]
 
@@ -38,9 +43,12 @@ REALM_ROLES = [
     "tickora_distributor",
     "tickora_internal_user",
     "tickora_external_user",
+    "tickora_service_account",
+]
+
+DEPRECATED_REALM_ROLES = [
     "tickora_sector_member",
     "tickora_sector_chief",
-    "tickora_service_account",
 ]
 
 
@@ -100,7 +108,7 @@ def cleanup_master_business_objects() -> None:
         kc.delete_group(group["id"])
         print("[cleanup:master] deleted group '/tickora'")
 
-    for role in REALM_ROLES:
+    for role in REALM_ROLES + DEPRECATED_REALM_ROLES:
         try:
             kc.get_realm_role(role)
             kc.delete_realm_role(role)
@@ -115,6 +123,15 @@ def ensure_role(kc: KeycloakAdmin, name: str) -> None:
         print(f"[role] {name}")
     except Exception as e:
         print(f"[role] {name}: {e}")
+
+
+def delete_realm_role_if_exists(kc: KeycloakAdmin, name: str) -> None:
+    try:
+        kc.get_realm_role(name)
+        kc.delete_realm_role(name)
+        print(f"[role:deprecated] deleted {name}")
+    except Exception:
+        pass
 
 
 def _get_group(kc: KeycloakAdmin, path: str) -> dict | None:
@@ -194,6 +211,24 @@ def ensure_client(kc: KeycloakAdmin, *, client_id: str, public: bool) -> str:
     return client_uuid
 
 
+def ensure_api_service_account_access(kc: KeycloakAdmin, *, api_uuid: str) -> None:
+    """Allow the API service account to read the dynamic organization tree."""
+    realm_management_uuid = _client_uuid(kc, "realm-management")
+    if not realm_management_uuid:
+        raise RuntimeError("realm-management client not found")
+    service_account = kc.get_client_service_account_user(api_uuid)
+    roles = [
+        kc.get_client_role(realm_management_uuid, role)
+        for role in ("query-groups", "query-users", "view-users", "view-realm")
+    ]
+    kc.assign_client_role(
+        user_id=service_account["id"],
+        client_id=realm_management_uuid,
+        roles=roles,
+    )
+    print("[client] tickora-api service account can read groups/users")
+
+
 def ensure_mapper(kc: KeycloakAdmin, *, client_uuid: str, name: str, payload: dict) -> None:
     existing = {m["name"]: m for m in kc.get_mappers_from_client(client_uuid)}
     if name in existing:
@@ -250,13 +285,16 @@ def main() -> int:
     ensure_realm(kc)
     for r in REALM_ROLES:
         ensure_role(kc, r)
+    for r in DEPRECATED_REALM_ROLES:
+        delete_realm_role_if_exists(kc, r)
     ensure_group(kc, "/tickora")
     ensure_group(kc, "/tickora/sectors")
     for code in SECTORS:
         ensure_group(kc, f"/tickora/sectors/{code}")
         ensure_group(kc, f"/tickora/sectors/{code}/members")
         ensure_group(kc, f"/tickora/sectors/{code}/chiefs")
-    ensure_client(kc, client_id=Config.KEYCLOAK_API_CLIENT_ID, public=False)
+    api_uuid = ensure_client(kc, client_id=Config.KEYCLOAK_API_CLIENT_ID, public=False)
+    ensure_api_service_account_access(kc, api_uuid=api_uuid)
     spa_uuid = ensure_client(kc, client_id=Config.KEYCLOAK_SPA_CLIENT_ID, public=True)
     ensure_spa_token_mappers(kc, spa_uuid=spa_uuid)
     print("done.")

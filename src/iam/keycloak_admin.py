@@ -48,13 +48,16 @@ class KeycloakAdminClient:
 
     # ── Groups ────────────────────────────────────────────────────────────
     def list_groups(self) -> list[dict]:
-        return self._kc.get_groups()
+        return self._kc.get_groups(full_hierarchy=True)
 
     def find_group_by_path(self, path: str) -> dict | None:
         try:
             return self._kc.get_group_by_path(path)
         except Exception:
             return None
+
+    def group_children(self, group_id: str) -> list[dict]:
+        return self._kc.get_group_children(group_id, full_hierarchy=True)
 
     def add_user_to_group(self, user_id: str, group_id: str) -> None:
         self._kc.group_user_add(user_id, group_id)

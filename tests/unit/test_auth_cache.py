@@ -1,7 +1,7 @@
 import time
 
 from src.iam.models import User
-from src.iam.principal import ROLE_DISTRIBUTOR
+from src.iam.principal import ROLE_ADMIN, ROLE_DISTRIBUTOR
 from src.iam import service as iam_service
 from src.iam import token_verifier
 
@@ -65,3 +65,46 @@ def test_principal_from_claims_uses_redis_until_token_expiry(monkeypatch):
     assert second.is_distributor
     assert second.is_member_of("s10")
     assert next(iter(redis.ttls.values())) <= 120
+
+
+def _principal_from_groups(monkeypatch, groups, roles=()):
+    monkeypatch.setattr(iam_service, "get_redis", lambda: None)
+    monkeypatch.setattr(iam_service, "get_or_create_user_from_claims", lambda claims: User(
+        id="user-1",
+        keycloak_subject=claims["sub"],
+        username="alice",
+        email="alice@example.test",
+        first_name="Alice",
+        last_name="User",
+        user_type="internal",
+        is_active=True,
+    ))
+    return iam_service.principal_from_claims({
+        "sub": "kc-sub-1",
+        "exp": int(time.time()) + 120,
+        "realm_access": {"roles": list(roles)},
+        "groups": list(groups),
+    })
+
+
+def test_tickora_root_group_implies_super_admin_without_sector_realm_roles(monkeypatch):
+    principal = _principal_from_groups(monkeypatch, ["/tickora"])
+
+    assert principal.has_role(ROLE_ADMIN)
+    assert principal.is_admin
+    assert principal.sector_memberships == ()
+
+
+def test_sector_parent_group_implies_chief_and_member_memberships_without_global_roles(monkeypatch):
+    principal = _principal_from_groups(monkeypatch, ["/tickora/sectors/s10"])
+
+    assert principal.is_chief_of("s10")
+    assert principal.is_member_of("s10")
+    assert principal.global_roles == frozenset()
+
+
+def test_sector_shorthand_group_normalizes_to_sector_code(monkeypatch):
+    principal = _principal_from_groups(monkeypatch, ["sector10"])
+
+    assert principal.is_chief_of("s10")
+    assert principal.is_member_of("s10")

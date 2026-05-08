@@ -14,7 +14,7 @@ sys.path.insert(0, str(ROOT))
 
 from sqlalchemy import select
 
-from scripts.keycloak_bootstrap import REALM, admin, ensure_realm, main as bootstrap_keycloak
+from scripts.keycloak_bootstrap import DEPRECATED_REALM_ROLES, REALM, REALM_ROLES, admin, ensure_realm, main as bootstrap_keycloak
 from src.core.db import get_db
 from src.iam.models import User
 from src.ticketing.models import Beneficiary, Sector, SectorMembership, Ticket, TicketComment, TicketMetadata
@@ -83,7 +83,7 @@ USERS = [
         "first_name": "Ioana",
         "last_name": "Member",
         "type": "internal",
-        "roles": ["tickora_sector_member", "tickora_internal_user"],
+        "roles": ["tickora_internal_user"],
         "groups": ["/tickora/sectors/s10/members"],
     },
     {
@@ -92,7 +92,7 @@ USERS = [
         "first_name": "Radu",
         "last_name": "Network",
         "type": "internal",
-        "roles": ["tickora_sector_member", "tickora_internal_user"],
+        "roles": ["tickora_internal_user"],
         "groups": ["/tickora/sectors/s2/members"],
     },
     {
@@ -142,17 +142,39 @@ def _kc_user(kc, spec: dict) -> str:
     return user_id
 
 
-def _assign_roles(kc, user_id: str, roles: list[str]) -> None:
-    if not roles:
-        return
-    role_payloads = [kc.get_realm_role(role) for role in roles]
-    kc.assign_realm_roles(user_id, role_payloads)
+def _sync_roles(kc, user_id: str, roles: list[str]) -> None:
+    managed = set(REALM_ROLES + DEPRECATED_REALM_ROLES)
+    desired = set(roles)
+    current = {
+        role["name"]: role
+        for role in kc.get_realm_roles_of_user(user_id)
+        if role.get("name") in managed
+    }
+    to_remove = [payload for name, payload in current.items() if name not in desired]
+    if to_remove:
+        kc.delete_realm_roles_of_user(user_id, to_remove)
+    to_add = [kc.get_realm_role(role) for role in sorted(desired - set(current))]
+    if to_add:
+        kc.assign_realm_roles(user_id, to_add)
 
 
 def _assign_groups(kc, user_id: str, paths: list[str]) -> None:
     for path in paths:
         group = kc.get_group_by_path(path)
         kc.group_user_add(user_id, group["id"])
+
+
+def _sync_groups(kc, user_id: str, paths: list[str]) -> None:
+    desired = set(paths)
+    current = {
+        group.get("path"): group
+        for group in kc.get_user_groups(user_id)
+        if (group.get("path") or "").startswith("/tickora")
+    }
+    for path, group in current.items():
+        if path not in desired:
+            kc.group_user_remove(user_id, group["id"])
+    _assign_groups(kc, user_id, paths)
 
 
 def seed_keycloak() -> dict[str, str]:
@@ -162,8 +184,8 @@ def seed_keycloak() -> dict[str, str]:
     out: dict[str, str] = {}
     for spec in USERS:
         user_id = _kc_user(kc, spec)
-        _assign_roles(kc, user_id, spec["roles"])
-        _assign_groups(kc, user_id, spec["groups"])
+        _sync_roles(kc, user_id, spec["roles"])
+        _sync_groups(kc, user_id, spec["groups"])
         out[spec["username"]] = user_id
         print(f"[keycloak:user] {spec['username']} / {PASSWORD}")
     return out

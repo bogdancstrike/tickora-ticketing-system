@@ -85,7 +85,7 @@ function AuditCard({ event, expanded, onToggle }: { event: AuditEventDto; expand
       styles={{ body: { padding: 12 } }}
     >
       <Space style={{ width: '100%', justifyContent: 'space-between' }} align="start">
-        <Space direction="vertical" size={4} style={{ flex: 1 }}>
+        <Space orientation="vertical" size={4} style={{ flex: 1 }}>
           <Space wrap>
             <Tag color={color}>{actionLabel(event.action)}</Tag>
             <Typography.Text type="secondary">{event.actor_username || event.actor_user_id || 'system'}</Typography.Text>

@@ -145,7 +145,7 @@ export function NotificationDropdown() {
                 </Space>
               }
               description={
-                <Space direction="vertical" size={0} style={{ width: '100%' }}>
+                <Space orientation="vertical" size={0} style={{ width: '100%' }}>
                   <Typography.Text type="secondary">{item.body}</Typography.Text>
                   <Typography.Text type="secondary" style={{ fontSize: 11 }}>
                     {new Date(item.created_at).toLocaleString()}
@@ -161,7 +161,7 @@ export function NotificationDropdown() {
   )
 
   return (
-    <Dropdown dropdownRender={() => menu} trigger={['click']} placement="bottomRight">
+    <Dropdown popupRender={() => menu} trigger={['click']} placement="bottomRight">
       <Badge count={unreadCount} offset={[-2, 10]} size="small">
         <Button type="text" icon={<BellOutlined />} onClick={() => { /* badge cleared via mark-read */ }} />
       </Badge>

@@ -12,11 +12,6 @@ from src.iam.models import User
 from src.iam.principal import (
     Principal,
     ROLE_ADMIN,
-    ROLE_AUDITOR,
-    ROLE_DISTRIBUTOR,
-    ROLE_INTERNAL_USER,
-    ROLE_SECTOR_CHIEF,
-    ROLE_SECTOR_MEMBER,
     SectorMembership,
 )
 from framework.commons.logger import logger as log
@@ -80,21 +75,7 @@ def _effective_roles_from_claims(claims: dict[str, Any]) -> frozenset[str]:
     roles = set((claims.get("realm_access") or {}).get("roles") or [])
     groups = {_normalize_group(g) for g in claims.get("groups") or []}
     if groups.intersection(_GLOBAL_TICKORA_GROUPS):
-        roles.update({
-            ROLE_ADMIN,
-            ROLE_AUDITOR,
-            ROLE_DISTRIBUTOR,
-            ROLE_INTERNAL_USER,
-            ROLE_SECTOR_CHIEF,
-            ROLE_SECTOR_MEMBER,
-        })
-    memberships = _parse_sector_groups(list(groups))
-    if memberships:
-        roles.add(ROLE_INTERNAL_USER)
-    if any(m.role == "member" for m in memberships):
-        roles.add(ROLE_SECTOR_MEMBER)
-    if any(m.role == "chief" for m in memberships):
-        roles.update({ROLE_SECTOR_CHIEF, ROLE_SECTOR_MEMBER})
+        roles.add(ROLE_ADMIN)
     return frozenset(roles)
 
 
