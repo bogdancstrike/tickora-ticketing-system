@@ -88,6 +88,28 @@
     },
     {
       "namespace": "tickora",
+      "operation_name": "tickets_update",
+      "model_name": "Empty",
+      "request_method": ["PATCH"],
+      "api_url": "/api/tickets/<ticket_id>",
+      "exec_method": {
+        "module_name": "api.tickets",
+        "method_name": "update"
+      }
+    },
+    {
+      "namespace": "tickora",
+      "operation_name": "tickets_delete",
+      "model_name": "Empty",
+      "request_method": ["DELETE"],
+      "api_url": "/api/tickets/<ticket_id>",
+      "exec_method": {
+        "module_name": "api.tickets",
+        "method_name": "delete_ticket"
+      }
+    },
+    {
+      "namespace": "tickora",
       "operation_name": "tickets_assign_sector",
       "model_name": "Empty",
       "request_method": ["POST"],

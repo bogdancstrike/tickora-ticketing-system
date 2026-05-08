@@ -64,3 +64,20 @@ def get_ticket(app, operation, request, *, principal: Principal, **kwargs):
     with get_db() as db:
         t = ticket_service.get(db, principal, ticket_id)
         return (serialize_ticket(t, principal), 200)
+
+
+@require_authenticated
+def update(app, operation, request, *, principal: Principal, **kwargs):
+    ticket_id = kwargs.get("ticket_id") or flask_request.view_args.get("ticket_id")
+    payload = _payload()
+    with get_db() as db:
+        t = ticket_service.update(db, principal, ticket_id, payload)
+        return (serialize_ticket(t, principal), 200)
+
+
+@require_authenticated
+def delete_ticket(app, operation, request, *, principal: Principal, **kwargs):
+    ticket_id = kwargs.get("ticket_id") or flask_request.view_args.get("ticket_id")
+    with get_db() as db:
+        ticket_service.delete(db, principal, ticket_id)
+        return ("", 204)
