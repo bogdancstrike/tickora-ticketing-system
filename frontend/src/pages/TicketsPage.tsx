@@ -685,8 +685,8 @@ export function TicketsPage() {
     if (me.error) message.error(me.error.message)
   }, [me.error])
 
-  const sortOrderFor = (key: string): 'ascend' | 'descend' | undefined =>
-    sortBy === key ? (sortDir === 'asc' ? 'ascend' : 'descend') : undefined
+  // Uncontrolled sortOrder: only set defaultSortOrder on the initial column so
+  // AntD manages click-to-toggle internally; onChange syncs to backend params.
 
   const sectorFilterOptions = useMemo(
     () => (options.data?.sectors || []).map((s) => ({ text: `${s.code} · ${s.name}`, value: s.code })),
@@ -703,8 +703,7 @@ export function TicketsPage() {
       dataIndex: 'ticket_code',
       width: 150,
       render: (value) => <Typography.Text strong>{value}</Typography.Text>,
-      sorter: true,
-      sortOrder: sortOrderFor('ticket_code'),
+      sorter: { multiple: 0 },
     },
     {
       title: 'Title',
@@ -712,16 +711,14 @@ export function TicketsPage() {
       width: 320,
       ellipsis: true,
       render: (value, row) => value || row.txt?.slice(0, 90) || '-',
-      sorter: true,
-      sortOrder: sortOrderFor('title'),
+      sorter: { multiple: 0 },
     },
     {
       title: 'Status',
       dataIndex: 'status',
       width: 220,
       render: (_value, record) => <StatusChanger ticket={record} size="small" />,
-      sorter: true,
-      sortOrder: sortOrderFor('status'),
+      sorter: { multiple: 0 },
       filters: STATUS_OPTIONS.map((o) => ({ text: o.label, value: o.value })),
       filteredValue: status ? [status] : null,
       filterMultiple: false,
@@ -731,8 +728,7 @@ export function TicketsPage() {
       dataIndex: 'priority',
       width: 140,
       render: (value) => <PriorityTag priority={value} />,
-      sorter: true,
-      sortOrder: sortOrderFor('priority'),
+      sorter: { multiple: 0 },
       filters: priorityFilterOptions,
       filteredValue: priority ? [priority] : null,
       filterMultiple: false,
@@ -752,18 +748,17 @@ export function TicketsPage() {
       dataIndex: 'created_at',
       width: 160,
       render: fmt,
-      sorter: true,
-      sortOrder: sortOrderFor('created_at'),
+      sorter: { multiple: 0 },
+      defaultSortOrder: 'descend' as const,
     },
     {
       title: 'Updated',
       dataIndex: 'updated_at',
       width: 160,
       render: fmt,
-      sorter: true,
-      sortOrder: sortOrderFor('updated_at'),
+      sorter: { multiple: 0 },
     },
-  ], [sortBy, sortDir, status, priority, sector, sectorFilterOptions, priorityFilterOptions])
+  ], [status, priority, sector, sectorFilterOptions, priorityFilterOptions])
 
   return (
     <div style={{ padding: 24, display: 'grid', gap: 16 }}>

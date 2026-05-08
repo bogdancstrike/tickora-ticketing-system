@@ -104,6 +104,15 @@ Legend: `[x]` done · `[~]` partial · `[ ]` pending
 
 - [ ] All sectors/ Sector / User / Nomenclature CRUD endpoints; Keycloak group sync
 - [~] Role-specific queue UIs: distributor `Review Tickets` implemented (with premature closure); remaining role queues pending
+- [x] Review queue is its own dedicated page (`/review/:ticketId`), not a drawer
+- [x] Reviewer restriction: distributors route to a sector; only chief/admin pick the operator
+- [x] Inline status changer (TicketsPage table + ticket detail) with double confirmation
+- [x] Unified `Assign` dropdown + Unassign (workflow_service.unassign + change_status endpoint)
+- [x] Configurable metadata key catalogue (`metadata_key_definitions`) with per-key option lists
+- [x] Add metadata UI in review (selectable values when key has options, free text otherwise)
+- [x] Audit explorer: per-column filters/sort, quick search, "See graph" with D3 evolution chart
+- [x] Profile page: chief sees a force-graph of their sector members
+- [x] Reusable common components: StatusTag, PriorityTag, AuditTimeline, format helpers, StatusChanger
 
 ## Phase 7 — Modern features (MVP-3)
 
@@ -114,6 +123,12 @@ Legend: `[x]` done · `[~]` partial · `[ ]` pending
 
 - [ ] Load (k6), soak, security review, backups+PITR, runbooks, prod observability,
       audit_events partitioning + retention
+- [x] First-pass security review (`docs/SECURITY_REVIEW.md`) — RBAC strengths,
+      defence-in-depth gaps, performance hotspots, hardening backlog
+- [x] Super-admin gate driven by `Config.SUPER_ADMIN_SUBJECTS` (env var) instead
+      of a hardcoded UUID inside `iam/rbac.is_super_admin`
+- [x] `assignable_users` endpoint refuses non-admins without an explicit sector
+      and rejects sectors the caller doesn't belong to
 
 ---
 

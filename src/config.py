@@ -82,6 +82,18 @@ class Config:
     RATE_LIMIT_COMMENTS_PER_MIN    = int(os.getenv("RATE_LIMIT_COMMENTS_PER_MIN", "30"))
     RATE_LIMIT_ATTACHMENTS_PER_MIN = int(os.getenv("RATE_LIMIT_ATTACHMENTS_PER_MIN", "10"))
 
+    # ── Super-admin guardrail ──────────────────────────────────────────────
+    # Subjects (Keycloak `sub`) listed here bypass everything; sensitive ops
+    # (e.g. permanent ticket deletion) require this membership in addition to
+    # the regular admin role. Keep as small as possible — ideally one or two.
+    SUPER_ADMIN_SUBJECTS = frozenset(
+        s.strip() for s in os.getenv(
+            "SUPER_ADMIN_SUBJECTS",
+            "93d10567-d264-4b06-948c-c1265d675845",
+        ).split(",")
+        if s.strip()
+    )
+
     # ── Email ──────────────────────────────────────────────────────────────
     SMTP_HOST     = os.getenv("SMTP_HOST", "")
     SMTP_PORT     = int(os.getenv("SMTP_PORT", "587"))

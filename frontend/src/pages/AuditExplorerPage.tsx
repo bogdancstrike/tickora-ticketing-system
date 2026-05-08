@@ -100,25 +100,21 @@ export function AuditExplorerPage() {
     queryFn: () => listAudit({ ...params, limit: 200 }),
   })
 
-  const sortOrderFor = (key: string) =>
-    params.sort_by === key ? (params.sort_dir === 'asc' ? ('ascend' as const) : ('descend' as const)) : null
-
   const columns: ColumnsType<AuditEventDto> = useMemo(() => [
     {
       title: 'Time',
       dataIndex: 'created_at',
       width: 190,
       render: fmt,
-      sorter: true,
-      sortOrder: sortOrderFor('created_at'),
+      sorter: { multiple: 0 },
+      defaultSortOrder: 'descend' as const,
     },
     {
       title: 'Action',
       dataIndex: 'action',
       width: 230,
       render: (v) => <Tag color="blue">{v}</Tag>,
-      sorter: true,
-      sortOrder: sortOrderFor('action'),
+      sorter: { multiple: 0 },
       filters: ACTION_FILTERS,
       filteredValue: params.action ? [params.action] : null,
       filterMultiple: false,
@@ -129,8 +125,7 @@ export function AuditExplorerPage() {
       dataIndex: 'actor_username',
       width: 180,
       render: (v, row) => v || row.actor_user_id || '-',
-      sorter: true,
-      sortOrder: sortOrderFor('actor_username'),
+      sorter: { multiple: 0 },
       filterDropdown: textFilterDropdown('Search username'),
       filteredValue: params.actor_username ? [params.actor_username] : null,
     },
@@ -276,8 +271,8 @@ export function AuditExplorerPage() {
                   )}
                   <Descriptions.Item label="Request Details">
                     <Space direction="vertical">
-                      <Typography.Text type="secondary">IP: {row.metadata?.request_ip || '-'}</Typography.Text>
-                      <Typography.Text type="secondary" style={{ fontSize: 11 }}>Agent: {row.metadata?.user_agent || '-'}</Typography.Text>
+                      <Typography.Text type="secondary">IP: {(row.metadata?.request_ip as string) || '-'}</Typography.Text>
+                      <Typography.Text type="secondary" style={{ fontSize: 11 }}>Agent: {(row.metadata?.user_agent as string) || '-'}</Typography.Text>
                     </Space>
                   </Descriptions.Item>
                 </Descriptions>

@@ -195,7 +195,7 @@ export function DashboardPage() {
   const tabs = [
     overview.data?.global && {
       key: 'global',
-      label: 'Global',
+      label: 'Global · all sectors',
       children: (
         <div style={{ display: 'grid', gap: 16 }}>
           <KpiGrid values={overview.data.global.kpis} />
@@ -203,6 +203,18 @@ export function DashboardPage() {
             <Col xs={24} xl={8}><ChartPanel title="Status"><BreakdownChart data={overview.data.global.by_status} title="Status" /></ChartPanel></Col>
             <Col xs={24} xl={8}><ChartPanel title="Priority"><BreakdownChart data={overview.data.global.by_priority} title="Priority" color="#fa8c16" /></ChartPanel></Col>
             <Col xs={24} xl={8}><ChartPanel title="Beneficiary Type"><BreakdownChart data={overview.data.global.by_beneficiary_type} title="Beneficiary Type" color="#52c41a" /></ChartPanel></Col>
+            {overview.data.global.by_category?.length ? (
+              <Col xs={24} xl={12}><ChartPanel title="Categories"><DoughnutChart data={overview.data.global.by_category} title="Category" /></ChartPanel></Col>
+            ) : null}
+            {overview.data.global.by_sector?.length ? (
+              <Col xs={24} xl={12}><ChartPanel title="Volume by sector">
+                <BreakdownChart
+                  data={overview.data.global.by_sector.map((s) => ({ key: s.sector_code, count: s.count }))}
+                  title="Sector"
+                  color="#13a8a8"
+                />
+              </ChartPanel></Col>
+            ) : null}
           </Row>
         </div>
       ),
@@ -295,14 +307,14 @@ export function DashboardPage() {
       {selectedSector.error && <Alert type="error" message={selectedSector.error.message} showIcon />}
       {selectedUser.error && <Alert type="error" message={selectedUser.error.message} showIcon />}
 
+      <Tabs items={tabs as any} />
+
       {timeseriesOption && (
         <div style={{ border: `1px solid ${token.colorBorderSecondary}`, borderRadius: 8, padding: 16, minHeight: 280 }}>
-          <Typography.Title level={5} style={{ marginTop: 0 }}>Created vs Closed</Typography.Title>
+          <Typography.Title level={5} style={{ marginTop: 0 }}>Created vs Closed · last 30 days</Typography.Title>
           <ReactECharts option={timeseriesOption} style={{ height: 260 }} />
         </div>
       )}
-
-      <Tabs items={tabs} />
     </div>
   )
 }

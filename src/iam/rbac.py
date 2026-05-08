@@ -226,5 +226,11 @@ def can_view_audit_tab(p: Principal, t: _TicketLike) -> bool:
 
 
 def is_super_admin(p: Principal) -> bool:
-    """Hardcoded super-admin check for sensitive operations like permanent deletion."""
-    return p.is_admin and p.keycloak_subject == "93d10567-d264-4b06-948c-c1265d675845"
+    """Super-admin gate for sensitive operations (e.g. permanent deletion).
+
+    The list of allowed subjects is configured via ``Config.SUPER_ADMIN_SUBJECTS``
+    (env var ``SUPER_ADMIN_SUBJECTS``, comma-separated). Importing the config
+    lazily avoids a circular import at module load.
+    """
+    from src.config import Config  # local import to dodge circulars
+    return p.is_admin and p.keycloak_subject in Config.SUPER_ADMIN_SUBJECTS
