@@ -119,6 +119,15 @@ export interface TicketOptionsDto {
   priorities: Array<TicketDto['priority']>
   categories: string[]
   types: string[]
+  metadata_keys: Array<{ key: string; label: string }>
+}
+
+export interface TicketMetadataDto {
+  key: string
+  value: string
+  label?: string | null
+  created_at?: string | null
+  updated_at?: string | null
 }
 
 export interface AssignableUserDto {
@@ -380,12 +389,41 @@ export const listTicketAudit = async (ticketId: string): Promise<{ items: AuditE
 export const listAudit = async (params: {
   action?: string
   actor_user_id?: string
-  entity_type?: string
-  entity_id?: string
+  actor_username?: string
   ticket_id?: string
   correlation_id?: string
+  created_after?: string
+  created_before?: string
+  sort_by?: string
+  sort_dir?: 'asc' | 'desc'
   limit?: number
 }): Promise<{ items: AuditEventDto[] }> => {
   const { data } = await apiClient.get('/api/audit', { params })
   return data
+}
+
+export const listTicketMetadata = async (ticketId: string): Promise<{ items: TicketMetadataDto[] }> => {
+  const { data } = await apiClient.get(`/api/tickets/${ticketId}/metadata`)
+  return data
+}
+
+export const setTicketMetadata = async (
+  ticketId: string,
+  payload: { key: string; value: string; label?: string },
+): Promise<TicketMetadataDto> => {
+  const { data } = await apiClient.post(`/api/tickets/${ticketId}/metadata`, payload)
+  return data
+}
+
+export const deleteTicketMetadata = async (ticketId: string, key: string): Promise<void> => {
+  await apiClient.delete(`/api/tickets/${ticketId}/metadata`, { params: { key } })
+}
+
+export const updateTicket = async (ticketId: string, payload: { title?: string; txt?: string }): Promise<TicketDto> => {
+  const { data } = await apiClient.patch(`/api/tickets/${ticketId}`, payload)
+  return data
+}
+
+export const deleteTicket = async (ticketId: string): Promise<void> => {
+  await apiClient.delete(`/api/tickets/${ticketId}`)
 }

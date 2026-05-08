@@ -110,6 +110,39 @@
     },
     {
       "namespace": "tickora",
+      "operation_name": "tickets_list_metadata",
+      "model_name": "Empty",
+      "request_method": ["GET"],
+      "api_url": "/api/tickets/<ticket_id>/metadata",
+      "exec_method": {
+        "module_name": "api.metadata",
+        "method_name": "list_metadata"
+      }
+    },
+    {
+      "namespace": "tickora",
+      "operation_name": "tickets_set_metadata",
+      "model_name": "Empty",
+      "request_method": ["POST"],
+      "api_url": "/api/tickets/<ticket_id>/metadata",
+      "exec_method": {
+        "module_name": "api.metadata",
+        "method_name": "set_metadata"
+      }
+    },
+    {
+      "namespace": "tickora",
+      "operation_name": "tickets_delete_metadata",
+      "model_name": "Empty",
+      "request_method": ["DELETE"],
+      "api_url": "/api/tickets/<ticket_id>/metadata",
+      "exec_method": {
+        "module_name": "api.metadata",
+        "method_name": "delete_metadata"
+      }
+    },
+    {
+      "namespace": "tickora",
       "operation_name": "tickets_assign_sector",
       "model_name": "Empty",
       "request_method": ["POST"],

@@ -2,7 +2,7 @@
 from typing import Any
 
 from flask import request as flask_request
-from sqlalchemy import desc, select
+from sqlalchemy import asc, desc, select
 from sqlalchemy.orm import Session
 
 from src.core.correlation import get_correlation_id
@@ -60,10 +60,15 @@ def list_(
     *,
     action: str | None = None,
     actor_user_id: str | None = None,
+    actor_username: str | None = None,
     entity_type: str | None = None,
     entity_id: str | None = None,
     ticket_id: str | None = None,
     correlation_id: str | None = None,
+    created_after: str | None = None,
+    created_before: str | None = None,
+    sort_by: str = "created_at",
+    sort_dir: str = "desc",
     limit: int = 100,
 ) -> list[AuditEvent]:
     if not rbac.can_view_global_audit(principal):
@@ -74,6 +79,8 @@ def list_(
         stmt = stmt.where(AuditEvent.action == action)
     if actor_user_id:
         stmt = stmt.where(AuditEvent.actor_user_id == actor_user_id)
+    if actor_username:
+        stmt = stmt.where(AuditEvent.actor_username.ilike(f"%{actor_username}%"))
     if entity_type:
         stmt = stmt.where(AuditEvent.entity_type == entity_type)
     if entity_id:
@@ -82,7 +89,15 @@ def list_(
         stmt = stmt.where(AuditEvent.ticket_id == ticket_id)
     if correlation_id:
         stmt = stmt.where(AuditEvent.correlation_id == correlation_id)
-    return list(db.scalars(stmt.order_by(desc(AuditEvent.created_at), desc(AuditEvent.id)).limit(limit)))
+    if created_after:
+        stmt = stmt.where(AuditEvent.created_at >= created_after)
+    if created_before:
+        stmt = stmt.where(AuditEvent.created_at < created_before)
+
+    col = getattr(AuditEvent, sort_by, AuditEvent.created_at)
+    order = desc(col) if sort_dir == "desc" else asc(col)
+    
+    return list(db.scalars(stmt.order_by(order, desc(AuditEvent.id)).limit(limit)))
 
 
 def get_for_ticket(db: Session, principal: Principal, ticket_id: str, *, limit: int = 100) -> list[AuditEvent]:

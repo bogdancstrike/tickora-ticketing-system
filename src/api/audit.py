@@ -23,10 +23,15 @@ def list_audit(app, operation, request, *, principal: Principal, **kwargs):
             principal,
             action=flask_request.args.get("action"),
             actor_user_id=flask_request.args.get("actor_user_id"),
+            actor_username=flask_request.args.get("actor_username"),
             entity_type=flask_request.args.get("entity_type"),
             entity_id=flask_request.args.get("entity_id"),
             ticket_id=flask_request.args.get("ticket_id"),
             correlation_id=flask_request.args.get("correlation_id"),
+            created_after=flask_request.args.get("created_after"),
+            created_before=flask_request.args.get("created_before"),
+            sort_by=flask_request.args.get("sort_by", "created_at"),
+            sort_dir=flask_request.args.get("sort_dir", "desc"),
             limit=_limit(),
         )
         return ({"items": [serialize_audit_event(e) for e in events]}, 200)

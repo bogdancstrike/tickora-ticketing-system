@@ -1,10 +1,14 @@
 import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import { Link } from 'react-router-dom'
 import dayjs from 'dayjs'
-import { Alert, Button, Empty, Flex, Form, Input, Space, Table, Tag, Typography, Descriptions, Card, theme as antTheme } from 'antd'
-import type { ColumnsType } from 'antd/es/table'
+import { Alert, Button, Empty, Flex, Form, Input, Space, Table, Tag, Typography, Descriptions, Card, DatePicker, theme as antTheme } from 'antd'
+import type { ColumnsType, TablePaginationConfig } from 'antd/es/table'
+import type { FilterValue, SorterResult } from 'antd/es/table/interface'
 import { ReloadOutlined, SearchOutlined } from '@ant-design/icons'
 import { listAudit, type AuditEventDto } from '@/api/tickets'
+
+const { RangePicker } = DatePicker
 
 function fmt(value?: string | null) {
   return value ? dayjs(value).format('YYYY-MM-DD HH:mm:ss') : '-'
@@ -20,20 +24,65 @@ function AuditValue({ value }: { value: unknown }) {
 
 export function AuditExplorerPage() {
   const { token } = antTheme.useToken()
-  const [filters, setFilters] = useState<Record<string, string>>({})
+  const [params, setParams] = useState<any>({ sort_by: 'created_at', sort_dir: 'desc' })
   const audit = useQuery({
-    queryKey: ['audit', filters],
-    queryFn: () => listAudit({ ...filters, limit: 200 }),
+    queryKey: ['audit', params],
+    queryFn: () => listAudit({ ...params, limit: 200 }),
   })
 
   const columns: ColumnsType<AuditEventDto> = useMemo(() => [
-    { title: 'Time', dataIndex: 'created_at', width: 180, render: fmt },
-    { title: 'Action', dataIndex: 'action', width: 220, render: (v) => <Tag color="blue">{v}</Tag> },
-    { title: 'Actor', dataIndex: 'actor_username', width: 170, render: (v, row) => v || row.actor_user_id || '-' },
+    { 
+      title: 'Time', 
+      dataIndex: 'created_at', 
+      width: 180, 
+      render: fmt,
+      sorter: true,
+      defaultSortOrder: 'descend',
+    },
+    { title: 'Action', dataIndex: 'action', width: 220, render: (v) => <Tag color="blue">{v}</Tag>, sorter: true },
+    { title: 'Actor', dataIndex: 'actor_username', width: 170, render: (v, row) => v || row.actor_user_id || '-', sorter: true },
     { title: 'Entity', width: 180, render: (_, row) => `${row.entity_type}:${row.entity_id || '-'}` },
-    { title: 'Ticket', dataIndex: 'ticket_id', width: 240, ellipsis: true },
+    { 
+      title: 'Ticket ID', 
+      dataIndex: 'ticket_id', 
+      width: 240, 
+      ellipsis: true,
+      render: (tid) => tid ? <Link to={`/tickets/${tid}`}>{tid}</Link> : '-'
+    },
     { title: 'Correlation', dataIndex: 'correlation_id', width: 220, ellipsis: true },
   ], [])
+
+  const handleTableChange = (
+    _pagination: TablePaginationConfig,
+    _filters: Record<string, FilterValue | null>,
+    sorter: SorterResult<AuditEventDto> | SorterResult<AuditEventDto>[]
+  ) => {
+    const s = Array.isArray(sorter) ? sorter[0] : sorter
+    if (s.field) {
+      setParams((prev: any) => ({
+        ...prev,
+        sort_by: s.field,
+        sort_dir: s.order === 'ascend' ? 'asc' : 'desc'
+      }))
+    }
+  }
+
+  const onFilter = (values: any) => {
+    const { range, ...rest } = values
+    const newParams = { ...params, ...rest }
+    if (range) {
+      newParams.created_after = range[0].startOf('day').toISOString()
+      newParams.created_before = range[1].endOf('day').toISOString()
+    } else {
+      delete newParams.created_after
+      delete newParams.created_before
+    }
+    // Remove empty strings
+    Object.keys(newParams).forEach(k => {
+      if (newParams[k] === '') delete newParams[k]
+    })
+    setParams(newParams)
+  }
 
   return (
     <div style={{ padding: 24, display: 'grid', gap: 16 }}>
@@ -45,20 +94,15 @@ export function AuditExplorerPage() {
         <Button icon={<ReloadOutlined />} onClick={() => audit.refetch()} />
       </Flex>
 
-      <Form
-        layout="inline"
-        onFinish={(values) => {
-          setFilters(Object.fromEntries(Object.entries(values).filter(([, v]) => !!v)) as Record<string, string>)
-        }}
-      >
+      <Form layout="inline" onFinish={onFilter}>
+        <Form.Item name="range"><RangePicker /></Form.Item>
         <Form.Item name="action"><Input allowClear placeholder="Action" /></Form.Item>
-        <Form.Item name="actor_user_id"><Input allowClear placeholder="Actor user ID" /></Form.Item>
+        <Form.Item name="actor_username"><Input allowClear placeholder="Actor username" /></Form.Item>
         <Form.Item name="ticket_id"><Input allowClear placeholder="Ticket ID" /></Form.Item>
-        <Form.Item name="correlation_id"><Input allowClear placeholder="Correlation ID" /></Form.Item>
         <Form.Item>
           <Space>
             <Button htmlType="submit" type="primary" icon={<SearchOutlined />}>Filter</Button>
-            <Button onClick={() => setFilters({})}>Clear</Button>
+            <Button onClick={() => setParams({ sort_by: 'created_at', sort_dir: 'desc' })}>Clear</Button>
           </Space>
         </Form.Item>
       </Form>
@@ -70,6 +114,7 @@ export function AuditExplorerPage() {
           loading={audit.isLoading}
           columns={columns}
           dataSource={audit.data?.items || []}
+          onChange={handleTableChange}
           expandable={{
             expandedRowRender: (row) => (
               <Card size="small" style={{ background: token.colorBgLayout }}>
