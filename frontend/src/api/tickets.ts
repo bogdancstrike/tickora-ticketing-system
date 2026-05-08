@@ -139,6 +139,7 @@ export interface ReviewTicketPayload {
   type?: string
   private_comment?: string
   reason?: string
+  close?: boolean
 }
 
 export interface DashboardBreakdown {

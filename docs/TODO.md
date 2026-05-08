@@ -79,7 +79,7 @@ Legend: `[x]` done · `[~]` partial · `[ ]` pending
 
 ---
 
-## Phase 4 — Comments + attachments + audit explorer
+## Phase 4 — Comments + attachments + audit explorer ✅
 
 - [x] Comment service + endpoints (visibility-filtered)
 - [x] MinIO client + presigned PUT/GET URLs
@@ -88,19 +88,22 @@ Legend: `[x]` done · `[~]` partial · `[ ]` pending
 - [x] Frontend: `CommentBox`, `AttachmentUploader`, ticket audit tab, `AuditExplorer`
 - [x] Distributor review flow: `POST /api/tickets/{id}/review` sets sector, assignee, priority, category, type, and private review commentary
 - [x] Dynamic form options: database-backed sectors, assignable users, priorities, categories, and types
+- [x] Enhanced audit UI with object diff view and request details
 
-## Phase 5 — Notifications + dashboards
+## Phase 5 — Notifications + dashboards ✅
 
-- [ ] Tasking (inspired from `rag-poc`: /home/bogdan/workspace/dev/rag-poc)
-- [ ] Notification handlers (in-app, email, SSE) with idempotency keys. Emails are enabled on .env (else, do not use email system)
-- [ ] SSE `/api/notifications/stream`. Also send on SSE new tickets in the system for Tickets Reviewers/Distributors.
-- [ ] Dashboard service + materialized views
-- [ ] Frontend dashboards + notification dropdown. Keep in mind for dashboard the RBAC (admin can see dashboard for all sectors/users, sector admin can see dashboard for their sectors and users, a user can see only his dashboard, and so on)
+- [x] Tasking infrastructure (Kafka producer/consumer + registry)
+- [x] Notification handlers (in-app, email stub, SSE) with idempotency
+- [x] SSE `/api/notifications/stream` for real-time delivery
+- [x] SLA service + background checker process
+- [x] Dashboard service + materialized views (`mv_dashboard_global_kpis`, `mv_dashboard_sector_kpis`)
+- [x] Frontend dashboards with **Apache ECharts**
+- [x] Header notification dropdown with unread badge
 
 ## Phase 6 — Admin module
 
 - [ ] All sectors/ Sector / User / Nomenclature CRUD endpoints; Keycloak group sync
-- [~] Role-specific queue UIs: distributor `Review Tickets` implemented; remaining role queues pending
+- [~] Role-specific queue UIs: distributor `Review Tickets` implemented (with premature closure); remaining role queues pending
 
 ## Phase 7 — Modern features (MVP-3)
 

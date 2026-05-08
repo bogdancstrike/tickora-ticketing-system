@@ -19,7 +19,7 @@ def register_task(name: str):
             raise ValueError(f"Task '{name}' is already registered")
         
         _TASK_REGISTRY[name] = func
-        logger.debug("task registered", task_name=name)
+        logger.debug("task registered", extra={"task_name": name})
         
         @functools.wraps(func)
         def wrapper(*args, **kwargs):

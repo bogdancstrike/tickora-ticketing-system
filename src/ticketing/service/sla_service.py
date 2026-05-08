@@ -15,7 +15,7 @@ def evaluate_sla(db: Session, ticket: Ticket) -> None:
 
     policy = _find_matching_policy(db, ticket)
     if not policy:
-        logger.debug("no sla policy matches ticket", ticket_id=ticket.id)
+        logger.debug("no sla policy matches ticket", extra={"ticket_id": ticket.id})
         return
 
     # Calculate SLA due date based on resolution_minutes
@@ -34,7 +34,7 @@ def evaluate_sla(db: Session, ticket: Ticket) -> None:
         else:
             ticket.sla_status = "within_sla"
             
-        logger.info("sla evaluated", ticket_id=ticket.id, policy_id=policy.id, sla_due_at=due_at.isoformat())
+        logger.info("sla evaluated", extra={"ticket_id": ticket.id, "policy_id": policy.id, "sla_due_at": due_at.isoformat()})
 
 def _find_matching_policy(db: Session, ticket: Ticket) -> Optional[SlaPolicy]:
     """Find the most specific active SLA policy for the ticket."""

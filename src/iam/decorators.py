@@ -20,9 +20,15 @@ from framework.commons.logger import logger as log
 
 def _extract_bearer() -> str:
     auth = flask_request.headers.get("Authorization") or ""
-    if not auth.lower().startswith("bearer "):
-        raise AuthenticationError("missing bearer token")
-    return auth.split(" ", 1)[1].strip()
+    if auth.lower().startswith("bearer "):
+        return auth.split(" ", 1)[1].strip()
+    
+    # Fallback to query parameter for EventSource (SSE) support
+    token = flask_request.args.get("access_token")
+    if token:
+        return token
+        
+    raise AuthenticationError("missing bearer token")
 
 
 def _build_principal() -> Principal:

@@ -46,6 +46,6 @@ def stream(app, operation, request, *, principal: Principal, **kwargs):
         mimetype="text/event-stream",
         headers={
             "Cache-Control": "no-cache",
-            "X-Accel-Buffering": "no",  // Disable buffering for Nginx
+            "X-Accel-Buffering": "no",  # Disable buffering for Nginx
         }
     )

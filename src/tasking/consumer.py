@@ -19,7 +19,7 @@ def run_consumer(topics: List[str] = None):
     if topics is None:
         topics = [Config.KAFKA_TOPIC_FAST, Config.KAFKA_TOPIC_SLOW]
         
-    logger.info("starting kafka consumer", topics=topics, group_id=Config.WORKER_NAME)
+    logger.info("starting kafka consumer", extra={"topics": topics, "group_id": Config.WORKER_NAME})
     
     consumer = KafkaConsumer(
         *topics,
@@ -55,14 +55,14 @@ def _process_message(message):
         
         try:
             handler = get_handler(task_name)
-            logger.info("executing task", task_name=task_name, topic=message.topic)
+            logger.info("executing task", extra={"task_name": task_name, "topic": message.topic})
             
             start_time = time.time()
             handler(payload)
             duration = time.time() - start_time
             
-            logger.info("task completed", task_name=task_name, duration_ms=int(duration * 1000))
+            logger.info("task completed", extra={"task_name": task_name, "duration_ms": int(duration * 1000)})
         except Exception as e:
-            logger.error("task failed", task_name=task_name, error=str(e))
+            logger.error("task failed", extra={"task_name": task_name, "error": str(e)})
             span.record_exception(e)
             # In a real system, we might want to push to a DLQ or retry

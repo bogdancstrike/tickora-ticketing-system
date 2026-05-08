@@ -52,7 +52,7 @@ def overview(db: Session, principal: Principal) -> dict[str, Any]:
 def global_(db: Session, principal: Principal) -> dict[str, Any]:
     if not rbac.can_view_global_dashboard(principal):
         raise PermissionDeniedError("not allowed to view global dashboard")
-    logger.info("dashboard global requested", username=principal.username)
+    logger.info("dashboard global requested", extra={"username": principal.username})
     
     # Use materialized view for KPIs
     mv = db.execute(select(sa_text("*")).select_from(sa_text("mv_dashboard_global_kpis"))).first()

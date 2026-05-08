@@ -18,7 +18,7 @@ def _get_producer() -> KafkaProducer:
     if _PRODUCER is None:
         with _PRODUCER_LOCK:
             if _PRODUCER is None:
-                logger.info("initializing kafka producer", servers=Config.KAFKA_BOOTSTRAP_SERVERS)
+                logger.info("initializing kafka producer", extra={"servers": Config.KAFKA_BOOTSTRAP_SERVERS})
                 _PRODUCER = KafkaProducer(
                     bootstrap_servers=Config.KAFKA_BOOTSTRAP_SERVERS.split(","),
                     value_serializer=lambda v: json.dumps(v).encode("utf-8"),
@@ -47,9 +47,9 @@ def publish(task_name: str, payload: Dict[str, Any], topic: Optional[str] = None
         if Config.DEV_MODE:
             future.get(timeout=10)
             
-        logger.debug("task published", task_name=task_name, topic=topic)
+        logger.debug("task published", extra={"task_name": task_name, "topic": topic})
     except Exception as e:
-        logger.error("failed to publish task", task_name=task_name, topic=topic, error=str(e))
+        logger.error("failed to publish task", extra={"task_name": task_name, "topic": topic, "error": str(e)})
         # Depending on criticality, we might want to raise here
         # or rely on recovery.py for retry logic if we persisted it.
         raise

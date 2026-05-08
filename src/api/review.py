@@ -20,6 +20,7 @@ class _ReviewTicketIn(BaseModel):
     type: str | None = Field(default=None, max_length=100)
     private_comment: str | None = Field(default=None, max_length=10000)
     reason: str | None = Field(default=None, max_length=1000)
+    close: bool = False
 
 
 def _payload() -> dict:

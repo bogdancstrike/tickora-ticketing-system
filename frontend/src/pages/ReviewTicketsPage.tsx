@@ -4,10 +4,10 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import dayjs from 'dayjs'
 import {
   Alert, Button, Drawer, Empty, Flex, Form, Input, Select, Space, Table, Tag, Typography,
-  message, theme as antTheme,
+  message, theme as antTheme, Popconfirm,
 } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
-import { CheckSquareOutlined, ReloadOutlined } from '@ant-design/icons'
+import { CheckSquareOutlined, ReloadOutlined, StopOutlined } from '@ant-design/icons'
 import {
   getTicketOptions, listAssignableUsers, listTickets, reviewTicket,
   type ReviewTicketPayload, type TicketDto,
@@ -239,9 +239,25 @@ export function ReviewTicketsPage() {
               </Form.Item>
               <Flex justify="space-between" gap={8}>
                 <Button onClick={() => navigate(`/tickets/${selected.id}`)}>Open Ticket</Button>
-                <Button type="primary" htmlType="submit" icon={<CheckSquareOutlined />} loading={review.isPending}>
-                  Apply Review
-                </Button>
+                <Space>
+                  <Popconfirm
+                    title="Close ticket prematurely?"
+                    description="This will cancel the ticket with the provided reason."
+                    onConfirm={() => {
+                      const values = form.getFieldsValue()
+                      review.mutate({ ...values, close: true })
+                    }}
+                    okText="Yes, Close"
+                    okButtonProps={{ danger: true }}
+                  >
+                    <Button danger icon={<StopOutlined />} loading={review.isPending}>
+                      Close Ticket
+                    </Button>
+                  </Popconfirm>
+                  <Button type="primary" htmlType="submit" icon={<CheckSquareOutlined />} loading={review.isPending}>
+                    Apply Review
+                  </Button>
+                </Space>
               </Flex>
             </Form>
           </div>

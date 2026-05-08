@@ -94,6 +94,15 @@ def review(db: Session, principal: Principal, ticket_id: str, payload: dict[str,
                 visibility="private",
             )
 
+        if payload.get("close"):
+            # Distributor decided to close the ticket prematurely during review
+            ticket = workflow_service.cancel(
+                db,
+                principal,
+                ticket_id,
+                reason=payload.get("reason") or "Closed prematurely during review",
+            )
+
         ticket = ticket_service.get(db, principal, ticket_id)
         set_attr(current, "ticket.status", ticket.status)
         set_attr(current, "ticket.priority", ticket.priority)

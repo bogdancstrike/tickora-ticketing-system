@@ -17,6 +17,7 @@ import { CreateTicketPage } from '@/pages/CreateTicketPage'
 import { ReviewTicketsPage } from '@/pages/ReviewTicketsPage'
 import { DashboardPage } from '@/pages/DashboardPage'
 import { RequireRole } from '@/auth/RequireRole'
+import { NotificationDropdown } from '@/components/common/NotificationDropdown'
 
 const { Header, Sider, Content } = Layout
 const { Text } = Typography
@@ -104,6 +105,7 @@ function AppHeader() {
     }}>
       <Text type="secondary">Ticketing · Tasking · Distribution</Text>
       <Space>
+        <NotificationDropdown />
         <Tooltip title={`Switch to ${mode === 'dark' ? 'light' : 'dark'} mode`}>
           <Button type="text" icon={<BgColorsOutlined />} onClick={toggle} />
         </Tooltip>
