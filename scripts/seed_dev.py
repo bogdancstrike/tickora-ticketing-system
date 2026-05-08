@@ -117,20 +117,27 @@ USERS = [
 
 
 def _kc_user(kc, spec: dict) -> str:
-    matches = kc.get_users({"username": spec["username"], "exact": True})
+    username = spec["username"]
+    matches = kc.get_users({"username": username, "exact": True})
     payload = {
-        "username": spec["username"],
+        "username": username,
         "email": spec["email"],
         "firstName": spec["first_name"],
         "lastName": spec["last_name"],
         "enabled": True,
         "emailVerified": True,
     }
+    
+    fixed_id = spec.get("keycloak_subject")
+    
     if matches:
         user_id = matches[0]["id"]
         kc.update_user(user_id, payload)
     else:
+        if fixed_id:
+            payload["id"] = fixed_id
         user_id = kc.create_user(payload, exist_ok=True)
+    
     kc.set_user_password(user_id, PASSWORD, temporary=False)
     return user_id
 
@@ -273,6 +280,21 @@ def _comment(db, ticket: Ticket, author: User, body: str, visibility: str) -> No
         ))
 
 
+def _metadata(db, ticket: Ticket, key: str, value: str, label: str | None = None) -> None:
+    meta = db.scalar(
+        select(TicketMetadata).where(
+            TicketMetadata.ticket_id == ticket.id,
+            TicketMetadata.key == key,
+        )
+    )
+    if meta is None:
+        meta = TicketMetadata(ticket_id=ticket.id, key=key)
+        db.add(meta)
+    meta.value = value
+    meta.label = label
+    db.flush()
+
+
 def seed_database(subjects: dict[str, str]) -> None:
     with get_db() as db:
         sectors = {code: _sector(db, code, name) for code, name in SECTORS}
@@ -322,7 +344,13 @@ def seed_database(subjects: dict[str, str]) -> None:
         _comment(db, t2, users["member.s10"], "We started replacement logistics.", "public")
         _comment(db, t2, users["chief.s10"], "Check stock before committing ETA.", "private")
         _comment(db, t3, users["member.s2"], "Initial packet-loss checks are underway.", "public")
-        print("[db] sectors, users, memberships, beneficiaries, tickets, comments seeded")
+
+        _metadata(db, t1, "importance", "vip", "Importance Level")
+        _metadata(db, t1, "platform", "mobile", "Target Platform")
+        _metadata(db, t2, "importance", "standard", "Importance Level")
+        _metadata(db, t3, "importance", "vip", "Importance Level")
+        
+        print("[db] sectors, users, memberships, beneficiaries, tickets, comments, metadata seeded")
 
 
 def main() -> int:

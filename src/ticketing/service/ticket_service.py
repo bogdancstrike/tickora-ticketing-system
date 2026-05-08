@@ -181,6 +181,58 @@ def get(db: Session, principal: Principal, ticket_id: str) -> Ticket:
         return t
 
 
+def update(db: Session, principal: Principal, ticket_id: str, payload: dict[str, Any]) -> Ticket:
+    with span("ticket.update", username=principal.username, user_id=principal.user_id, ticket_id=ticket_id) as current:
+        t = get(db, principal, ticket_id)
+        if not rbac.can_update_ticket(principal, t):
+            raise PermissionDeniedError("not allowed to update this ticket")
+
+        old_val = _ticket_audit_snapshot(t)
+        
+        if "title" in payload:
+            t.title = (payload["title"] or "").strip()[:500]
+        if "txt" in payload:
+            t.txt = (payload["txt"] or "").strip()
+            
+        db.flush()
+        new_val = _ticket_audit_snapshot(t)
+        
+        if old_val != new_val:
+            audit_service.record(
+                db,
+                actor=principal,
+                action=events.TICKET_UPDATED,
+                entity_type="ticket",
+                entity_id=t.id,
+                ticket_id=t.id,
+                old_value=old_val,
+                new_value=new_val,
+            )
+        
+        return t
+
+
+def delete(db: Session, principal: Principal, ticket_id: str) -> None:
+    with span("ticket.delete", username=principal.username, user_id=principal.user_id, ticket_id=ticket_id):
+        t = get(db, principal, ticket_id)
+        if not rbac.can_delete_ticket(principal, t):
+            raise PermissionDeniedError("not allowed to delete this ticket")
+
+        t.is_deleted = True
+        db.flush()
+        
+        audit_service.record(
+            db,
+            actor=principal,
+            action=events.TICKET_DELETED,
+            entity_type="ticket",
+            entity_id=t.id,
+            ticket_id=t.id,
+            old_value={"is_deleted": False},
+            new_value={"is_deleted": True},
+        )
+
+
 def list_(
     db: Session,
     principal: Principal,

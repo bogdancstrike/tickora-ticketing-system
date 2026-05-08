@@ -202,3 +202,29 @@ def can_view_global_dashboard(p: Principal) -> bool:
 
 def can_view_sector_dashboard(p: Principal, sector_code: str) -> bool:
     return p.is_admin or p.is_auditor or p.is_chief_of(sector_code) or p.is_member_of(sector_code)
+
+
+def can_delete_ticket(p: Principal, t: _TicketLike) -> bool:
+    """Only super-admins can soft-delete tickets."""
+    return is_super_admin(p)
+
+
+def can_update_ticket(p: Principal, t: _TicketLike) -> bool:
+    """Admins or anyone with update permission (e.g. distributor during triage)."""
+    return p.is_admin or p.is_distributor or (t.current_sector_code and p.is_chief_of(t.current_sector_code))
+
+
+def can_view_audit_tab(p: Principal, t: _TicketLike) -> bool:
+    """Only staff working on the ticket (and admins/auditors) see the audit tab."""
+    if p.is_admin or p.is_auditor:
+        return True
+    if t.current_sector_code and t.current_sector_code in p.all_sectors:
+        return True
+    if p.is_distributor:
+        return True
+    return False
+
+
+def is_super_admin(p: Principal) -> bool:
+    """Hardcoded super-admin check for sensitive operations like permanent deletion."""
+    return p.is_admin and p.keycloak_subject == "93d10567-d264-4b06-948c-c1265d675845"
