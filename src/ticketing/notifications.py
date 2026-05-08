@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from src.core.db import get_db
 from src.config import Config
 from src.tasking.registry import register_task
-from src.ticketing.models import Notification, Ticket, User, SectorMembership, Sector
+from src.ticketing.models import Beneficiary, Notification, Ticket, TicketAssignee, SectorMembership, Sector
 from src.iam.models import User as IAMUser
 
 @register_task("notify_distributors")
@@ -104,43 +104,62 @@ def notify_assignee(payload: Dict[str, Any]):
         )
         db.commit()
 
-@register_task("notify_beneficiary")
-def notify_beneficiary(payload: Dict[str, Any]):
-    """Notify everyone with skin in the game about a status change.
 
-    Targets: requester (creator), current assignee, sector members.
-    The actor (whoever triggered the change) is excluded.
+@register_task("notify_ticket_event")
+def notify_ticket_event(payload: Dict[str, Any]):
+    """Notify direct ticket participants about an event they are allowed to see.
+
+    Participants are the requester/beneficiary user plus all current assignees.
+    Private events must pass ``visible_to_requester=False`` so requester-side
+    recipients do not learn about staff-only activity.
     """
     ticket_id = payload.get("ticket_id")
     actor_user_id = payload.get("actor_user_id")
+    event_type = payload.get("type") or "ticket_updated"
+    title = payload.get("title")
+    body = payload.get("body")
+    visible_to_requester = payload.get("visible_to_requester", True)
+    include_assignees = payload.get("include_assignees", True)
+
     with get_db() as db:
         ticket = db.get(Ticket, ticket_id)
         if not ticket:
             return
 
-        recipients: set[str] = set()
-        if ticket.created_by_user_id:
-            recipients.add(ticket.created_by_user_id)
-        if ticket.assignee_user_id:
-            recipients.add(ticket.assignee_user_id)
-        if ticket.current_sector_id:
-            members = db.scalars(
-                select(SectorMembership.user_id)
-                .where(SectorMembership.sector_id == ticket.current_sector_id, SectorMembership.is_active.is_(True))
-            ).all()
-            recipients.update(members)
+        recipients = _participant_recipient_ids(
+            db,
+            ticket,
+            include_requester=bool(visible_to_requester),
+            include_assignees=bool(include_assignees),
+        )
         recipients.discard(actor_user_id)
 
         for uid in recipients:
             _create_in_app_notification(
                 db,
                 user_id=uid,
-                type="status_changed",
-                title=f"Ticket {ticket.ticket_code} · {ticket.status.replace('_', ' ')}",
-                body=f"Status changed to {ticket.status}.",
+                type=event_type,
+                title=title or f"Ticket {ticket.ticket_code} updated",
+                body=body or "A ticket you are involved in was updated.",
                 ticket_id=ticket.id,
             )
         db.commit()
+
+
+@register_task("notify_beneficiary")
+def notify_beneficiary(payload: Dict[str, Any]):
+    """Backward-compatible alias for status-change participant notifications."""
+    ticket_id = payload.get("ticket_id")
+    with get_db() as db:
+        ticket = db.get(Ticket, ticket_id)
+        status = ticket.status if ticket else "updated"
+    notify_ticket_event({
+        **payload,
+        "type": payload.get("type") or "status_changed",
+        "title": payload.get("title") or (f"Ticket updated · {status.replace('_', ' ')}" if ticket_id else None),
+        "body": payload.get("body") or f"Status changed to {status}.",
+        "visible_to_requester": payload.get("visible_to_requester", True),
+    })
 
 
 @register_task("notify_comment")
@@ -154,32 +173,30 @@ def notify_comment(payload: Dict[str, Any]):
     ticket_id     = payload.get("ticket_id")
     actor_user_id = payload.get("actor_user_id")
     visibility    = payload.get("visibility", "public")
+    notification_type = payload.get("type") or "comment_created"
+    title = payload.get("title")
+    body = payload.get("body")
 
     with get_db() as db:
         ticket = db.get(Ticket, ticket_id)
         if not ticket:
             return
 
-        recipients: set[str] = set()
-        if ticket.assignee_user_id:
-            recipients.add(ticket.assignee_user_id)
-        if ticket.current_sector_id:
-            members = db.scalars(
-                select(SectorMembership.user_id)
-                .where(SectorMembership.sector_id == ticket.current_sector_id, SectorMembership.is_active.is_(True))
-            ).all()
-            recipients.update(members)
-        if visibility == "public" and ticket.created_by_user_id:
-            recipients.add(ticket.created_by_user_id)
+        recipients = _participant_recipient_ids(
+            db,
+            ticket,
+            include_requester=visibility == "public",
+            include_assignees=True,
+        )
         recipients.discard(actor_user_id)
 
         for uid in recipients:
             _create_in_app_notification(
                 db,
                 user_id=uid,
-                type="comment_created",
-                title=f"New comment on {ticket.ticket_code}",
-                body=f"A {visibility} comment was posted.",
+                type=notification_type,
+                title=title or f"New comment on {ticket.ticket_code}",
+                body=body or f"A {visibility} comment was posted.",
                 ticket_id=ticket.id,
             )
         db.commit()
@@ -327,6 +344,45 @@ def _create_in_app_notification(
     _publish_to_sse(user_id, notification)
     
     return notification
+
+
+def _participant_recipient_ids(
+    db: Session,
+    ticket: Ticket,
+    *,
+    include_requester: bool,
+    include_assignees: bool,
+) -> set[str]:
+    recipients: set[str] = set()
+    if include_requester:
+        recipients.update(_requester_user_ids(db, ticket))
+    if include_assignees:
+        recipients.update(_assignee_user_ids(db, ticket))
+    return recipients
+
+
+def _requester_user_ids(db: Session, ticket: Ticket) -> set[str]:
+    user_ids: set[str] = set()
+    if ticket.created_by_user_id:
+        user_ids.add(ticket.created_by_user_id)
+    if ticket.beneficiary_id:
+        beneficiary_user_id = db.scalar(
+            select(Beneficiary.user_id).where(Beneficiary.id == ticket.beneficiary_id)
+        )
+        if beneficiary_user_id:
+            user_ids.add(beneficiary_user_id)
+    return user_ids
+
+
+def _assignee_user_ids(db: Session, ticket: Ticket) -> set[str]:
+    user_ids = set(
+        db.scalars(
+            select(TicketAssignee.user_id).where(TicketAssignee.ticket_id == ticket.id)
+        ).all()
+    )
+    if ticket.assignee_user_id:
+        user_ids.add(ticket.assignee_user_id)
+    return user_ids
 
 def _publish_to_sse(user_id: str, notification: Notification):
     """Publish notification to Redis for SSE delivery."""

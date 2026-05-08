@@ -142,6 +142,15 @@ def edit(db: Session, principal: Principal, comment_id: str, *, body: str) -> Ti
         old_value={"body": old},
         new_value={"body": body},
     )
+    publish("notify_comment", {
+        "ticket_id": comment.ticket_id,
+        "comment_id": comment.id,
+        "actor_user_id": principal.user_id,
+        "visibility": comment.visibility,
+        "type": "comment_edited",
+        "title": "Comment updated",
+        "body": "A comment was updated.",
+    })
     return comment
 
 
@@ -162,4 +171,13 @@ def delete(db: Session, principal: Principal, comment_id: str) -> TicketComment:
         ticket_id=comment.ticket_id,
         old_value={"visibility": comment.visibility, "body": comment.body},
     )
+    publish("notify_comment", {
+        "ticket_id": comment.ticket_id,
+        "comment_id": comment.id,
+        "actor_user_id": principal.user_id,
+        "visibility": comment.visibility,
+        "type": "comment_deleted",
+        "title": "Comment deleted",
+        "body": "A comment was deleted.",
+    })
     return comment

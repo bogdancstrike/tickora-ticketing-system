@@ -31,7 +31,12 @@ from src.ticketing.models import (
     TicketStatusHistory,
 )
 from src.ticketing.service import audit_service, sla_service
-from src.ticketing.service.ticket_service import _sector_code, _beneficiary_user_id
+from src.ticketing.service.ticket_service import (
+    _assignees_for_ticket,
+    _beneficiary_user_id,
+    _sector_code,
+    _sector_codes_for_ticket,
+)
 from src.tasking.producer import publish
 
 
@@ -40,6 +45,8 @@ from src.tasking.producer import publish
 def _hydrate_for_rbac(db: Session, t: Ticket) -> Ticket:
     setattr(t, "current_sector_code", _sector_code(db, t.current_sector_id))
     setattr(t, "beneficiary_user_id", _beneficiary_user_id(db, t.beneficiary_id))
+    setattr(t, "sector_codes", _sector_codes_for_ticket(db, t.id))
+    setattr(t, "assignee_user_ids", _assignees_for_ticket(db, t.id))
     return t
 
 
@@ -222,6 +229,14 @@ def _assign_sector(db: Session, p: Principal, ticket_id: str, sector_code: str, 
         metadata={"reason": reason} if reason else None,
     )
     publish("notify_sector", {"ticket_id": ticket_id, "sector_id": sector.id})
+    publish("notify_ticket_event", {
+        "ticket_id": ticket_id,
+        "actor_user_id": p.user_id,
+        "type": "ticket_sector_assigned",
+        "title": f"Ticket routed to {sector.code}",
+        "body": f"Ticket was routed to sector {sector.code}.",
+        "include_assignees": False,
+    })
     return _load(db, ticket_id)
 
 
@@ -271,6 +286,14 @@ def _assign_to_me(db: Session, p: Principal, ticket_id: str) -> Ticket:
         new_value={"assignee_user_id": p.user_id, "status": sm.IN_PROGRESS},
     )
     publish("notify_assignee", {"ticket_id": ticket_id, "user_id": p.user_id})
+    publish("notify_ticket_event", {
+        "ticket_id": ticket_id,
+        "actor_user_id": p.user_id,
+        "type": "ticket_assigned",
+        "title": "Ticket assigned",
+        "body": "Ticket was assigned to an operator.",
+        "include_assignees": False,
+    })
     return _load(db, ticket_id)
 
 
@@ -338,6 +361,14 @@ def _assign_to_user(db: Session, p: Principal, ticket_id: str, target_user_id: s
         metadata={"reason": reason} if reason else None,
     )
     publish("notify_assignee", {"ticket_id": ticket_id, "user_id": target_user_id})
+    publish("notify_ticket_event", {
+        "ticket_id": ticket_id,
+        "actor_user_id": p.user_id,
+        "type": "ticket_assigned",
+        "title": "Ticket assigned",
+        "body": "Ticket was assigned to an operator.",
+        "include_assignees": False,
+    })
     return _load(db, ticket_id)
 
 
@@ -425,6 +456,14 @@ def add_assignee(db: Session, p: Principal, ticket_id: str, user_id: str) -> Tic
             metadata={"action": "add_assignee"},
         )
         publish("notify_assignee", {"ticket_id": ticket_id, "user_id": user_id})
+        publish("notify_ticket_event", {
+            "ticket_id": ticket_id,
+            "actor_user_id": p.user_id,
+            "type": "ticket_assignee_added",
+            "title": "Ticket assignee added",
+            "body": "An assignee was added to the ticket.",
+            "include_assignees": False,
+        })
         return _load(db, ticket_id)
 
 
@@ -708,6 +747,13 @@ def _reopen(db: Session, p: Principal, ticket_id: str, *, reason: str) -> Ticket
     )
     if target_assignee:
         publish("notify_assignee", {"ticket_id": ticket_id, "user_id": target_assignee})
+    publish("notify_ticket_event", {
+        "ticket_id": ticket_id,
+        "actor_user_id": p.user_id,
+        "type": "status_changed",
+        "title": "Ticket reopened",
+        "body": "Ticket was reopened.",
+    })
     return _load(db, ticket_id)
 
 
@@ -791,4 +837,11 @@ def _change_priority(db: Session, p: Principal, ticket_id: str, priority: str, *
         old_value={"priority": t.priority}, new_value={"priority": priority},
         metadata={"reason": reason} if reason else None,
     )
+    publish("notify_ticket_event", {
+        "ticket_id": ticket_id,
+        "actor_user_id": p.user_id,
+        "type": "priority_changed",
+        "title": "Ticket priority changed",
+        "body": f"Priority changed to {priority}.",
+    })
     return _load(db, ticket_id)

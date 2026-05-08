@@ -14,11 +14,11 @@ import {
 } from '@ant-design/icons'
 import { Dropdown } from 'antd'
 import {
-  assignSector, assignToMe, assignToUser, cancelTicket, changePriority, closeTicket,
+  addAssignee, addSector, assignSector, assignToMe, assignToUser, cancelTicket, changePriority, closeTicket,
   createComment, deleteAttachment, deleteComment, downloadAttachmentUrl, getMe,
   getTicket, getTicketOptions, listAssignableUsers, listAttachments, listComments,
   listTicketAudit, listTickets, markDone, registerAttachment, reopenTicket, requestAttachmentUpload,
-  deleteTicket, listTicketMetadata, unassignTicket,
+  deleteTicket, listTicketMetadata, removeAssignee, removeSector, unassignTicket,
   type AttachmentDto,
   type TicketDto,
 } from '@/api/tickets'
@@ -31,6 +31,20 @@ import { AuditTimeline } from '@/components/common/AuditTimeline'
 
 const fmt = fmtDateTime
 const bytes = fmtBytes
+
+function ticketSectorCodes(ticket: TicketDto): string[] {
+  const codes = ticket.sector_codes?.length ? ticket.sector_codes : []
+  return Array.from(new Set([ticket.current_sector_code, ...codes].filter(Boolean) as string[]))
+}
+
+function ticketAssigneeIds(ticket: TicketDto): string[] {
+  const userIds = ticket.assignee_user_ids?.length ? ticket.assignee_user_ids : []
+  return Array.from(new Set([ticket.assignee_user_id, ...userIds].filter(Boolean) as string[]))
+}
+
+function shortUserId(userId: string): string {
+  return `${userId.slice(0, 8)}…`
+}
 
 function useSessionBootstrap() {
   const setUser = useSessionStore((s) => s.setUser)
@@ -59,9 +73,10 @@ function useSessionBootstrap() {
 function canAssignToMe(ticket: TicketDto, user: ReturnType<typeof useSessionStore.getState>['user']) {
   if (!user) return false
   const isAdmin = user.roles.includes('tickora_admin')
-  const inSector = !!user.sectors?.some((s) => s.sectorCode === ticket.current_sector_code)
+  const sectors = ticketSectorCodes(ticket)
+  const inSector = !!user.sectors?.some((s) => sectors.includes(s.sectorCode))
   return (isAdmin || inSector)
-    && !ticket.assignee_user_id
+    && ticketAssigneeIds(ticket).length === 0
     && ['pending', 'assigned_to_sector', 'reopened'].includes(ticket.status)
 }
 
@@ -86,7 +101,7 @@ function canMarkDone(ticket: TicketDto, user: ReturnType<typeof useSessionStore.
   if (!user) return false
   const isAdmin = user.roles.includes('tickora_admin')
   const isChief = !!user.sectors?.some((s) => s.sectorCode === ticket.current_sector_code && s.role === 'chief')
-  const isAssignee = ticket.assignee_user_id === user.id
+  const isAssignee = !!user.id && ticketAssigneeIds(ticket).includes(user.id)
   return (isAdmin || isChief || isAssignee)
     && ['in_progress', 'reopened'].includes(ticket.status)
 }

@@ -308,6 +308,34 @@ export const assignToUser = async (ticketId: string, userId: string, reason?: st
   return data
 }
 
+export const addSector = async (ticketId: string, sectorCode: string): Promise<TicketDto> => {
+  const { data } = await apiClient.post(`/api/tickets/${ticketId}/sectors/add`, {
+    sector_code: sectorCode,
+  })
+  return data
+}
+
+export const removeSector = async (ticketId: string, sectorCode: string): Promise<TicketDto> => {
+  const { data } = await apiClient.post(`/api/tickets/${ticketId}/sectors/remove`, {
+    sector_code: sectorCode,
+  })
+  return data
+}
+
+export const addAssignee = async (ticketId: string, userId: string): Promise<TicketDto> => {
+  const { data } = await apiClient.post(`/api/tickets/${ticketId}/assignees/add`, {
+    user_id: userId,
+  })
+  return data
+}
+
+export const removeAssignee = async (ticketId: string, userId: string): Promise<TicketDto> => {
+  const { data } = await apiClient.post(`/api/tickets/${ticketId}/assignees/remove`, {
+    user_id: userId,
+  })
+  return data
+}
+
 export const unassignTicket = async (ticketId: string, reason?: string): Promise<TicketDto> => {
   const { data } = await apiClient.post(`/api/tickets/${ticketId}/unassign`, {
     reason: reason || undefined,

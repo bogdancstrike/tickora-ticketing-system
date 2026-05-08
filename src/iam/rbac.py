@@ -15,15 +15,35 @@ class _TicketLike(Protocol):
     requester_email: str | None
     current_sector_code: str | None
     assignee_user_id: str | None
+    assignee_user_ids: list[str]
     last_active_assignee_user_id: str | None
     created_by_user_id: str | None
     beneficiary_user_id: str | None
+    sector_codes: list[str]
     is_deleted: bool
 
 
 class _CommentLike(Protocol):
     visibility: str  # "public" | "private"
     author_user_id: str | None
+
+
+def _sector_codes(t: _TicketLike) -> set[str]:
+    codes = set(getattr(t, "sector_codes", []) or [])
+    if t.current_sector_code:
+        codes.add(t.current_sector_code)
+    return codes
+
+
+def _assignee_user_ids(t: _TicketLike) -> set[str]:
+    user_ids = set(getattr(t, "assignee_user_ids", []) or [])
+    if t.assignee_user_id:
+        user_ids.add(t.assignee_user_id)
+    return user_ids
+
+
+def _is_assigned_to(p: Principal, t: _TicketLike) -> bool:
+    return bool(p.user_id and p.user_id in _assignee_user_ids(t))
 
 
 # ── Ticket visibility ────────────────────────────────────────────────────────
@@ -38,7 +58,7 @@ def can_view_ticket(p: Principal, t: _TicketLike) -> bool:
         return True
     if t.beneficiary_user_id and t.beneficiary_user_id == p.user_id:
         return True
-    if t.current_sector_code and t.current_sector_code in p.all_sectors:
+    if _sector_codes(t).intersection(p.all_sectors):
         return True
     if p.is_distributor and t.status in ("pending", "assigned_to_sector"):
         return True
@@ -56,7 +76,7 @@ def can_modify_ticket(p: Principal, t: _TicketLike) -> bool:
         return True
     if t.current_sector_code and p.is_chief_of(t.current_sector_code):
         return True
-    if t.assignee_user_id and t.assignee_user_id == p.user_id:
+    if _is_assigned_to(p, t):
         return True
     return False
 
@@ -74,7 +94,7 @@ def can_assign_sector(p: Principal, t: _TicketLike) -> bool:
 def can_assign_to_me(p: Principal, t: _TicketLike) -> bool:
     if p.is_admin:
         return True
-    if t.current_sector_code and t.current_sector_code in p.all_sectors:
+    if _sector_codes(t).intersection(p.all_sectors):
         return True
     return False
 
@@ -97,7 +117,7 @@ def can_mark_done(p: Principal, t: _TicketLike) -> bool:
         return True
     if t.current_sector_code and p.is_chief_of(t.current_sector_code):
         return True
-    if t.assignee_user_id and t.assignee_user_id == p.user_id:
+    if _is_assigned_to(p, t):
         return True
     return False
 
@@ -156,7 +176,7 @@ def can_drive_status(p: Principal, t: _TicketLike) -> bool:
         return True
     if t.current_sector_code and p.is_chief_of(t.current_sector_code):
         return True
-    if t.assignee_user_id and t.assignee_user_id == p.user_id:
+    if _is_assigned_to(p, t):
         return True
     return False
 
@@ -166,7 +186,7 @@ def can_drive_status(p: Principal, t: _TicketLike) -> bool:
 def can_see_private_comments(p: Principal, t: _TicketLike) -> bool:
     if p.is_admin or p.is_auditor or p.is_distributor:
         return True
-    if t.current_sector_code and t.current_sector_code in p.all_sectors:
+    if _sector_codes(t).intersection(p.all_sectors):
         return True
     return False
 
@@ -181,7 +201,7 @@ def can_post_public_comment(p: Principal, t: _TicketLike) -> bool:
         return True
     if t.current_sector_code and p.is_chief_of(t.current_sector_code):
         return True
-    if t.assignee_user_id and t.assignee_user_id == p.user_id:
+    if _is_assigned_to(p, t):
         return True
     if t.created_by_user_id and t.created_by_user_id == p.user_id:
         return True
@@ -195,7 +215,7 @@ def can_post_public_comment(p: Principal, t: _TicketLike) -> bool:
 def can_post_private_comment(p: Principal, t: _TicketLike) -> bool:
     if p.is_admin:
         return True
-    if t.current_sector_code and t.current_sector_code in p.all_sectors:
+    if _sector_codes(t).intersection(p.all_sectors):
         return True
     if p.is_distributor:
         return True
@@ -250,7 +270,7 @@ def can_view_audit_tab(p: Principal, t: _TicketLike) -> bool:
     """Only staff working on the ticket (and admins/auditors) see the audit tab."""
     if p.is_admin or p.is_auditor:
         return True
-    if t.current_sector_code and t.current_sector_code in p.all_sectors:
+    if _sector_codes(t).intersection(p.all_sectors):
         return True
     if p.is_distributor:
         return True

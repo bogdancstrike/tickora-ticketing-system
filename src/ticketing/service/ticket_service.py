@@ -76,6 +76,17 @@ def _visibility_filter(p: Principal):
                 select(Sector.id).where(Sector.code.in_(p.all_sectors))
             )
         )
+        clauses.append(
+            exists(
+                select(1)
+                .select_from(TicketSectorAssignment)
+                .join(Sector, Sector.id == TicketSectorAssignment.sector_id)
+                .where(
+                    TicketSectorAssignment.ticket_id == Ticket.id,
+                    Sector.code.in_(p.all_sectors),
+                )
+            )
+        )
     # distributor sees pending/assigned_to_sector
     if p.is_distributor:
         clauses.append(Ticket.status.in_(("pending", "assigned_to_sector")))
@@ -281,11 +292,34 @@ def _list(
     if (btype := filters.get("beneficiary_type")):
         stmt = stmt.where(Ticket.beneficiary_type == btype)
     if (assignee := filters.get("assignee_user_id")):
-        stmt = stmt.where(Ticket.assignee_user_id == assignee)
+        stmt = stmt.where(
+            or_(
+                Ticket.assignee_user_id == assignee,
+                exists(
+                    select(1)
+                    .select_from(TicketAssignee)
+                    .where(
+                        TicketAssignee.ticket_id == Ticket.id,
+                        TicketAssignee.user_id == assignee,
+                    )
+                ),
+            )
+        )
     if (sector_code := filters.get("current_sector_code")):
         stmt = stmt.where(
-            Ticket.current_sector_id.in_(
-                select(Sector.id).where(Sector.code == sector_code)
+            or_(
+                Ticket.current_sector_id.in_(
+                    select(Sector.id).where(Sector.code == sector_code)
+                ),
+                exists(
+                    select(1)
+                    .select_from(TicketSectorAssignment)
+                    .join(Sector, Sector.id == TicketSectorAssignment.sector_id)
+                    .where(
+                        TicketSectorAssignment.ticket_id == Ticket.id,
+                        Sector.code == sector_code,
+                    )
+                ),
             )
         )
     if (created_after := filters.get("created_after")):

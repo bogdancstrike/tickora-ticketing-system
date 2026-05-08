@@ -9,7 +9,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from framework.commons.logger import logger
-from sqlalchemy import case, func, or_, select, text as sa_text, cast as sa_cast, Text as sa_Text
+from sqlalchemy import case, func, or_, select, cast as sa_cast, Text as sa_Text
 from sqlalchemy.orm import Session
 
 from src.core.errors import NotFoundError, PermissionDeniedError
@@ -53,23 +53,9 @@ def global_(db: Session, principal: Principal) -> dict[str, Any]:
     if not rbac.can_view_global_dashboard(principal):
         raise PermissionDeniedError("not allowed to view global dashboard")
     logger.info("dashboard global requested", extra={"username": principal.username})
-    
-    # Use materialized view for KPIs
-    mv = db.execute(select(sa_text("*")).select_from(sa_text("mv_dashboard_global_kpis"))).first()
-    
-    kpis = {
-        "total_tickets": int(mv.total_tickets) if mv else 0,
-        "active_tickets": int(mv.active_tickets) if mv else 0,
-        "new_today": int(mv.new_today) if mv else 0,
-        "closed_today": int(mv.closed_today) if mv else 0,
-        "sla_breached": int(mv.sla_breached) if mv else 0,
-        "reopened": int(mv.reopened) if mv else 0,
-        "avg_assignment_minutes": round(float(mv.avg_assignment_minutes), 1) if mv and mv.avg_assignment_minutes else None,
-        "avg_resolution_minutes": round(float(mv.avg_resolution_minutes), 1) if mv and mv.avg_resolution_minutes else None,
-    }
-    
+
     return {
-        "kpis": kpis,
+        "kpis": _global_kpis(db),
         "by_status": _breakdown(db, Ticket.status),
         "by_priority": _breakdown(db, Ticket.priority),
         "by_beneficiary_type": _breakdown(db, Ticket.beneficiary_type),
@@ -112,26 +98,11 @@ def sector(db: Session, principal: Principal, sector_code: str) -> dict[str, Any
     sector_row = db.scalar(select(Sector).where(Sector.code == sector_code, Sector.is_active.is_(True)))
     if sector_row is None:
         raise NotFoundError("sector not found")
-    # Use materialized view for KPIs
-    mv = db.execute(
-        select(sa_text("*"))
-        .select_from(sa_text("mv_dashboard_sector_kpis"))
-        .where(sa_text(f"current_sector_id = '{sector_row.id}'"))
-    ).first()
-
-    kpis = {
-        "active": int(mv.active) if mv else 0,
-        "unassigned": int(mv.unassigned) if mv else 0,
-        "done": int(mv.done) if mv else 0,
-        "sla_breached": int(mv.sla_breached) if mv else 0,
-        "reopened": int(mv.reopened) if mv else 0,
-        "avg_resolution_minutes": round(float(mv.avg_resolution_minutes), 1) if mv and mv.avg_resolution_minutes else None,
-    }
 
     return {
         "sector_code": sector_row.code,
         "sector_name": sector_row.name,
-        "kpis": kpis,
+        "kpis": _sector_kpis(db, sector_row.id),
         "by_status": _breakdown(db, Ticket.status, sector_id=sector_row.id),
         "by_priority": _breakdown(db, Ticket.priority, sector_id=sector_row.id),
         "by_category": _breakdown(db, Ticket.category, sector_id=sector_row.id),
@@ -222,6 +193,87 @@ def _count(db: Session, stmt) -> int:
 def _today_start() -> datetime:
     now = datetime.now(timezone.utc)
     return datetime(now.year, now.month, now.day, tzinfo=timezone.utc)
+
+
+def _global_kpis(db: Session) -> dict[str, int | float | None]:
+    today = _today_start()
+    active_count = func.sum(case((Ticket.status.in_(ACTIVE_STATUSES), 1), else_=0))
+    new_today = func.sum(case((Ticket.created_at >= today, 1), else_=0))
+    closed_today = func.sum(case((Ticket.closed_at >= today, 1), else_=0))
+    sla_breached = func.sum(case((Ticket.sla_status == "breached", 1), else_=0))
+    reopened = func.sum(case((Ticket.reopened_count > 0, 1), else_=0))
+    avg_assignment = func.avg(
+        case(
+            (Ticket.assigned_at.is_not(None), func.extract("epoch", Ticket.assigned_at - Ticket.created_at) / 60),
+            else_=None,
+        )
+    )
+    avg_resolution = func.avg(
+        case(
+            (Ticket.done_at.is_not(None), func.extract("epoch", Ticket.done_at - Ticket.created_at) / 60),
+            else_=None,
+        )
+    )
+    row = db.execute(
+        select(
+            func.count(Ticket.id),
+            active_count,
+            new_today,
+            closed_today,
+            sla_breached,
+            reopened,
+            avg_assignment,
+            avg_resolution,
+        )
+        .where(Ticket.is_deleted.is_(False))
+    ).one()
+    return {
+        "total_tickets": int(row[0] or 0),
+        "active_tickets": int(row[1] or 0),
+        "new_today": int(row[2] or 0),
+        "closed_today": int(row[3] or 0),
+        "sla_breached": int(row[4] or 0),
+        "reopened": int(row[5] or 0),
+        "avg_assignment_minutes": round(float(row[6]), 1) if row[6] is not None else None,
+        "avg_resolution_minutes": round(float(row[7]), 1) if row[7] is not None else None,
+    }
+
+
+def _sector_kpis(db: Session, sector_id: str) -> dict[str, int | float | None]:
+    active_count = func.sum(case((Ticket.status.in_(ACTIVE_STATUSES), 1), else_=0))
+    unassigned = func.sum(
+        case(
+            (
+                Ticket.assignee_user_id.is_(None) & Ticket.status.in_(ACTIVE_STATUSES),
+                1,
+            ),
+            else_=0,
+        )
+    )
+    done_count = func.sum(case((Ticket.status.in_(DONE_STATUSES), 1), else_=0))
+    sla_breached = func.sum(case((Ticket.sla_status == "breached", 1), else_=0))
+    reopened = func.sum(case((Ticket.reopened_count > 0, 1), else_=0))
+    avg_resolution = func.avg(
+        case(
+            (Ticket.done_at.is_not(None), func.extract("epoch", Ticket.done_at - Ticket.created_at) / 60),
+            else_=None,
+        )
+    )
+    row = db.execute(
+        select(active_count, unassigned, done_count, sla_breached, reopened, avg_resolution)
+        .where(
+            Ticket.is_deleted.is_(False),
+            Ticket.current_sector_id == sector_id,
+        )
+    ).one()
+    return {
+        "active": int(row[0] or 0),
+        "unassigned": int(row[1] or 0),
+        "done": int(row[2] or 0),
+        "sla_breached": int(row[3] or 0),
+        "reopened": int(row[4] or 0),
+        "avg_resolution_minutes": round(float(row[5]), 1) if row[5] is not None else None,
+    }
 
 
 def _avg_minutes(db: Session, start_col, end_col, *, sector_id: str | None = None) -> float | None:
