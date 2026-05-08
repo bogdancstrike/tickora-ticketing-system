@@ -9,25 +9,72 @@ import './index.css'
 
 setTokenProvider(() => keycloak.token)
 
+const FULL_ACCESS_ROLES = [
+  'tickora_admin',
+  'tickora_auditor',
+  'tickora_distributor',
+  'tickora_internal_user',
+  'tickora_sector_chief',
+  'tickora_sector_member',
+]
+
+function normalizeSectorCode(code: string) {
+  const value = (code || '').trim().toLowerCase()
+  return /^sector\d+$/.test(value) ? `s${value.slice('sector'.length)}` : value
+}
+
+function tokenSectors(groups: string[]) {
+  const out = new Map<string, Set<'member' | 'chief'>>()
+  const add = (code: string, role: 'member' | 'chief') => {
+    const sectorCode = normalizeSectorCode(code)
+    if (!sectorCode) return
+    const roles = out.get(sectorCode) || new Set<'member' | 'chief'>()
+    roles.add(role)
+    out.set(sectorCode, roles)
+  }
+
+  groups.forEach((raw) => {
+    const group = (raw || '').trim()
+    const sectorPath = group.match(/^\/tickora\/sectors\/([^/]+)(?:\/(members|member|chiefs|chief))?$/)
+    const legacyPath = group.match(/^\/tickora\/([^/]+)(?:\/(members|member|chiefs|chief))?$/)
+    const shorthand = group.match(/^sector\d+$/i)
+    const match = sectorPath || legacyPath
+
+    if (match && match[1] !== 'sectors') {
+      const role = match[2]
+      if (!role) {
+        add(match[1], 'chief')
+        add(match[1], 'member')
+      } else {
+        add(match[1], role.startsWith('chief') ? 'chief' : 'member')
+      }
+    } else if (shorthand) {
+      add(group, 'chief')
+      add(group, 'member')
+    }
+  })
+
+  return Array.from(out.entries()).flatMap(([sectorCode, roles]) =>
+    Array.from(roles).map((role) => ({ sectorCode, role })),
+  )
+}
+
 const onTokens = () => {
   if (!keycloak.tokenParsed) return
   const t = keycloak.tokenParsed as any
-  const realmRoles: string[] = t?.realm_access?.roles || []
-  const sectors = (t?.groups || [])
-    .map((g: string) => {
-      const match = g.match(/^\/tickora\/sectors\/([^/]+)\/(members|chiefs)$/)
-      if (!match) return null
-      return { sectorCode: match[1], role: match[2] === 'chiefs' ? 'chief' : 'member' }
-    })
-    .filter(Boolean)
+  const groups: string[] = t?.groups || []
+  const roles = new Set<string>(t?.realm_access?.roles || [])
+  if (groups.some((g) => g === '/tickora' || g === 'tickora')) {
+    FULL_ACCESS_ROLES.forEach((role) => roles.add(role))
+  }
   useSessionStore.getState().setUser({
     id:        t.sub,
     username:  t.preferred_username,
     email:     t.email,
     firstName: t.given_name,
     lastName:  t.family_name,
-    roles:     realmRoles,
-    sectors,
+    roles:     Array.from(roles),
+    sectors:   tokenSectors(groups),
   })
 }
 

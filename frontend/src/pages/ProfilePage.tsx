@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import {
   Avatar, Button, Card, Col, Descriptions, Divider, Empty, Flex, Modal, Row, Statistic, Tag, Tooltip, Typography, Space,
@@ -11,10 +11,10 @@ import {
 import ReactECharts from 'echarts-for-react'
 import { useSessionStore } from '@/stores/sessionStore'
 import {
-  getDashboardOverview, listAssignableUsers, listTickets, type AssignableUserDto,
+  getDashboardOverview, getMe, listAssignableUsers, listTickets, type AssignableUserDto,
 } from '@/api/tickets'
 import { StatusTag } from '@/components/common/StatusTag'
-import { fmtRelative } from '@/components/common/format'
+import { fmtDate, fmtRelative } from '@/components/common/format'
 
 function initials(first?: string, last?: string, fallback = '?') {
   return ((first?.[0] || '') + (last?.[0] || '')).toUpperCase() || fallback
@@ -211,6 +211,28 @@ function TeamsILead({
 export function ProfilePage() {
   const { token } = antTheme.useToken()
   const user = useSessionStore((s) => s.user)
+  const setUser = useSessionStore((s) => s.setUser)
+
+  const me = useQuery({
+    queryKey: ['me'],
+    queryFn: getMe,
+    staleTime: 60_000,
+    enabled: !!user?.id,
+  })
+
+  useEffect(() => {
+    if (!me.data) return
+    setUser({
+      id: me.data.user_id,
+      username: me.data.username,
+      email: me.data.email,
+      firstName: me.data.first_name,
+      lastName: me.data.last_name,
+      createdAt: me.data.created_at,
+      roles: me.data.roles,
+      sectors: me.data.sectors.map((s) => ({ sectorCode: s.sector_code, role: s.role })),
+    })
+  }, [me.data, setUser])
 
   const recent = useQuery({
     queryKey: ['profile-recent', user?.id],
@@ -251,6 +273,9 @@ export function ProfilePage() {
             <Divider style={{ margin: '16px 0' }} />
             <Descriptions size="small" column={1}>
               <Descriptions.Item label="Username"><Typography.Text code>{user.username || '—'}</Typography.Text></Descriptions.Item>
+              <Descriptions.Item label="First Name">{user.firstName || '—'}</Descriptions.Item>
+              <Descriptions.Item label="Last Name">{user.lastName || '—'}</Descriptions.Item>
+              <Descriptions.Item label="Joined">{fmtDate(user.createdAt)}</Descriptions.Item>
             </Descriptions>
           </Card>
         </Col>

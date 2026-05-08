@@ -6,6 +6,7 @@ export interface SessionUser {
   email?: string
   firstName?: string
   lastName?: string
+  createdAt?: string | null
   roles: string[]
   sectors?: { sectorCode: string; role: 'member' | 'chief' }[]
 }
