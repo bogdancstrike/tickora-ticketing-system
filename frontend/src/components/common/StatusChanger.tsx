@@ -10,8 +10,6 @@ const ALLOWED_TRANSITIONS: Record<string, Array<{ to: string; label: string }>> 
   assigned_to_sector: [{ to: 'in_progress', label: 'Take ownership' }, { to: 'cancelled', label: 'Cancel' }],
   in_progress:        [{ to: 'done', label: 'Mark done' }, { to: 'assigned_to_sector', label: 'Unassign · back to sector' }],
   reopened:           [{ to: 'in_progress', label: 'Take ownership' }, { to: 'done', label: 'Mark done' }],
-  waiting_for_user:   [{ to: 'done', label: 'Mark done' }],
-  on_hold:            [{ to: 'done', label: 'Mark done' }],
   done:               [{ to: 'closed', label: 'Close ticket' }, { to: 'reopened', label: 'Reopen' }],
   closed:             [{ to: 'reopened', label: 'Reopen' }],
 }

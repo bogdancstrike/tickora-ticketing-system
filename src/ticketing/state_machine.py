@@ -6,21 +6,18 @@ is the runtime enforcement; this table is the design enforcement.
 """
 from dataclasses import dataclass
 
-# Statuses (BRD §11.2)
+# Statuses (BRD §11.2 — trimmed set)
 PENDING             = "pending"
 ASSIGNED_TO_SECTOR  = "assigned_to_sector"
 IN_PROGRESS         = "in_progress"
-WAITING_FOR_USER    = "waiting_for_user"
-ON_HOLD             = "on_hold"
 DONE                = "done"
 CLOSED              = "closed"
 REOPENED            = "reopened"
 CANCELLED           = "cancelled"
-DUPLICATE           = "duplicate"
 
 ALL_STATUSES = frozenset({
-    PENDING, ASSIGNED_TO_SECTOR, IN_PROGRESS, WAITING_FOR_USER, ON_HOLD,
-    DONE, CLOSED, REOPENED, CANCELLED, DUPLICATE,
+    PENDING, ASSIGNED_TO_SECTOR, IN_PROGRESS,
+    DONE, CLOSED, REOPENED, CANCELLED,
 })
 
 # Actions
@@ -33,11 +30,6 @@ ACTION_MARK_DONE        = "mark_done"
 ACTION_CLOSE            = "close"
 ACTION_REOPEN           = "reopen"
 ACTION_CANCEL           = "cancel"
-ACTION_MARK_DUPLICATE   = "mark_duplicate"
-ACTION_REQUEST_INFO     = "request_info"      # → waiting_for_user
-ACTION_USER_RESPONDED   = "user_responded"    # → in_progress
-ACTION_HOLD             = "hold"              # → on_hold
-ACTION_UNHOLD           = "unhold"            # → in_progress
 
 
 @dataclass(frozen=True)
@@ -49,20 +41,15 @@ class Transition:
 
 # from_status × action → to_status
 TRANSITIONS: list[Transition] = [
-    Transition(ACTION_ASSIGN_SECTOR,   frozenset({PENDING, ASSIGNED_TO_SECTOR}),                                         ASSIGNED_TO_SECTOR),
-    Transition(ACTION_ASSIGN_TO_ME,    frozenset({PENDING, ASSIGNED_TO_SECTOR, REOPENED}),                               IN_PROGRESS),
-    Transition(ACTION_ASSIGN_TO_USER,  frozenset({PENDING, ASSIGNED_TO_SECTOR, IN_PROGRESS, REOPENED, ON_HOLD}),         IN_PROGRESS),
-    Transition(ACTION_REASSIGN,        frozenset({IN_PROGRESS, WAITING_FOR_USER, ON_HOLD, REOPENED, ASSIGNED_TO_SECTOR}), IN_PROGRESS),
-    Transition(ACTION_UNASSIGN,        frozenset({IN_PROGRESS, WAITING_FOR_USER, ON_HOLD, REOPENED, ASSIGNED_TO_SECTOR}), ASSIGNED_TO_SECTOR),
-    Transition(ACTION_REQUEST_INFO,    frozenset({IN_PROGRESS, REOPENED}),                                                WAITING_FOR_USER),
-    Transition(ACTION_USER_RESPONDED,  frozenset({WAITING_FOR_USER}),                                                     IN_PROGRESS),
-    Transition(ACTION_HOLD,            frozenset({IN_PROGRESS, REOPENED}),                                                ON_HOLD),
-    Transition(ACTION_UNHOLD,          frozenset({ON_HOLD}),                                                              IN_PROGRESS),
-    Transition(ACTION_MARK_DONE,       frozenset({IN_PROGRESS, REOPENED, WAITING_FOR_USER, ON_HOLD}),                     DONE),
-    Transition(ACTION_CLOSE,           frozenset({DONE}),                                                                 CLOSED),
-    Transition(ACTION_REOPEN,          frozenset({DONE, CLOSED}),                                                         REOPENED),
-    Transition(ACTION_CANCEL,          frozenset({PENDING, ASSIGNED_TO_SECTOR}),                                          CANCELLED),
-    Transition(ACTION_MARK_DUPLICATE,  frozenset({PENDING, ASSIGNED_TO_SECTOR}),                                          DUPLICATE),
+    Transition(ACTION_ASSIGN_SECTOR,   frozenset({PENDING, ASSIGNED_TO_SECTOR}),                          ASSIGNED_TO_SECTOR),
+    Transition(ACTION_ASSIGN_TO_ME,    frozenset({PENDING, ASSIGNED_TO_SECTOR, REOPENED}),                IN_PROGRESS),
+    Transition(ACTION_ASSIGN_TO_USER,  frozenset({PENDING, ASSIGNED_TO_SECTOR, IN_PROGRESS, REOPENED}),   IN_PROGRESS),
+    Transition(ACTION_REASSIGN,        frozenset({IN_PROGRESS, REOPENED, ASSIGNED_TO_SECTOR}),            IN_PROGRESS),
+    Transition(ACTION_UNASSIGN,        frozenset({IN_PROGRESS, REOPENED, ASSIGNED_TO_SECTOR}),            ASSIGNED_TO_SECTOR),
+    Transition(ACTION_MARK_DONE,       frozenset({IN_PROGRESS, REOPENED}),                                DONE),
+    Transition(ACTION_CLOSE,           frozenset({DONE}),                                                 CLOSED),
+    Transition(ACTION_REOPEN,          frozenset({DONE, CLOSED}),                                         REOPENED),
+    Transition(ACTION_CANCEL,          frozenset({PENDING, ASSIGNED_TO_SECTOR}),                          CANCELLED),
 ]
 
 _BY_ACTION: dict[str, Transition] = {t.action: t for t in TRANSITIONS}

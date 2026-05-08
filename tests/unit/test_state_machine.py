@@ -17,10 +17,6 @@ class TestTargetStatus:
         (sm.ACTION_REOPEN,          sm.DONE,               sm.REOPENED),
         (sm.ACTION_REOPEN,          sm.CLOSED,             sm.REOPENED),
         (sm.ACTION_CANCEL,          sm.PENDING,            sm.CANCELLED),
-        (sm.ACTION_HOLD,            sm.IN_PROGRESS,        sm.ON_HOLD),
-        (sm.ACTION_UNHOLD,          sm.ON_HOLD,            sm.IN_PROGRESS),
-        (sm.ACTION_REQUEST_INFO,    sm.IN_PROGRESS,        sm.WAITING_FOR_USER),
-        (sm.ACTION_USER_RESPONDED,  sm.WAITING_FOR_USER,   sm.IN_PROGRESS),
     ])
     def test_valid_transitions(self, action, from_status, expected):
         assert sm.target_status(action, from_status) == expected

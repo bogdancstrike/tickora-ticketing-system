@@ -22,6 +22,9 @@ export const setTokenProvider = (fn: () => string | undefined): void => {
   tokenProvider = fn
 }
 
+/** Returns the current access token (for SSE / WS where headers can't be set). */
+export const getToken = (): string | undefined => tokenProvider()
+
 apiClient.interceptors.request.use((cfg) => {
   const token = tokenProvider()
   if (token) {

@@ -20,7 +20,7 @@ from src.iam.models import User
 from src.ticketing.models import Beneficiary, Sector, SectorMembership, Ticket
 from src.ticketing.service.ticket_service import _visibility_filter
 
-ACTIVE_STATUSES = ("pending", "assigned_to_sector", "in_progress", "waiting_for_user", "on_hold", "reopened")
+ACTIVE_STATUSES = ("pending", "assigned_to_sector", "in_progress", "reopened")
 DONE_STATUSES = ("done", "closed")
 
 

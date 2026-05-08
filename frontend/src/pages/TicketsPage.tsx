@@ -71,7 +71,7 @@ function canAssignToUser(ticket: TicketDto, user: ReturnType<typeof useSessionSt
   const isDistributor = user.roles.includes('tickora_distributor')
   const isChief = !!user.sectors?.some((s) => s.sectorCode === ticket.current_sector_code && s.role === 'chief')
   return (isAdmin || isDistributor || isChief)
-    && ['pending', 'assigned_to_sector', 'in_progress', 'reopened', 'on_hold'].includes(ticket.status)
+    && ['pending', 'assigned_to_sector', 'in_progress', 'reopened'].includes(ticket.status)
 }
 
 function canAssignSector(ticket: TicketDto, user: ReturnType<typeof useSessionStore.getState>['user']) {
@@ -88,7 +88,7 @@ function canMarkDone(ticket: TicketDto, user: ReturnType<typeof useSessionStore.
   const isChief = !!user.sectors?.some((s) => s.sectorCode === ticket.current_sector_code && s.role === 'chief')
   const isAssignee = ticket.assignee_user_id === user.id
   return (isAdmin || isChief || isAssignee)
-    && ['in_progress', 'reopened', 'waiting_for_user', 'on_hold'].includes(ticket.status)
+    && ['in_progress', 'reopened'].includes(ticket.status)
 }
 
 function canClose(ticket: TicketDto, user: ReturnType<typeof useSessionStore.getState>['user']) {
