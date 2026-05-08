@@ -1,0 +1,258 @@
+{
+  "namespaces": [
+    {
+      "name": "tickora",
+      "description": "Tickora API"
+    }
+  ],
+  "models": {
+    "Empty": {}
+  },
+  "endpoints": [
+    {
+      "namespace": "tickora",
+      "operation_name": "liveness",
+      "model_name": "Empty",
+      "request_method": ["GET"],
+      "api_url": "/liveness",
+      "exec_method": {
+        "module_name": "api.health",
+        "method_name": "liveness"
+      }
+    },
+    {
+      "namespace": "tickora",
+      "operation_name": "readiness",
+      "model_name": "Empty",
+      "request_method": ["GET"],
+      "api_url": "/readiness",
+      "exec_method": {
+        "module_name": "api.health",
+        "method_name": "readiness"
+      }
+    },
+    {
+      "namespace": "tickora",
+      "operation_name": "health",
+      "model_name": "Empty",
+      "request_method": ["GET"],
+      "api_url": "/health",
+      "exec_method": {
+        "module_name": "api.health",
+        "method_name": "health_check"
+      }
+    },
+    {
+      "namespace": "tickora",
+      "operation_name": "me",
+      "model_name": "Empty",
+      "request_method": ["GET"],
+      "api_url": "/api/me",
+      "exec_method": {
+        "module_name": "api.me",
+        "method_name": "me"
+      }
+    },
+    {
+      "namespace": "tickora",
+      "operation_name": "tickets_create",
+      "model_name": "Empty",
+      "request_method": ["POST"],
+      "api_url": "/api/tickets",
+      "exec_method": {
+        "module_name": "api.tickets",
+        "method_name": "create"
+      }
+    },
+    {
+      "namespace": "tickora",
+      "operation_name": "tickets_list",
+      "model_name": "Empty",
+      "request_method": ["GET"],
+      "api_url": "/api/tickets",
+      "exec_method": {
+        "module_name": "api.tickets",
+        "method_name": "list_tickets"
+      }
+    },
+    {
+      "namespace": "tickora",
+      "operation_name": "tickets_get",
+      "model_name": "Empty",
+      "request_method": ["GET"],
+      "api_url": "/api/tickets/<ticket_id>",
+      "exec_method": {
+        "module_name": "api.tickets",
+        "method_name": "get_ticket"
+      }
+    },
+    {
+      "namespace": "tickora",
+      "operation_name": "tickets_assign_sector",
+      "model_name": "Empty",
+      "request_method": ["POST"],
+      "api_url": "/api/tickets/<ticket_id>/assign-sector",
+      "exec_method": { "module_name": "api.workflow", "method_name": "assign_sector" }
+    },
+    {
+      "namespace": "tickora",
+      "operation_name": "tickets_assign_to_me",
+      "model_name": "Empty",
+      "request_method": ["POST"],
+      "api_url": "/api/tickets/<ticket_id>/assign-to-me",
+      "exec_method": { "module_name": "api.workflow", "method_name": "assign_to_me" }
+    },
+    {
+      "namespace": "tickora",
+      "operation_name": "tickets_assign_to_user",
+      "model_name": "Empty",
+      "request_method": ["POST"],
+      "api_url": "/api/tickets/<ticket_id>/assign-to-user",
+      "exec_method": { "module_name": "api.workflow", "method_name": "assign_to_user" }
+    },
+    {
+      "namespace": "tickora",
+      "operation_name": "tickets_reassign",
+      "model_name": "Empty",
+      "request_method": ["POST"],
+      "api_url": "/api/tickets/<ticket_id>/reassign",
+      "exec_method": { "module_name": "api.workflow", "method_name": "reassign" }
+    },
+    {
+      "namespace": "tickora",
+      "operation_name": "tickets_mark_done",
+      "model_name": "Empty",
+      "request_method": ["POST"],
+      "api_url": "/api/tickets/<ticket_id>/mark-done",
+      "exec_method": { "module_name": "api.workflow", "method_name": "mark_done" }
+    },
+    {
+      "namespace": "tickora",
+      "operation_name": "tickets_close",
+      "model_name": "Empty",
+      "request_method": ["POST"],
+      "api_url": "/api/tickets/<ticket_id>/close",
+      "exec_method": { "module_name": "api.workflow", "method_name": "close" }
+    },
+    {
+      "namespace": "tickora",
+      "operation_name": "tickets_reopen",
+      "model_name": "Empty",
+      "request_method": ["POST"],
+      "api_url": "/api/tickets/<ticket_id>/reopen",
+      "exec_method": { "module_name": "api.workflow", "method_name": "reopen" }
+    },
+    {
+      "namespace": "tickora",
+      "operation_name": "tickets_cancel",
+      "model_name": "Empty",
+      "request_method": ["POST"],
+      "api_url": "/api/tickets/<ticket_id>/cancel",
+      "exec_method": { "module_name": "api.workflow", "method_name": "cancel" }
+    },
+    {
+      "namespace": "tickora",
+      "operation_name": "tickets_change_priority",
+      "model_name": "Empty",
+      "request_method": ["POST"],
+      "api_url": "/api/tickets/<ticket_id>/change-priority",
+      "exec_method": { "module_name": "api.workflow", "method_name": "change_priority" }
+    },
+    {
+      "namespace": "tickora",
+      "operation_name": "comments_list",
+      "model_name": "Empty",
+      "request_method": ["GET"],
+      "api_url": "/api/tickets/<ticket_id>/comments",
+      "exec_method": { "module_name": "api.comments", "method_name": "list_comments" }
+    },
+    {
+      "namespace": "tickora",
+      "operation_name": "comments_create",
+      "model_name": "Empty",
+      "request_method": ["POST"],
+      "api_url": "/api/tickets/<ticket_id>/comments",
+      "exec_method": { "module_name": "api.comments", "method_name": "create_comment" }
+    },
+    {
+      "namespace": "tickora",
+      "operation_name": "comments_edit",
+      "model_name": "Empty",
+      "request_method": ["PATCH"],
+      "api_url": "/api/comments/<comment_id>",
+      "exec_method": { "module_name": "api.comments", "method_name": "edit_comment" }
+    },
+    {
+      "namespace": "tickora",
+      "operation_name": "comments_delete",
+      "model_name": "Empty",
+      "request_method": ["DELETE"],
+      "api_url": "/api/comments/<comment_id>",
+      "exec_method": { "module_name": "api.comments", "method_name": "delete_comment" }
+    },
+    {
+      "namespace": "tickora",
+      "operation_name": "attachments_upload_url",
+      "model_name": "Empty",
+      "request_method": ["POST"],
+      "api_url": "/api/tickets/<ticket_id>/attachments/upload-url",
+      "exec_method": { "module_name": "api.attachments", "method_name": "request_upload_url" }
+    },
+    {
+      "namespace": "tickora",
+      "operation_name": "attachments_register",
+      "model_name": "Empty",
+      "request_method": ["POST"],
+      "api_url": "/api/tickets/<ticket_id>/attachments",
+      "exec_method": { "module_name": "api.attachments", "method_name": "register_attachment" }
+    },
+    {
+      "namespace": "tickora",
+      "operation_name": "attachments_list",
+      "model_name": "Empty",
+      "request_method": ["GET"],
+      "api_url": "/api/tickets/<ticket_id>/attachments",
+      "exec_method": { "module_name": "api.attachments", "method_name": "list_attachments" }
+    },
+    {
+      "namespace": "tickora",
+      "operation_name": "attachments_download",
+      "model_name": "Empty",
+      "request_method": ["GET"],
+      "api_url": "/api/attachments/<attachment_id>/download",
+      "exec_method": { "module_name": "api.attachments", "method_name": "download_attachment" }
+    },
+    {
+      "namespace": "tickora",
+      "operation_name": "attachments_delete",
+      "model_name": "Empty",
+      "request_method": ["DELETE"],
+      "api_url": "/api/attachments/<attachment_id>",
+      "exec_method": { "module_name": "api.attachments", "method_name": "delete_attachment" }
+    },
+    {
+      "namespace": "tickora",
+      "operation_name": "audit_list",
+      "model_name": "Empty",
+      "request_method": ["GET"],
+      "api_url": "/api/audit",
+      "exec_method": { "module_name": "api.audit", "method_name": "list_audit" }
+    },
+    {
+      "namespace": "tickora",
+      "operation_name": "ticket_audit",
+      "model_name": "Empty",
+      "request_method": ["GET"],
+      "api_url": "/api/tickets/<ticket_id>/audit",
+      "exec_method": { "module_name": "api.audit", "method_name": "ticket_audit" }
+    },
+    {
+      "namespace": "tickora",
+      "operation_name": "user_audit",
+      "model_name": "Empty",
+      "request_method": ["GET"],
+      "api_url": "/api/users/<user_id>/audit",
+      "exec_method": { "module_name": "api.audit", "method_name": "user_audit" }
+    }
+  ]
+}

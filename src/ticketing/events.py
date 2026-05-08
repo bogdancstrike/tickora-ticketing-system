@@ -1,0 +1,41 @@
+"""Audit/event constants. One name → one immutable string."""
+
+# ── Ticket lifecycle ──────────────────────────────────────────────────────────
+TICKET_CREATED              = "TICKET_CREATED"
+TICKET_UPDATED              = "TICKET_UPDATED"
+TICKET_ASSIGNED_TO_SECTOR   = "TICKET_ASSIGNED_TO_SECTOR"
+TICKET_REASSIGNED_TO_SECTOR = "TICKET_REASSIGNED_TO_SECTOR"
+TICKET_ASSIGNED_TO_USER     = "TICKET_ASSIGNED_TO_USER"
+TICKET_REASSIGNED           = "TICKET_REASSIGNED"
+TICKET_UNASSIGNED           = "TICKET_UNASSIGNED"
+TICKET_STATUS_CHANGED       = "TICKET_STATUS_CHANGED"
+TICKET_PRIORITY_CHANGED     = "TICKET_PRIORITY_CHANGED"
+TICKET_DONE                 = "TICKET_DONE"
+TICKET_CLOSED               = "TICKET_CLOSED"
+TICKET_REOPENED             = "TICKET_REOPENED"
+TICKET_CANCELLED            = "TICKET_CANCELLED"
+TICKET_MARKED_DUPLICATE     = "TICKET_MARKED_DUPLICATE"
+
+# ── Comments ──────────────────────────────────────────────────────────────────
+COMMENT_CREATED  = "COMMENT_CREATED"
+COMMENT_EDITED   = "COMMENT_EDITED"
+COMMENT_DELETED  = "COMMENT_DELETED"
+
+# ── Attachments ───────────────────────────────────────────────────────────────
+ATTACHMENT_UPLOADED   = "ATTACHMENT_UPLOADED"
+ATTACHMENT_DOWNLOADED = "ATTACHMENT_DOWNLOADED"
+ATTACHMENT_DELETED    = "ATTACHMENT_DELETED"
+
+# ── Sector / membership / config ──────────────────────────────────────────────
+SECTOR_CREATED      = "SECTOR_CREATED"
+SECTOR_UPDATED      = "SECTOR_UPDATED"
+SECTOR_DELETED      = "SECTOR_DELETED"
+MEMBERSHIP_GRANTED  = "MEMBERSHIP_GRANTED"
+MEMBERSHIP_REVOKED  = "MEMBERSHIP_REVOKED"
+ROLE_GRANTED        = "ROLE_GRANTED"
+ROLE_REVOKED        = "ROLE_REVOKED"
+CONFIG_CHANGED      = "CONFIG_CHANGED"
+
+# ── Auth ──────────────────────────────────────────────────────────────────────
+ACCESS_DENIED = "ACCESS_DENIED"
+EXPORT_RUN    = "EXPORT_RUN"
