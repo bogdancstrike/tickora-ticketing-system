@@ -15,6 +15,12 @@ body {
   cursor: pointer;
 }
 
+@media (max-width: 1024px) {
+  .tickora-ticket-grid {
+    grid-template-columns: 1fr !important;
+  }
+}
+
 /* Light scrollbars in dark mode */
 ::-webkit-scrollbar       { width: 8px; height: 8px; }
 ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.18); border-radius: 4px; }

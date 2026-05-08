@@ -28,6 +28,7 @@ ACTION_ASSIGN_SECTOR    = "assign_sector"
 ACTION_ASSIGN_TO_ME     = "assign_to_me"
 ACTION_ASSIGN_TO_USER   = "assign_to_user"
 ACTION_REASSIGN         = "reassign"
+ACTION_UNASSIGN         = "unassign"
 ACTION_MARK_DONE        = "mark_done"
 ACTION_CLOSE            = "close"
 ACTION_REOPEN           = "reopen"
@@ -52,6 +53,7 @@ TRANSITIONS: list[Transition] = [
     Transition(ACTION_ASSIGN_TO_ME,    frozenset({PENDING, ASSIGNED_TO_SECTOR, REOPENED}),                               IN_PROGRESS),
     Transition(ACTION_ASSIGN_TO_USER,  frozenset({PENDING, ASSIGNED_TO_SECTOR, IN_PROGRESS, REOPENED, ON_HOLD}),         IN_PROGRESS),
     Transition(ACTION_REASSIGN,        frozenset({IN_PROGRESS, WAITING_FOR_USER, ON_HOLD, REOPENED, ASSIGNED_TO_SECTOR}), IN_PROGRESS),
+    Transition(ACTION_UNASSIGN,        frozenset({IN_PROGRESS, WAITING_FOR_USER, ON_HOLD, REOPENED, ASSIGNED_TO_SECTOR}), ASSIGNED_TO_SECTOR),
     Transition(ACTION_REQUEST_INFO,    frozenset({IN_PROGRESS, REOPENED}),                                                WAITING_FOR_USER),
     Transition(ACTION_USER_RESPONDED,  frozenset({WAITING_FOR_USER}),                                                     IN_PROGRESS),
     Transition(ACTION_HOLD,            frozenset({IN_PROGRESS, REOPENED}),                                                ON_HOLD),

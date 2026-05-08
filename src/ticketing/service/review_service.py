@@ -76,6 +76,16 @@ def review(db: Session, principal: Principal, ticket_id: str, payload: dict[str,
 
         assignee_user_id = _clean(payload.get("assignee_user_id"))
         if assignee_user_id:
+            # Distributors (reviewers) only route to a sector — picking a specific
+            # user is a sector-level action reserved for chiefs and admins. This
+            # prevents distributors from cherry-picking individual operators
+            # before the sector chief has had a chance to balance workload.
+            target_sector = sector_code or getattr(ticket, "current_sector_code", None)
+            if not (principal.is_admin or (target_sector and principal.is_chief_of(target_sector))):
+                raise PermissionDeniedError(
+                    "distributors may only assign sectors during review; "
+                    "user-level assignment is performed by the sector chief"
+                )
             ticket = workflow_service.assign_to_user(
                 db,
                 principal,

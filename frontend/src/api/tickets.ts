@@ -56,6 +56,9 @@ export interface CommentDto {
   id: string
   ticket_id: string
   author_user_id?: string | null
+  author_display?: string | null
+  author_username?: string | null
+  author_email?: string | null
   visibility: 'public' | 'private'
   comment_type: string
   body: string
@@ -97,6 +100,13 @@ export interface ListTicketParams {
   status?: string
   priority?: string
   current_sector_code?: string
+  category?: string
+  assignee_user_id?: string
+  search?: string
+  sort_by?: 'created_at' | 'updated_at' | 'ticket_code' | 'priority' | 'status' | 'title'
+  sort_dir?: 'asc' | 'desc'
+  created_after?: string
+  created_before?: string
   cursor?: string
   limit?: number
 }
@@ -119,7 +129,13 @@ export interface TicketOptionsDto {
   priorities: Array<TicketDto['priority']>
   categories: string[]
   types: string[]
-  metadata_keys: Array<{ key: string; label: string }>
+  metadata_keys: Array<{
+    key: string
+    label: string
+    value_type?: 'string' | 'enum'
+    options?: string[] | null
+    description?: string | null
+  }>
 }
 
 export interface TicketMetadataDto {
@@ -283,6 +299,25 @@ export const assignToMe = async (ticketId: string): Promise<TicketDto> => {
 export const assignToUser = async (ticketId: string, userId: string, reason?: string): Promise<TicketDto> => {
   const { data } = await apiClient.post(`/api/tickets/${ticketId}/assign-to-user`, {
     user_id: userId,
+    reason: reason || undefined,
+  })
+  return data
+}
+
+export const unassignTicket = async (ticketId: string, reason?: string): Promise<TicketDto> => {
+  const { data } = await apiClient.post(`/api/tickets/${ticketId}/unassign`, {
+    reason: reason || undefined,
+  })
+  return data
+}
+
+export const changeTicketStatus = async (
+  ticketId: string,
+  status: string,
+  reason?: string,
+): Promise<TicketDto> => {
+  const { data } = await apiClient.post(`/api/tickets/${ticketId}/change-status`, {
+    status,
     reason: reason || undefined,
   })
   return data

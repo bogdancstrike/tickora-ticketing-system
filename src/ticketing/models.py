@@ -13,6 +13,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     func,
+    text,
 )
 from sqlalchemy.dialects.postgresql import INET, JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
@@ -347,10 +348,24 @@ class TicketMetadata(Base):
 
     id:        Mapped[str] = mapped_column(UUID(as_uuid=False), primary_key=True, default=_uuid)
     ticket_id: Mapped[str] = mapped_column(UUID(as_uuid=False), ForeignKey("tickets.id"), nullable=False)
-    
+
     key:       Mapped[str] = mapped_column(String(100), nullable=False)
     value:     Mapped[str] = mapped_column(Text, nullable=False)
     label:     Mapped[str | None] = mapped_column(String(255))
-    
+
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
+
+
+class MetadataKeyDefinition(Base):
+    """Catalogue of allowed metadata keys with optional fixed value lists."""
+    __tablename__ = "metadata_key_definitions"
+
+    key:         Mapped[str] = mapped_column(String(100), primary_key=True)
+    label:       Mapped[str] = mapped_column(String(255), nullable=False)
+    value_type:  Mapped[str] = mapped_column(String(20), nullable=False, server_default="string")
+    options:     Mapped[list[str] | None] = mapped_column(JSONB)
+    description: Mapped[str | None] = mapped_column(Text)
+    is_active:   Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))
+    created_at:  Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at:  Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=lambda: datetime.now(timezone.utc), nullable=False)

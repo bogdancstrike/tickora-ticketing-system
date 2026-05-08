@@ -1,56 +1,36 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import dayjs from 'dayjs'
 import {
   Alert, Button, Checkbox, Descriptions, Empty, Flex, Form, Input, List, Modal, Select,
   Space, Table, Tabs, Tag, Typography, message, theme as antTheme,
 } from 'antd'
-import type { ColumnsType } from 'antd/es/table'
+import type { ColumnsType, TablePaginationConfig } from 'antd/es/table'
+import type { SorterResult } from 'antd/es/table/interface'
 import {
   CheckCircleOutlined, CloseCircleOutlined, EditOutlined, PlayCircleOutlined,
   PaperClipOutlined, PlusOutlined, ReloadOutlined, RetweetOutlined, StopOutlined, UserSwitchOutlined,
+  UserAddOutlined, UserDeleteOutlined, DownOutlined,
 } from '@ant-design/icons'
+import { Dropdown } from 'antd'
 import {
   assignSector, assignToMe, assignToUser, cancelTicket, changePriority, closeTicket,
   createComment, deleteAttachment, deleteComment, downloadAttachmentUrl, getMe,
   getTicket, getTicketOptions, listAssignableUsers, listAttachments, listComments,
   listTicketAudit, listTickets, markDone, registerAttachment, reopenTicket, requestAttachmentUpload,
-  deleteTicket,
+  deleteTicket, listTicketMetadata, unassignTicket,
   type AttachmentDto,
-  type AuditEventDto, type TicketDto,
+  type TicketDto,
 } from '@/api/tickets'
 import { useSessionStore } from '@/stores/sessionStore'
+import { StatusTag, STATUS_OPTIONS } from '@/components/common/StatusTag'
+import { PriorityTag } from '@/components/common/PriorityTag'
+import { StatusChanger } from '@/components/common/StatusChanger'
+import { fmtDateTime, fmtBytes } from '@/components/common/format'
+import { AuditTimeline } from '@/components/common/AuditTimeline'
 
-const STATUS_COLORS: Record<string, string> = {
-  pending: 'default',
-  assigned_to_sector: 'processing',
-  in_progress: 'blue',
-  waiting_for_user: 'gold',
-  on_hold: 'orange',
-  done: 'green',
-  closed: 'success',
-  reopened: 'purple',
-  cancelled: 'red',
-  duplicate: 'red',
-}
-
-const PRIORITY_COLORS: Record<string, string> = {
-  low: 'default',
-  medium: 'blue',
-  high: 'orange',
-  critical: 'red',
-}
-
-function fmt(value?: string | null) {
-  return value ? dayjs(value).format('YYYY-MM-DD HH:mm') : '-'
-}
-
-function bytes(value: number) {
-  if (value < 1024) return `${value} B`
-  if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)} KB`
-  return `${(value / 1024 / 1024).toFixed(1)} MB`
-}
+const fmt = fmtDateTime
+const bytes = fmtBytes
 
 function useSessionBootstrap() {
   const setUser = useSessionStore((s) => s.setUser)
@@ -166,6 +146,7 @@ function WorkflowActions({ ticket }: { ticket: TicketDto }) {
       if (action === 'assign_to_me') return assignToMe(ticket.id)
       if (action === 'assign_sector') return assignSector(ticket.id, values.sectorCode, values.reason)
       if (action === 'assign_to_user') return assignToUser(ticket.id, values.userId, values.reason)
+      if (action === 'unassign') return unassignTicket(ticket.id, values.reason)
       if (action === 'mark_done') return markDone(ticket.id, values.resolution)
       if (action === 'close') return closeTicket(ticket.id)
       if (action === 'reopen') return reopenTicket(ticket.id, values.reason)
@@ -190,21 +171,46 @@ function WorkflowActions({ ticket }: { ticket: TicketDto }) {
     run.mutate({ action: modal!, values })
   }
 
+  // Build a single Assign menu when at least one assign option is available
+  const assignItems: { key: string; label: string; icon: React.ReactNode }[] = []
+  if (canAssignToMe(ticket, user)) assignItems.push({ key: 'assign_to_me', label: 'Assign to me', icon: <PlayCircleOutlined /> })
+  if (canAssignSector(ticket, user)) assignItems.push({ key: 'assign_sector', label: 'Assign to sector…', icon: <RetweetOutlined /> })
+  if (canAssignToUser(ticket, user)) assignItems.push({ key: 'assign_to_user', label: 'Assign to user…', icon: <UserSwitchOutlined /> })
+
+  // Unassign visibility: anyone can unassign if they're the current assignee;
+  // admins and the sector chief can also unassign anyone.
+  const isCurrentAssignee = !!user?.id && ticket.assignee_user_id === user.id
+  const isSectorChief = !!user?.sectors?.some((s) => s.sectorCode === ticket.current_sector_code && s.role === 'chief')
+  const canUnassign = !!ticket.assignee_user_id
+    && (isCurrentAssignee || user?.roles.includes('tickora_admin') || isSectorChief)
+
   return (
     <>
       {holder}
       <Flex wrap="wrap" gap={8}>
-        {canAssignToMe(ticket, user) && (
-          <Button icon={<PlayCircleOutlined />} type="primary" loading={run.isPending}
-                  onClick={() => run.mutate({ action: 'assign_to_me', values: {} })}>
-            Assign to me
+        {assignItems.length > 0 && (
+          <Dropdown
+            menu={{
+              items: assignItems,
+              onClick: ({ key }) => {
+                if (key === 'assign_to_me') run.mutate({ action: 'assign_to_me', values: {} })
+                else setModal(key)
+              },
+            }}
+          >
+            <Button type="primary" icon={<UserAddOutlined />} loading={run.isPending}>
+              Assign <DownOutlined />
+            </Button>
+          </Dropdown>
+        )}
+        {canUnassign && (
+          <Button
+            icon={<UserDeleteOutlined />}
+            loading={run.isPending}
+            onClick={() => setModal('unassign')}
+          >
+            Unassign
           </Button>
-        )}
-        {canAssignSector(ticket, user) && (
-          <Button icon={<RetweetOutlined />} onClick={() => setModal('assign_sector')}>Assign sector</Button>
-        )}
-        {canAssignToUser(ticket, user) && (
-          <Button icon={<UserSwitchOutlined />} onClick={() => setModal('assign_to_user')}>Assign user</Button>
         )}
         {canMarkDone(ticket, user) && (
           <Button icon={<CheckCircleOutlined />} onClick={() => setModal('mark_done')}>Mark done</Button>
@@ -280,8 +286,14 @@ function WorkflowActions({ ticket }: { ticket: TicketDto }) {
               <Input.TextArea rows={4} placeholder="How was this ticket resolved?" />
             </Form.Item>
           )}
-          {['assign_sector', 'assign_to_user', 'priority', 'reopen', 'cancel'].includes(modal || '') && (
-            <Form.Item name="reason" label="Reason" rules={['reopen', 'cancel'].includes(modal || '') ? [{ required: true, min: 3 }] : []}>
+          {modal === 'unassign' && (
+            <Alert type="info" showIcon style={{ marginBottom: 12 }}
+                   message={isCurrentAssignee ? 'Unassign yourself from this ticket' : 'Remove the current assignee'}
+                   description="The ticket will return to the sector queue and stay visible to its current sector." />
+          )}
+          {['assign_sector', 'assign_to_user', 'unassign', 'priority', 'reopen', 'cancel'].includes(modal || '') && (
+            <Form.Item name="reason" label={modal === 'unassign' ? 'Reason (optional)' : 'Reason'}
+                       rules={['reopen', 'cancel'].includes(modal || '') ? [{ required: true, min: 3 }] : []}>
               <Input.TextArea rows={3} />
             </Form.Item>
           )}
@@ -291,10 +303,15 @@ function WorkflowActions({ ticket }: { ticket: TicketDto }) {
   )
 }
 
+function authorInitials(name: string): string {
+  return name.split(/[\s.@]+/).filter(Boolean).slice(0, 2).map(s => s[0]?.toUpperCase()).join('') || '?'
+}
+
 function CommentBox({ ticketId, disabled }: { ticketId: string; disabled?: boolean }) {
   const [form] = Form.useForm()
   const [msg, holder] = message.useMessage()
   const queryClient = useQueryClient()
+  const user = useSessionStore((s) => s.user)
   const comments = useQuery({
     queryKey: ['comments', ticketId],
     queryFn: () => listComments(ticketId),
@@ -316,41 +333,70 @@ function CommentBox({ ticketId, disabled }: { ticketId: string; disabled?: boole
   })
 
   return (
-    <div style={{ display: 'grid', gap: 16 }}>
+    <div style={{ display: 'grid', gap: 12 }}>
       {holder}
       {!disabled && (
-        <Form form={form} layout="vertical" initialValues={{ is_public: true }} onFinish={(v) => add.mutate(v)}>
-          <Form.Item name="body" rules={[{ required: true, min: 2 }]}>
-            <Input.TextArea rows={3} placeholder="Add a comment" />
-          </Form.Item>
-          <Flex justify="space-between" align="center">
-            <Form.Item name="is_public" valuePropName="checked" style={{ marginBottom: 0 }}>
-              <Checkbox>Public comment</Checkbox>
+        <div style={{ padding: 12, border: '1px solid rgba(0,0,0,0.06)', borderRadius: 8 }}>
+          <Form form={form} layout="vertical" initialValues={{ is_public: true }} onFinish={(v) => add.mutate(v)}>
+            <Form.Item name="body" rules={[{ required: true, min: 2 }]} style={{ marginBottom: 8 }}>
+              <Input.TextArea rows={3} placeholder="Write a comment…" />
             </Form.Item>
-            <Button htmlType="submit" type="primary" loading={add.isPending}>Post</Button>
-          </Flex>
-        </Form>
+            <Flex justify="space-between" align="center">
+              <Form.Item name="is_public" valuePropName="checked" style={{ marginBottom: 0 }}>
+                <Checkbox>Visible to requester (public)</Checkbox>
+              </Form.Item>
+              <Button htmlType="submit" type="primary" loading={add.isPending}>Post comment</Button>
+            </Flex>
+          </Form>
+        </div>
       )}
       {disabled && <Alert type="info" message="Comments are disabled for closed tickets." />}
-      <List
-        loading={comments.isLoading}
-        dataSource={comments.data?.items || []}
-        locale={{ emptyText: <Empty description="No comments" /> }}
-        renderItem={(item) => (
-          <List.Item
-            actions={[
-              <Button key="delete" size="small" type="link" danger onClick={() => remove.mutate(item.id)}>
-                Delete
-              </Button>,
-            ]}
-          >
-            <List.Item.Meta
-              title={<Space><Tag color={item.visibility === 'private' ? 'orange' : 'green'}>{item.visibility}</Tag><Typography.Text>{fmt(item.created_at)}</Typography.Text></Space>}
-              description={<Typography.Paragraph style={{ whiteSpace: 'pre-wrap', marginBottom: 0 }}>{item.body}</Typography.Paragraph>}
-            />
-          </List.Item>
-        )}
-      />
+      {(comments.data?.items || []).length === 0 && !comments.isLoading && (
+        <Empty description="No comments yet" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+      )}
+      <div style={{ display: 'grid', gap: 8 }}>
+        {(comments.data?.items || []).map((item) => {
+          const display = item.author_display || item.author_username || item.author_email || 'user'
+          const isMine = !!user?.id && item.author_user_id === user.id
+          return (
+            <div key={item.id} style={{
+              display: 'flex', gap: 12, padding: 12,
+              border: '1px solid rgba(0,0,0,0.06)', borderRadius: 8,
+              background: item.visibility === 'private' ? 'rgba(255,180,0,0.04)' : undefined,
+            }}>
+              <div style={{
+                width: 36, height: 36, flexShrink: 0,
+                borderRadius: '50%',
+                background: isMine ? '#1677ff' : '#8c8c8c',
+                color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontWeight: 600, fontSize: 13,
+              }}>{authorInitials(display)}</div>
+              <div style={{ flex: 1 }}>
+                <Flex justify="space-between" align="center" wrap="wrap" gap={8}>
+                  <Space size={6}>
+                    <Typography.Text strong>{display}</Typography.Text>
+                    {item.author_username && item.author_display && item.author_username !== item.author_display && (
+                      <Typography.Text type="secondary" style={{ fontSize: 12 }}>@{item.author_username}</Typography.Text>
+                    )}
+                    <Tag color={item.visibility === 'private' ? 'orange' : 'green'}>{item.visibility}</Tag>
+                  </Space>
+                  <Space size={6}>
+                    <Typography.Text type="secondary" style={{ fontSize: 12 }}>{fmt(item.created_at)}</Typography.Text>
+                    {(isMine || user?.roles.includes('tickora_admin')) && (
+                      <Button size="small" type="text" danger onClick={() => remove.mutate(item.id)}>
+                        Delete
+                      </Button>
+                    )}
+                  </Space>
+                </Flex>
+                <Typography.Paragraph style={{ whiteSpace: 'pre-wrap', marginTop: 6, marginBottom: 0 }}>
+                  {item.body}
+                </Typography.Paragraph>
+              </div>
+            </div>
+          )
+        })}
+      </div>
     </div>
   )
 }
@@ -442,27 +488,68 @@ function TicketAudit({ ticketId }: { ticketId: string }) {
     queryKey: ['ticketAudit', ticketId],
     queryFn: () => listTicketAudit(ticketId),
   })
+  return <AuditTimeline events={audit.data?.items || []} loading={audit.isLoading} />
+}
+
+function TicketSidebar({ ticket }: { ticket: TicketDto }) {
+  const { token } = antTheme.useToken()
+  const meta = useQuery({
+    queryKey: ['ticketMetadata', ticket.id],
+    queryFn: () => listTicketMetadata(ticket.id),
+  })
+  const items = meta.data?.items || []
   return (
-    <List
-      loading={audit.isLoading}
-      dataSource={audit.data?.items || []}
-      locale={{ emptyText: <Empty description="No audit events" /> }}
-      renderItem={(item: AuditEventDto) => (
-        <List.Item>
-          <List.Item.Meta
-            title={<Space><Tag color="blue">{item.action}</Tag><Typography.Text>{fmt(item.created_at)}</Typography.Text></Space>}
-            description={
-              <div style={{ display: 'grid', gap: 4 }}>
-                <Typography.Text type="secondary">{item.actor_username || item.actor_user_id || 'system'}</Typography.Text>
-                <pre style={{ margin: 0, whiteSpace: 'pre-wrap' }}>
-                  {JSON.stringify({ old_value: item.old_value, new_value: item.new_value, metadata: item.metadata }, null, 2)}
-                </pre>
-              </div>
-            }
-          />
-        </List.Item>
+    <div style={{ display: 'grid', gap: 16 }}>
+      <div style={{ border: `1px solid ${token.colorBorderSecondary}`, borderRadius: 8, padding: 14 }}>
+        <Typography.Text type="secondary" style={{ fontSize: 12, letterSpacing: '0.05em' }}>DETAILS</Typography.Text>
+        <Descriptions size="small" column={1} colon={false} style={{ marginTop: 8 }}>
+          <Descriptions.Item label="Sector">{ticket.current_sector_code || '—'}</Descriptions.Item>
+          <Descriptions.Item label="Category">{ticket.category || '—'}</Descriptions.Item>
+          <Descriptions.Item label="Type">{ticket.type || '—'}</Descriptions.Item>
+          <Descriptions.Item label="Assignee">{ticket.assignee_user_id ? <Typography.Text code style={{ fontSize: 11 }}>{ticket.assignee_user_id.slice(0, 8)}…</Typography.Text> : 'Unassigned'}</Descriptions.Item>
+          <Descriptions.Item label="SLA">
+            {ticket.sla_status
+              ? <Tag color={ticket.sla_status === 'breached' ? 'red' : ticket.sla_status === 'at_risk' ? 'orange' : 'green'}>{ticket.sla_status}</Tag>
+              : '—'}
+          </Descriptions.Item>
+        </Descriptions>
+      </div>
+      <div style={{ border: `1px solid ${token.colorBorderSecondary}`, borderRadius: 8, padding: 14 }}>
+        <Typography.Text type="secondary" style={{ fontSize: 12, letterSpacing: '0.05em' }}>REQUESTER</Typography.Text>
+        <Descriptions size="small" column={1} colon={false} style={{ marginTop: 8 }}>
+          <Descriptions.Item label="Name">
+            {[ticket.requester_first_name, ticket.requester_last_name].filter(Boolean).join(' ') || '—'}
+          </Descriptions.Item>
+          <Descriptions.Item label="Email">{ticket.requester_email || '—'}</Descriptions.Item>
+          <Descriptions.Item label="Type"><Tag>{ticket.beneficiary_type}</Tag></Descriptions.Item>
+        </Descriptions>
+      </div>
+      <div style={{ border: `1px solid ${token.colorBorderSecondary}`, borderRadius: 8, padding: 14 }}>
+        <Typography.Text type="secondary" style={{ fontSize: 12, letterSpacing: '0.05em' }}>TIMELINE</Typography.Text>
+        <Descriptions size="small" column={1} colon={false} style={{ marginTop: 8 }}>
+          <Descriptions.Item label="Created">{fmt(ticket.created_at)}</Descriptions.Item>
+          <Descriptions.Item label="Updated">{fmt(ticket.updated_at)}</Descriptions.Item>
+          <Descriptions.Item label="Assigned">{fmt(ticket.assigned_at)}</Descriptions.Item>
+          <Descriptions.Item label="First response">{fmt(ticket.first_response_at)}</Descriptions.Item>
+          <Descriptions.Item label="Done">{fmt(ticket.done_at)}</Descriptions.Item>
+          <Descriptions.Item label="Closed">{fmt(ticket.closed_at)}</Descriptions.Item>
+          <Descriptions.Item label="SLA due">{fmt(ticket.sla_due_at)}</Descriptions.Item>
+        </Descriptions>
+      </div>
+      {items.length > 0 && (
+        <div style={{ border: `1px solid ${token.colorBorderSecondary}`, borderRadius: 8, padding: 14 }}>
+          <Typography.Text type="secondary" style={{ fontSize: 12, letterSpacing: '0.05em' }}>METADATA</Typography.Text>
+          <div style={{ display: 'grid', gap: 4, marginTop: 8 }}>
+            {items.map((m) => (
+              <Flex key={m.key} justify="space-between" gap={8}>
+                <Typography.Text type="secondary">{m.label || m.key}</Typography.Text>
+                <Typography.Text strong>{m.value}</Typography.Text>
+              </Flex>
+            ))}
+          </div>
+        </div>
       )}
-    />
+    </div>
   )
 }
 
@@ -478,74 +565,87 @@ function TicketDetails({ ticketId }: { ticketId?: string }) {
   const user = useSessionStore(s => s.user)
   const isClosed = ticket ? ['done', 'closed', 'cancelled'].includes(ticket.status) : false
 
+  if (error) {
+    return (
+      <div style={{ padding: 24 }}>
+        <Alert type="error" message={error.message} showIcon />
+      </div>
+    )
+  }
+  if (!ticket && !isLoading) return <div style={{ padding: 80 }}><Empty /></div>
+  if (!ticket) return null
+
   return (
     <div style={{ padding: 24, display: 'grid', gap: 16 }}>
-      <Flex justify="space-between" align="center" wrap="wrap" gap={12}>
-        <div>
-          <Typography.Title level={3} style={{ margin: 0 }}>
-            {ticket ? `${ticket.ticket_code} · ${ticket.title || 'Ticket'}` : 'Ticket'}
-          </Typography.Title>
-          <Typography.Text type="secondary">Details, workflow, comments, attachments, and audit trail</Typography.Text>
-        </div>
-        <Button onClick={() => navigate('/tickets')}>Back to Tickets</Button>
+      {/* Top breadcrumb / back */}
+      <Flex justify="space-between" align="center" wrap="wrap" gap={8}>
+        <Space>
+          <Button type="link" onClick={() => navigate('/tickets')} style={{ padding: 0 }}>← Back to Tickets</Button>
+        </Space>
+        <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+          Created {fmt(ticket.created_at)} · Updated {fmt(ticket.updated_at)}
+        </Typography.Text>
       </Flex>
-      {error && <Alert type="error" message={error.message} showIcon />}
-      {!error && !ticket && !isLoading && <Empty style={{ marginTop: 80 }} />}
-      {ticket && (
-        <div style={{ display: 'grid', gap: 16 }}>
+
+      {/* Hero card */}
+      <div style={{
+        border: `1px solid ${token.colorBorderSecondary}`,
+        borderRadius: 12,
+        padding: 20,
+        background: token.colorBgContainer,
+        display: 'grid',
+        gap: 12,
+      }}>
+        <Flex justify="space-between" align="start" wrap="wrap" gap={12}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <Space size={8} style={{ marginBottom: 6 }}>
+              <Typography.Text type="secondary" style={{ fontFamily: 'monospace' }}>{ticket.ticket_code}</Typography.Text>
+              <StatusChanger ticket={ticket} />
+              <PriorityTag priority={ticket.priority} />
+              {ticket.current_sector_code && <Tag color="cyan">{ticket.current_sector_code}</Tag>}
+            </Space>
+            <Typography.Title level={3} style={{ margin: 0 }}>
+              {ticket.title || 'Untitled ticket'}
+            </Typography.Title>
+          </div>
+        </Flex>
+        <WorkflowActions ticket={ticket} />
+      </div>
+
+      {/* Two-column body */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 320px', gap: 16 }}
+           className="tickora-ticket-grid">
+        <div style={{ minWidth: 0, display: 'grid', gap: 16 }}>
           <div style={{
             border: `1px solid ${token.colorBorderSecondary}`,
-            borderRadius: 8,
-            padding: 16,
-            display: 'grid',
-            gap: 14,
+            borderRadius: 8, padding: 16,
           }}>
-            <Space wrap>
-              <Tag color={STATUS_COLORS[ticket.status]}>{ticket.status}</Tag>
-              <Tag color={PRIORITY_COLORS[ticket.priority]}>{ticket.priority}</Tag>
-              {ticket.current_sector_code && <Tag>{ticket.current_sector_code}</Tag>}
-              {ticket.assignee_user_id && <Tag>assigned</Tag>}
-            </Space>
-            <Typography.Paragraph style={{ margin: 0, whiteSpace: 'pre-wrap' }}>{ticket.txt}</Typography.Paragraph>
+            <Typography.Text type="secondary" style={{ fontSize: 12, letterSpacing: '0.05em' }}>DESCRIPTION</Typography.Text>
+            <Typography.Paragraph style={{ margin: '8px 0 0', whiteSpace: 'pre-wrap' }}>{ticket.txt}</Typography.Paragraph>
             {ticket.resolution && (
-              <Alert type="success" showIcon message="Resolution" description={ticket.resolution} />
+              <Alert style={{ marginTop: 12 }} type="success" showIcon message="Resolution" description={ticket.resolution} />
             )}
           </div>
-
-          <WorkflowActions ticket={ticket} />
-
           <Tabs
+            defaultActiveKey="comments"
             items={[
-              { key: 'comments', label: 'Comments', children: <CommentBox ticketId={ticket.id} disabled={isClosed} /> },
+              { key: 'comments', label: 'Conversation', children: <CommentBox ticketId={ticket.id} disabled={isClosed} /> },
               { key: 'attachments', label: 'Attachments', children: <AttachmentUploader ticketId={ticket.id} disabled={isClosed} /> },
-              { key: 'audit', label: 'Audit', children: <TicketAudit ticketId={ticket.id} /> },
+              { key: 'audit', label: 'Activity', children: <TicketAudit ticketId={ticket.id} /> },
             ].filter(item => {
               if (item.key === 'audit') {
-                 const isAdmin = user?.roles.includes('tickora_admin')
-                 const isAuditor = user?.roles.includes('tickora_auditor')
-                 const isDistributor = user?.roles.includes('tickora_distributor')
-                 const isStaff = !!user?.sectors?.some(s => s.sectorCode === ticket.current_sector_code)
-                 return isAdmin || isAuditor || isDistributor || isStaff
+                const isAdmin = user?.roles.includes('tickora_admin')
+                const isAuditor = user?.roles.includes('tickora_auditor')
+                const isDistributor = user?.roles.includes('tickora_distributor')
+                const isStaff = !!user?.sectors?.some(s => s.sectorCode === ticket.current_sector_code)
+                return isAdmin || isAuditor || isDistributor || isStaff
               }
               return true
             })}
           />
-
-          <Descriptions bordered size="small" column={1}>
-            <Descriptions.Item label="Requester">
-              {[ticket.requester_first_name, ticket.requester_last_name].filter(Boolean).join(' ') || ticket.requester_email || '-'}
-            </Descriptions.Item>
-            <Descriptions.Item label="Requester email">{ticket.requester_email || '-'}</Descriptions.Item>
-            <Descriptions.Item label="Created">{fmt(ticket.created_at)}</Descriptions.Item>
-            <Descriptions.Item label="Updated">{fmt(ticket.updated_at)}</Descriptions.Item>
-            <Descriptions.Item label="Assigned">{fmt(ticket.assigned_at)}</Descriptions.Item>
-            <Descriptions.Item label="First response">{fmt(ticket.first_response_at)}</Descriptions.Item>
-            <Descriptions.Item label="Done">{fmt(ticket.done_at)}</Descriptions.Item>
-            <Descriptions.Item label="Closed">{fmt(ticket.closed_at)}</Descriptions.Item>
-            <Descriptions.Item label="SLA">{ticket.sla_status || '-'} · {fmt(ticket.sla_due_at)}</Descriptions.Item>
-          </Descriptions>
         </div>
-      )}
+        <TicketSidebar ticket={ticket} />
+      </div>
     </div>
   )
 }
@@ -562,10 +662,18 @@ export function TicketsPage() {
   const [status, setStatus] = useState<string | undefined>()
   const [priority, setPriority] = useState<string | undefined>()
   const [sector, setSector] = useState<string | undefined>()
+  const [search, setSearch] = useState<string>('')
+  const [sortBy, setSortBy] = useState<'created_at' | 'updated_at' | 'ticket_code' | 'priority' | 'status' | 'title'>('created_at')
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
   const me = useSessionBootstrap()
   const tickets = useQuery({
-    queryKey: ['tickets', status, priority, sector],
-    queryFn: () => listTickets({ status, priority, current_sector_code: sector, limit: 100 }),
+    queryKey: ['tickets', status, priority, sector, search, sortBy, sortDir],
+    queryFn: () => listTickets({
+      status, priority, current_sector_code: sector,
+      search: search || undefined,
+      sort_by: sortBy, sort_dir: sortDir,
+      limit: 100,
+    }),
   })
   const options = useQuery({
     queryKey: ['ticketOptions'],
@@ -577,12 +685,26 @@ export function TicketsPage() {
     if (me.error) message.error(me.error.message)
   }, [me.error])
 
+  const sortOrderFor = (key: string): 'ascend' | 'descend' | undefined =>
+    sortBy === key ? (sortDir === 'asc' ? 'ascend' : 'descend') : undefined
+
+  const sectorFilterOptions = useMemo(
+    () => (options.data?.sectors || []).map((s) => ({ text: `${s.code} · ${s.name}`, value: s.code })),
+    [options.data?.sectors],
+  )
+  const priorityFilterOptions = useMemo(
+    () => (options.data?.priorities || ['low', 'medium', 'high', 'critical']).map((p) => ({ text: p, value: p })),
+    [options.data?.priorities],
+  )
+
   const columns: ColumnsType<TicketDto> = useMemo(() => [
     {
       title: 'Code',
       dataIndex: 'ticket_code',
-      width: 140,
+      width: 150,
       render: (value) => <Typography.Text strong>{value}</Typography.Text>,
+      sorter: true,
+      sortOrder: sortOrderFor('ticket_code'),
     },
     {
       title: 'Title',
@@ -590,38 +712,58 @@ export function TicketsPage() {
       width: 320,
       ellipsis: true,
       render: (value, row) => value || row.txt?.slice(0, 90) || '-',
+      sorter: true,
+      sortOrder: sortOrderFor('title'),
     },
     {
       title: 'Status',
       dataIndex: 'status',
-      width: 160,
-      render: (value) => <Tag color={STATUS_COLORS[value]}>{value}</Tag>,
+      width: 220,
+      render: (_value, record) => <StatusChanger ticket={record} size="small" />,
+      sorter: true,
+      sortOrder: sortOrderFor('status'),
+      filters: STATUS_OPTIONS.map((o) => ({ text: o.label, value: o.value })),
+      filteredValue: status ? [status] : null,
+      filterMultiple: false,
     },
     {
       title: 'Priority',
       dataIndex: 'priority',
-      width: 110,
-      render: (value) => <Tag color={PRIORITY_COLORS[value]}>{value}</Tag>,
+      width: 140,
+      render: (value) => <PriorityTag priority={value} />,
+      sorter: true,
+      sortOrder: sortOrderFor('priority'),
+      filters: priorityFilterOptions,
+      filteredValue: priority ? [priority] : null,
+      filterMultiple: false,
     },
     {
       title: 'Sector',
       dataIndex: 'current_sector_code',
-      width: 100,
+      width: 140,
       render: (value) => value ? <Tag>{value}</Tag> : '-',
+      filters: sectorFilterOptions,
+      filteredValue: sector ? [sector] : null,
+      filterMultiple: false,
+      filterSearch: true,
     },
     {
       title: 'Created',
       dataIndex: 'created_at',
-      width: 150,
+      width: 160,
       render: fmt,
+      sorter: true,
+      sortOrder: sortOrderFor('created_at'),
     },
     {
       title: 'Updated',
       dataIndex: 'updated_at',
-      width: 150,
+      width: 160,
       render: fmt,
+      sorter: true,
+      sortOrder: sortOrderFor('updated_at'),
     },
-  ], [])
+  ], [sortBy, sortDir, status, priority, sector, sectorFilterOptions, priorityFilterOptions])
 
   return (
     <div style={{ padding: 24, display: 'grid', gap: 16 }}>
@@ -634,13 +776,14 @@ export function TicketsPage() {
           <Button type="primary" icon={<PlusOutlined />} onClick={() => navigate('/create')}>
             Create Ticket
           </Button>
-          <Select allowClear placeholder="Status" value={status} onChange={setStatus} style={{ width: 190 }}
-                  options={['pending', 'assigned_to_sector', 'in_progress', 'done', 'closed', 'reopened', 'cancelled'].map((s) => ({ value: s, label: s }))} />
-          <Select allowClear placeholder="Priority" value={priority} onChange={setPriority} style={{ width: 130 }}
-                  options={(options.data?.priorities || ['low', 'medium', 'high', 'critical']).map((p) => ({ value: p, label: p }))} />
-          <Select allowClear showSearch placeholder="Sector" value={sector} onChange={setSector}
-                  style={{ width: 180 }} optionFilterProp="label"
-                  options={(options.data?.sectors || []).map((s) => ({ value: s.code, label: `${s.code} · ${s.name}` }))} />
+          <Input.Search allowClear placeholder="Search title, body or code"
+                  value={search} onChange={(e) => setSearch(e.target.value)}
+                  onSearch={setSearch} style={{ width: 280 }} />
+          {(status || priority || sector) && (
+            <Button onClick={() => { setStatus(undefined); setPriority(undefined); setSector(undefined) }}>
+              Clear filters
+            </Button>
+          )}
           <Button icon={<ReloadOutlined />} onClick={() => tickets.refetch()} />
         </Space>
       </Flex>
@@ -653,7 +796,25 @@ export function TicketsPage() {
           loading={tickets.isLoading}
           columns={columns}
           dataSource={tickets.data?.items || []}
-          pagination={false}
+          pagination={{ pageSize: 25, showSizeChanger: true, showTotal: (n) => `${n} tickets` }}
+          onChange={(_p, filters, sorter: SorterResult<TicketDto> | SorterResult<TicketDto>[]) => {
+            const s = Array.isArray(sorter) ? sorter[0] : sorter
+            const field = (s?.field as any)
+            if (s?.order && field && ['created_at', 'updated_at', 'ticket_code', 'priority', 'status', 'title'].includes(field)) {
+              setSortBy(field)
+              setSortDir(s.order === 'ascend' ? 'asc' : 'desc')
+            } else if (!s?.order) {
+              setSortBy('created_at')
+              setSortDir('desc')
+            }
+            const pickFirst = (key: string) => {
+              const v = filters?.[key]
+              return Array.isArray(v) && v.length ? String(v[0]) : undefined
+            }
+            setStatus(pickFirst('status'))
+            setPriority(pickFirst('priority'))
+            setSector(pickFirst('current_sector_code'))
+          }}
           onRow={(record) => ({ onClick: () => navigate(`/tickets/${record.id}`) })}
           locale={{ emptyText: <Empty description="No tickets match the current filters" /> }}
           rowClassName={() => 'tickora-row-clickable'}

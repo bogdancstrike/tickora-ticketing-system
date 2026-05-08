@@ -34,40 +34,34 @@ function KpiGrid({ values }: { values: Record<string, number | null | undefined>
 }
 
 function BreakdownChart({ data, title, color = '#1677ff' }: { data: DashboardBreakdown[]; title: string; color?: string }) {
-  const { token } = antTheme.useToken()
   if (!data.length) return <Empty description="No data" image={Empty.PRESENTED_IMAGE_SIMPLE} />
-  
-  const option = {
-    tooltip: {
-      trigger: 'axis',
-      axisPointer: { type: 'shadow' }
-    },
-    grid: {
-      left: '3%',
-      right: '4%',
-      bottom: '3%',
-      top: '10%',
-      containLabel: true
-    },
-    xAxis: {
-      type: 'category',
-      data: data.map(item => labelize(item.key)),
-      axisTick: { alignWithLabel: true }
-    },
-    yAxis: {
-      type: 'value'
-    },
-    series: [
-      {
-        name: title,
-        type: 'bar',
-        barWidth: '60%',
-        data: data.map(item => item.count),
-        itemStyle: { color }
-      }
-    ]
-  }
 
+  const option = {
+    tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+    grid: { left: '3%', right: '4%', bottom: '3%', top: '10%', containLabel: true },
+    xAxis: { type: 'category', data: data.map((i) => labelize(i.key)), axisTick: { alignWithLabel: true } },
+    yAxis: { type: 'value' },
+    series: [{ name: title, type: 'bar', barWidth: '60%', data: data.map((i) => i.count), itemStyle: { color, borderRadius: [4, 4, 0, 0] } }],
+  }
+  return <ReactECharts option={option} style={{ height: 240 }} />
+}
+
+function DoughnutChart({ data, title }: { data: DashboardBreakdown[]; title: string }) {
+  if (!data.length) return <Empty description="No data" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+  const option = {
+    tooltip: { trigger: 'item', formatter: '{b}: {c} ({d}%)' },
+    legend: { bottom: 0, type: 'scroll' },
+    series: [{
+      name: title,
+      type: 'pie',
+      radius: ['45%', '70%'],
+      avoidLabelOverlap: true,
+      itemStyle: { borderRadius: 4, borderColor: 'transparent', borderWidth: 2 },
+      label: { show: false },
+      labelLine: { show: false },
+      data: data.map((i) => ({ name: labelize(i.key), value: i.count })),
+    }],
+  }
   return <ReactECharts option={option} style={{ height: 240 }} />
 }
 

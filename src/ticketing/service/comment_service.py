@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from src.core.errors import BusinessRuleError, NotFoundError, PermissionDeniedError, ValidationError
 from src.iam import rbac
+from src.iam.models import User
 from src.iam.principal import Principal
 from src.ticketing import events
 from src.ticketing.models import TicketComment
@@ -24,7 +25,25 @@ def list_(db: Session, principal: Principal, ticket_id: str) -> list[TicketComme
     )
     if not rbac.can_see_private_comments(principal, ticket):
         stmt = stmt.where(TicketComment.visibility == "public")
-    return list(db.scalars(stmt.order_by(TicketComment.created_at.asc(), TicketComment.id.asc())))
+    comments = list(db.scalars(stmt.order_by(TicketComment.created_at.asc(), TicketComment.id.asc())))
+
+    # Hydrate author display name/email/username for the serializer.
+    author_ids = {c.author_user_id for c in comments if c.author_user_id}
+    if author_ids:
+        rows = db.execute(
+            select(User.id, User.username, User.email, User.first_name, User.last_name)
+            .where(User.id.in_(author_ids))
+        ).all()
+        index = {uid: (uname, email, first, last) for uid, uname, email, first, last in rows}
+        for c in comments:
+            row = index.get(c.author_user_id)
+            if row:
+                uname, email, first, last = row
+                full = " ".join([n for n in (first, last) if n]).strip()
+                setattr(c, "_author_display", full or uname or email or "user")
+                setattr(c, "_author_username", uname)
+                setattr(c, "_author_email", email)
+    return comments
 
 
 def create(

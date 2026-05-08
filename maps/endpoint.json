@@ -175,6 +175,22 @@
     },
     {
       "namespace": "tickora",
+      "operation_name": "tickets_unassign",
+      "model_name": "Empty",
+      "request_method": ["POST"],
+      "api_url": "/api/tickets/<ticket_id>/unassign",
+      "exec_method": { "module_name": "api.workflow", "method_name": "unassign" }
+    },
+    {
+      "namespace": "tickora",
+      "operation_name": "tickets_change_status",
+      "model_name": "Empty",
+      "request_method": ["POST"],
+      "api_url": "/api/tickets/<ticket_id>/change-status",
+      "exec_method": { "module_name": "api.workflow", "method_name": "change_status" }
+    },
+    {
+      "namespace": "tickora",
       "operation_name": "tickets_mark_done",
       "model_name": "Empty",
       "request_method": ["POST"],

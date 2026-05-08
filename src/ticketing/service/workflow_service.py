@@ -259,6 +259,100 @@ def _assign_to_user(db: Session, p: Principal, ticket_id: str, target_user_id: s
     return _load(db, ticket_id)
 
 
+def change_status(
+    db: Session,
+    p: Principal,
+    ticket_id: str,
+    target_status: str,
+    *,
+    reason: str | None = None,
+) -> Ticket:
+    """Convenience wrapper that maps a target status to the right transition.
+
+    The frontend can call this for any allowed transition without having to
+    pick the specific endpoint (assign-sector, mark-done, …) — easier to wire
+    up an inline status switcher.
+    """
+    with span("workflow.change_status", username=p.username, user_id=p.user_id, ticket_id=ticket_id, target_status=target_status):
+        if target_status == sm.IN_PROGRESS:
+            return _assign_to_me(db, p, ticket_id)
+        if target_status == sm.ASSIGNED_TO_SECTOR:
+            return _unassign(db, p, ticket_id, reason=reason)
+        if target_status == sm.DONE:
+            return _mark_done(db, p, ticket_id, resolution=reason)
+        if target_status == sm.CLOSED:
+            return _close(db, p, ticket_id)
+        if target_status == sm.REOPENED:
+            if not reason:
+                raise BusinessRuleError("reopen requires a reason")
+            return _reopen(db, p, ticket_id, reason=reason)
+        if target_status == sm.CANCELLED:
+            if not reason:
+                raise BusinessRuleError("cancel requires a reason")
+            return _cancel(db, p, ticket_id, reason=reason)
+        raise BusinessRuleError(f"no transition wired up for status {target_status!r}")
+
+
+def unassign(db: Session, p: Principal, ticket_id: str, *, reason: str | None = None) -> Ticket:
+    """Clear the current assignee.
+
+    Anyone may unassign themselves; admins and the current sector chief may
+    unassign anyone. The ticket falls back to ``assigned_to_sector`` so it
+    is visible in the sector queue and can be picked up again.
+    """
+    with span("workflow.unassign", username=p.username, user_id=p.user_id, ticket_id=ticket_id):
+        return _unassign(db, p, ticket_id, reason=reason)
+
+
+def _unassign(db: Session, p: Principal, ticket_id: str, *, reason: str | None = None) -> Ticket:
+    t = _load(db, ticket_id)
+    _check_visible(p, t)
+
+    if t.assignee_user_id is None:
+        return t  # idempotent
+
+    # RBAC: self-unassign always allowed; otherwise require admin or sector chief.
+    is_self = t.assignee_user_id == p.user_id
+    is_chief = bool(t.current_sector_code and p.is_chief_of(t.current_sector_code))
+    if not (is_self or p.is_admin or is_chief):
+        _denied("unassign", p, ticket_id, db, "not allowed to unassign this ticket")
+
+    new_status = sm.target_status(sm.ACTION_UNASSIGN, t.status)
+    if new_status is None:
+        # Fall back to current status if transition not defined.
+        new_status = t.status
+
+    old_assignee = t.assignee_user_id
+    res = db.execute(
+        update(Ticket)
+        .where(
+            Ticket.id == ticket_id,
+            Ticket.is_deleted.is_(False),
+            Ticket.assignee_user_id == old_assignee,
+        )
+        .values(
+            assignee_user_id=None,
+            status=new_status,
+        )
+        .returning(Ticket.id)
+    )
+    if _no_returned_row(res):
+        raise ConcurrencyConflictError("ticket state changed; refresh and retry")
+
+    _record_assignment_change(db, ticket_id, old_assignee, None, p.user_id, reason)
+    if t.status != new_status:
+        _record_status_change(db, ticket_id, t.status, new_status, p.user_id, reason)
+    audit_service.record(
+        db, actor=p,
+        action=audit_events.TICKET_UNASSIGNED,
+        entity_type="ticket", entity_id=ticket_id, ticket_id=ticket_id,
+        old_value={"assignee_user_id": old_assignee, "status": t.status},
+        new_value={"assignee_user_id": None, "status": new_status},
+        metadata={"reason": reason, "self": is_self} if reason or is_self else None,
+    )
+    return _load(db, ticket_id)
+
+
 def mark_done(db: Session, p: Principal, ticket_id: str, *, resolution: str | None = None) -> Ticket:
     with span("workflow.mark_done", username=p.username, user_id=p.user_id, ticket_id=ticket_id) as current:
         ticket = _mark_done(db, p, ticket_id, resolution=resolution)

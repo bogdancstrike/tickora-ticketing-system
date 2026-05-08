@@ -290,9 +290,30 @@ def _list(
         stmt = stmt.where(Ticket.created_at < created_before)
     if (code := filters.get("ticket_code")):
         stmt = stmt.where(Ticket.ticket_code == code)
+    if (search := filters.get("search")):
+        like = f"%{search.strip()}%"
+        stmt = stmt.where(
+            or_(
+                Ticket.title.ilike(like),
+                Ticket.txt.ilike(like),
+                Ticket.ticket_code.ilike(like),
+            )
+        )
 
-    # ── Cursor ─────────────────────────────────────────────────────────────
-    cursor = Cursor.decode(cursor_token)
+    # ── Sort + cursor (cursor only supported on created_at-desc) ───────────
+    sort_by = (filters.get("sort_by") or "created_at")
+    sort_dir = (filters.get("sort_dir") or "desc").lower()
+    sort_col = {
+        "created_at":  Ticket.created_at,
+        "updated_at":  Ticket.updated_at,
+        "ticket_code": Ticket.ticket_code,
+        "priority":    Ticket.priority,
+        "status":      Ticket.status,
+        "title":       Ticket.title,
+    }.get(sort_by, Ticket.created_at)
+    direction = desc if sort_dir == "desc" else asc
+
+    cursor = Cursor.decode(cursor_token) if (sort_by == "created_at" and sort_dir == "desc") else None
     if cursor is not None:
         stmt = stmt.where(
             or_(
@@ -300,13 +321,16 @@ def _list(
                 and_(Ticket.created_at == cursor.sort_value, Ticket.id < cursor.id),
             )
         )
-    stmt = stmt.order_by(desc(Ticket.created_at), desc(Ticket.id)).limit(limit + 1)
+    stmt = stmt.order_by(direction(sort_col), direction(Ticket.id)).limit(limit + 1)
 
     rows = list(db.scalars(stmt))
     next_token: str | None = None
     if len(rows) > limit:
         nxt = rows[limit - 1]
-        next_token = Cursor(sort_value=nxt.created_at, id=nxt.id).encode()
+        # Cursor is only emitted for the default sort (created_at desc) — non-default
+        # sorts fall back to offset-style pagination (or repeated requests with a smaller limit).
+        if sort_by == "created_at" and sort_dir == "desc":
+            next_token = Cursor(sort_value=nxt.created_at, id=nxt.id).encode()
         rows = rows[:limit]
 
     # Hydrate sector_code / beneficiary_user_id for downstream RBAC/serializer.

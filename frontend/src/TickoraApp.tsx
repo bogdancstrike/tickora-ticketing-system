@@ -6,6 +6,7 @@ import {
 import {
   DashboardOutlined, UnorderedListOutlined, CheckSquareOutlined, AuditOutlined, SettingOutlined,
   BgColorsOutlined, MenuFoldOutlined, MenuUnfoldOutlined, UserOutlined, LogoutOutlined,
+  IdcardOutlined,
 } from '@ant-design/icons'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { useKeycloak } from '@react-keycloak/web'
@@ -15,6 +16,7 @@ import { TicketDetailPage, TicketsPage } from '@/pages/TicketsPage'
 import { AuditExplorerPage } from '@/pages/AuditExplorerPage'
 import { CreateTicketPage } from '@/pages/CreateTicketPage'
 import { ReviewTicketsPage } from '@/pages/ReviewTicketsPage'
+import { ReviewTicketPage } from '@/pages/ReviewTicketPage'
 import { DashboardPage } from '@/pages/DashboardPage'
 import { ProfilePage } from '@/pages/ProfilePage'
 import { RequireRole } from '@/auth/RequireRole'
@@ -97,6 +99,7 @@ function AppHeader() {
   const { mode, toggle } = useThemeStore()
   const { keycloak } = useKeycloak()
   const user = useSessionStore((s) => s.user)
+  const navigate = useNavigate()
 
   return (
     <Header style={{
@@ -112,10 +115,17 @@ function AppHeader() {
         </Tooltip>
         <Dropdown
           menu={{
-            items: [{
-              key: 'logout', icon: <LogoutOutlined />, label: 'Logout',
-              onClick: () => keycloak.logout(),
-            }],
+            items: [
+              {
+                key: 'profile', icon: <IdcardOutlined />, label: 'My Profile',
+                onClick: () => navigate('/profile'),
+              },
+              { type: 'divider' as const },
+              {
+                key: 'logout', icon: <LogoutOutlined />, label: 'Logout',
+                onClick: () => keycloak.logout(),
+              },
+            ],
           }}
         >
           <Button type="text" icon={<UserOutlined />}>
@@ -151,9 +161,14 @@ function Shell() {
             <Route path="/tickets"   element={<TicketsPage />} />
             <Route path="/tickets/:ticketId" element={<TicketDetailPage />} />
             <Route path="/create"    element={<CreateTicketPage />} />
+            <Route path="/profile"   element={<ProfilePage />} />
             <Route
               path="/review"
               element={<RequireRole roles={[ROLE_ADMIN, ROLE_DISTRIBUTOR]}><ReviewTicketsPage /></RequireRole>}
+            />
+            <Route
+              path="/review/:ticketId"
+              element={<RequireRole roles={[ROLE_ADMIN, ROLE_DISTRIBUTOR]}><ReviewTicketPage /></RequireRole>}
             />
             <Route
               path="/audit"

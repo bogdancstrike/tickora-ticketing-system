@@ -101,6 +101,35 @@ def reassign(app, operation, request, *, principal: Principal, **kwargs):
     return assign_to_user(app, operation, request, principal=principal, **kwargs)
 
 
+class _UnassignIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    reason: str | None = None
+
+
+@require_authenticated
+def unassign(app, operation, request, *, principal: Principal, **kwargs):
+    body = _parse(_UnassignIn, _payload())
+    tid = _ticket_id(kwargs)
+    with get_db() as db:
+        t = workflow_service.unassign(db, principal, tid, reason=body.reason)
+        return (serialize_ticket(t, principal), 200)
+
+
+class _ChangeStatusIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    status: str
+    reason: str | None = None
+
+
+@require_authenticated
+def change_status(app, operation, request, *, principal: Principal, **kwargs):
+    body = _parse(_ChangeStatusIn, _payload())
+    tid = _ticket_id(kwargs)
+    with get_db() as db:
+        t = workflow_service.change_status(db, principal, tid, body.status, reason=body.reason)
+        return (serialize_ticket(t, principal), 200)
+
+
 @require_authenticated
 def mark_done(app, operation, request, *, principal: Principal, **kwargs):
     body = _parse(_MarkDoneIn, _payload())

@@ -79,7 +79,10 @@ def serialize_comment(c: TicketComment) -> dict[str, Any]:
     return {
         "id": c.id,
         "ticket_id": c.ticket_id,
-        "author_user_id": c.author_user_id,
+        "author_user_id":  c.author_user_id,
+        "author_display":  getattr(c, "_author_display", None),
+        "author_username": getattr(c, "_author_username", None),
+        "author_email":    getattr(c, "_author_email", None),
         "visibility": c.visibility,
         "comment_type": c.comment_type,
         "body": c.body,

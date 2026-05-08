@@ -5,7 +5,9 @@ from sqlalchemy import distinct, select
 from sqlalchemy.orm import Session
 
 from src.iam.models import User
-from src.ticketing.models import Sector, SectorMembership, Ticket, TicketMetadata
+from src.ticketing.models import (
+    MetadataKeyDefinition, Sector, SectorMembership, Ticket, TicketMetadata,
+)
 
 DEFAULT_PRIORITIES = ("low", "medium", "high", "critical")
 DEFAULT_CATEGORIES = ("access", "hardware", "network", "software", "facilities")
@@ -31,23 +33,36 @@ def ticket_options(db: Session) -> dict:
 
 
 def _metadata_keys(db: Session) -> list[dict]:
-    # Distinct keys from the metadata table
-    rows = db.execute(
+    """Return the catalogue of metadata keys, with options if defined.
+
+    Authoritative source is `metadata_key_definitions`. Any keys present in
+    `ticket_metadatas` but missing a definition are surfaced as free-text keys
+    so legacy data is still editable.
+    """
+    defs = list(db.scalars(
+        select(MetadataKeyDefinition)
+        .where(MetadataKeyDefinition.is_active.is_(True))
+        .order_by(MetadataKeyDefinition.label.asc())
+    ))
+    out: list[dict] = [
+        {
+            "key":         d.key,
+            "label":       d.label,
+            "value_type":  d.value_type,
+            "options":     d.options,
+            "description": d.description,
+        }
+        for d in defs
+    ]
+
+    seen = {d.key for d in defs}
+    legacy = db.execute(
         select(distinct(TicketMetadata.key), TicketMetadata.label)
         .order_by(TicketMetadata.key.asc())
     ).all()
-    
-    defaults = [
-        {"key": "importance", "label": "Importance Level"},
-        {"key": "platform", "label": "Target Platform"},
-        {"key": "impact_range", "label": "Impact Range"},
-    ]
-    
-    seen = {r[0] for r in rows}
-    out = [{"key": k, "label": l or k} for k, l in rows]
-    for d in defaults:
-        if d["key"] not in seen:
-            out.append(d)
+    for k, label in legacy:
+        if k not in seen:
+            out.append({"key": k, "label": label or k, "value_type": "string", "options": None, "description": None})
     return out
 
 

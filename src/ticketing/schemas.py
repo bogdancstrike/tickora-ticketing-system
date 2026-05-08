@@ -38,5 +38,10 @@ class ListTicketsQuery(BaseModel):
     created_after:        datetime | None = None
     created_before:       datetime | None = None
     ticket_code:          str | None = None
+    search:               str | None = Field(default=None, max_length=200)
+    sort_by:              Literal[
+        "created_at", "updated_at", "ticket_code", "priority", "status", "title"
+    ] | None = None
+    sort_dir:             Literal["asc", "desc"] | None = None
     cursor:               str | None = None
     limit:                int | None = Field(default=None, ge=1, le=200)
