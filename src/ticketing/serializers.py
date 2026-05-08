@@ -4,7 +4,7 @@ from typing import Any
 
 from src.iam import rbac
 from src.iam.principal import Principal
-from src.ticketing.models import AuditEvent, Ticket, TicketAttachment, TicketComment
+from src.ticketing.models import AuditEvent, Ticket, TicketAttachment, TicketComment, TicketMetadata
 
 
 def _iso(d: datetime | None) -> str | None:
@@ -43,6 +43,11 @@ def serialize_ticket(t: Ticket, p: Principal, *, full: bool = True) -> dict[str,
     if full:
         payload["txt"] = t.txt
         payload["resolution"] = t.resolution
+        
+        # Include metadata in full serialization
+        metadatas = getattr(t, "metadatas", [])
+        if metadatas:
+            payload["metadata"] = {m.key: {"value": m.value, "label": m.label} for m in metadatas}
 
     if can_see_internal:
         payload.update({
@@ -117,4 +122,14 @@ def serialize_audit_event(e: AuditEvent) -> dict[str, Any]:
         "user_agent": e.user_agent,
         "correlation_id": e.correlation_id,
         "created_at": _iso(e.created_at),
+    }
+
+
+def serialize_metadata(m: TicketMetadata) -> dict[str, Any]:
+    return {
+        "key": m.key,
+        "value": m.value,
+        "label": m.label,
+        "created_at": _iso(m.created_at),
+        "updated_at": _iso(m.updated_at),
     }

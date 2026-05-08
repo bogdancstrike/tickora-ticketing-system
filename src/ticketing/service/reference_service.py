@@ -5,7 +5,7 @@ from sqlalchemy import distinct, select
 from sqlalchemy.orm import Session
 
 from src.iam.models import User
-from src.ticketing.models import Sector, SectorMembership, Ticket
+from src.ticketing.models import Sector, SectorMembership, Ticket, TicketMetadata
 
 DEFAULT_PRIORITIES = ("low", "medium", "high", "critical")
 DEFAULT_CATEGORIES = ("access", "hardware", "network", "software", "facilities")
@@ -26,7 +26,29 @@ def ticket_options(db: Session) -> dict:
         "priorities": _values(db, Ticket.priority, DEFAULT_PRIORITIES),
         "categories": _values(db, Ticket.category, DEFAULT_CATEGORIES),
         "types": _values(db, Ticket.type, DEFAULT_TYPES),
+        "metadata_keys": _metadata_keys(db),
     }
+
+
+def _metadata_keys(db: Session) -> list[dict]:
+    # Distinct keys from the metadata table
+    rows = db.execute(
+        select(distinct(TicketMetadata.key), TicketMetadata.label)
+        .order_by(TicketMetadata.key.asc())
+    ).all()
+    
+    defaults = [
+        {"key": "importance", "label": "Importance Level"},
+        {"key": "platform", "label": "Target Platform"},
+        {"key": "impact_range", "label": "Impact Range"},
+    ]
+    
+    seen = {r[0] for r in rows}
+    out = [{"key": k, "label": l or k} for k, l in rows]
+    for d in defaults:
+        if d["key"] not in seen:
+            out.append(d)
+    return out
 
 
 def assignable_users(db: Session, *, sector_code: str | None = None) -> list[dict]:
