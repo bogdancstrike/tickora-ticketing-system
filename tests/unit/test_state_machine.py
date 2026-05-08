@@ -26,8 +26,10 @@ class TestTargetStatus:
         (sm.ACTION_ASSIGN_TO_ME, sm.DONE),
         (sm.ACTION_MARK_DONE,    sm.PENDING),
         (sm.ACTION_MARK_DONE,    sm.CLOSED),
+        (sm.ACTION_CLOSE,        sm.IN_PROGRESS),
         (sm.ACTION_CLOSE,        sm.PENDING),
         (sm.ACTION_REOPEN,       sm.IN_PROGRESS),
+        (sm.ACTION_CANCEL,       sm.IN_PROGRESS),
         (sm.ACTION_CANCEL,       sm.DONE),
     ])
     def test_invalid_transitions_return_none(self, action, from_status):

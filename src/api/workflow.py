@@ -130,6 +130,52 @@ def change_status(app, operation, request, *, principal: Principal, **kwargs):
         return (serialize_ticket(t, principal), 200)
 
 
+class _AddSectorIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    sector_code: str
+
+
+@require_authenticated
+def add_sector(app, operation, request, *, principal: Principal, **kwargs):
+    body = _parse(_AddSectorIn, _payload())
+    tid = _ticket_id(kwargs)
+    with get_db() as db:
+        t = workflow_service.add_sector(db, principal, tid, body.sector_code)
+        return (serialize_ticket(t, principal), 200)
+
+
+@require_authenticated
+def remove_sector(app, operation, request, *, principal: Principal, **kwargs):
+    body = _parse(_AddSectorIn, _payload())
+    tid = _ticket_id(kwargs)
+    with get_db() as db:
+        t = workflow_service.remove_sector(db, principal, tid, body.sector_code)
+        return (serialize_ticket(t, principal), 200)
+
+
+class _AddAssigneeIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    user_id: str
+
+
+@require_authenticated
+def add_assignee(app, operation, request, *, principal: Principal, **kwargs):
+    body = _parse(_AddAssigneeIn, _payload())
+    tid = _ticket_id(kwargs)
+    with get_db() as db:
+        t = workflow_service.add_assignee(db, principal, tid, body.user_id)
+        return (serialize_ticket(t, principal), 200)
+
+
+@require_authenticated
+def remove_assignee(app, operation, request, *, principal: Principal, **kwargs):
+    body = _parse(_AddAssigneeIn, _payload())
+    tid = _ticket_id(kwargs)
+    with get_db() as db:
+        t = workflow_service.remove_assignee(db, principal, tid, body.user_id)
+        return (serialize_ticket(t, principal), 200)
+
+
 @require_authenticated
 def mark_done(app, operation, request, *, principal: Principal, **kwargs):
     body = _parse(_MarkDoneIn, _payload())

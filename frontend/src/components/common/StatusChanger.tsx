@@ -8,10 +8,14 @@ import { StatusTag } from './StatusTag'
 
 interface Transition { to: string; label: string }
 
+// These mirror the backend state_machine.TRANSITIONS exactly. Stay in lockstep
+// with src/ticketing/state_machine.py — adding an option here without an
+// allowed transition there results in a runtime error.
 const STAFF_TRANSITIONS: Record<string, Transition[]> = {
   pending: [
-    { to: 'in_progress', label: 'Take ownership' },
-    { to: 'cancelled',   label: 'Cancel' },
+    { to: 'in_progress',        label: 'Take ownership' },
+    { to: 'assigned_to_sector', label: 'Route to sector' },
+    { to: 'cancelled',          label: 'Cancel' },
   ],
   assigned_to_sector: [
     { to: 'in_progress', label: 'Take ownership' },
@@ -19,24 +23,17 @@ const STAFF_TRANSITIONS: Record<string, Transition[]> = {
   ],
   in_progress: [
     { to: 'done',               label: 'Mark done' },
-    { to: 'closed',             label: 'Close ticket' },
     { to: 'assigned_to_sector', label: 'Unassign · back to sector' },
-    { to: 'cancelled',          label: 'Cancel' },
   ],
   reopened: [
     { to: 'in_progress', label: 'Take ownership' },
     { to: 'done',        label: 'Mark done' },
-    { to: 'closed',      label: 'Close ticket' },
-    { to: 'cancelled',   label: 'Cancel' },
   ],
   done: [
     { to: 'closed',   label: 'Close ticket' },
     { to: 'reopened', label: 'Reopen' },
   ],
   closed: [
-    { to: 'reopened', label: 'Reopen' },
-  ],
-  cancelled: [
     { to: 'reopened', label: 'Reopen' },
   ],
 }

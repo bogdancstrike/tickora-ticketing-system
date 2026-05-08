@@ -341,6 +341,128 @@ def _assign_to_user(db: Session, p: Principal, ticket_id: str, target_user_id: s
     return _load(db, ticket_id)
 
 
+def add_sector(db: Session, p: Principal, ticket_id: str, sector_code: str) -> Ticket:
+    """Add a *secondary* sector to the ticket without changing its primary."""
+    with span("workflow.add_sector", username=p.username, user_id=p.user_id, ticket_id=ticket_id, sector_code=sector_code):
+        t = _load(db, ticket_id)
+        _check_visible(p, t)
+        if not rbac.can_assign_sector(p, t):
+            _denied(sm.ACTION_ASSIGN_SECTOR, p, ticket_id, db, "not allowed to add sector")
+        sector = db.scalar(select(Sector).where(Sector.code == sector_code))
+        if sector is None or not sector.is_active:
+            raise BusinessRuleError(f"unknown or inactive sector: {sector_code}")
+        already_primary = t.current_sector_id == sector.id
+        _add_sector_assignment(db, ticket_id, sector.id, by_user_id=p.user_id, primary=already_primary)
+        audit_service.record(
+            db, actor=p, action=audit_events.TICKET_ASSIGNED_TO_SECTOR,
+            entity_type="ticket", entity_id=ticket_id, ticket_id=ticket_id,
+            new_value={"added_sector_id": sector.id, "primary": already_primary},
+            metadata={"action": "add_sector"},
+        )
+        publish("notify_sector", {"ticket_id": ticket_id, "sector_id": sector.id})
+        return _load(db, ticket_id)
+
+
+def remove_sector(db: Session, p: Principal, ticket_id: str, sector_code: str) -> Ticket:
+    """Detach a sector. Refuses to remove the *primary* sector — re-route it
+    via assign_sector first."""
+    with span("workflow.remove_sector", username=p.username, user_id=p.user_id, ticket_id=ticket_id, sector_code=sector_code):
+        t = _load(db, ticket_id)
+        _check_visible(p, t)
+        if not rbac.can_assign_sector(p, t):
+            _denied(sm.ACTION_ASSIGN_SECTOR, p, ticket_id, db, "not allowed to remove sector")
+        sector = db.scalar(select(Sector).where(Sector.code == sector_code))
+        if sector is None:
+            raise BusinessRuleError(f"unknown sector: {sector_code}")
+        if t.current_sector_id == sector.id:
+            raise BusinessRuleError("cannot remove the primary sector — reassign it first")
+        db.execute(
+            TicketSectorAssignment.__table__.delete()
+            .where(
+                TicketSectorAssignment.ticket_id == ticket_id,
+                TicketSectorAssignment.sector_id == sector.id,
+            )
+        )
+        audit_service.record(
+            db, actor=p, action=audit_events.TICKET_ASSIGNED_TO_SECTOR,
+            entity_type="ticket", entity_id=ticket_id, ticket_id=ticket_id,
+            old_value={"removed_sector_id": sector.id},
+            metadata={"action": "remove_sector"},
+        )
+        return _load(db, ticket_id)
+
+
+def add_assignee(db: Session, p: Principal, ticket_id: str, user_id: str) -> Ticket:
+    """Add a *secondary* assignee. Useful for shared / pair work."""
+    with span("workflow.add_assignee", username=p.username, user_id=p.user_id, ticket_id=ticket_id, target_user_id=user_id):
+        t = _load(db, ticket_id)
+        _check_visible(p, t)
+        if not rbac.can_assign_to_user(p, t):
+            _denied(sm.ACTION_ASSIGN_TO_USER, p, ticket_id, db, "not allowed to add assignee")
+        if t.current_sector_id is None:
+            raise BusinessRuleError("ticket has no current sector")
+        in_sector = db.scalar(
+            select(ORMSectorMembership.id).where(
+                ORMSectorMembership.user_id == user_id,
+                ORMSectorMembership.sector_id == t.current_sector_id,
+                ORMSectorMembership.is_active.is_(True),
+            )
+        )
+        if in_sector is None and not p.is_admin:
+            raise BusinessRuleError("target user is not a member of the current sector")
+        primary = t.assignee_user_id is None  # promote if there's no primary yet
+        _add_user_assignment(db, ticket_id, user_id, by_user_id=p.user_id, primary=primary)
+        if primary:
+            db.execute(
+                update(Ticket)
+                .where(Ticket.id == ticket_id)
+                .values(assignee_user_id=user_id, last_active_assignee_user_id=user_id)
+            )
+        audit_service.record(
+            db, actor=p, action=audit_events.TICKET_ASSIGNED_TO_USER,
+            entity_type="ticket", entity_id=ticket_id, ticket_id=ticket_id,
+            new_value={"added_assignee": user_id, "primary": primary},
+            metadata={"action": "add_assignee"},
+        )
+        publish("notify_assignee", {"ticket_id": ticket_id, "user_id": user_id})
+        return _load(db, ticket_id)
+
+
+def remove_assignee(db: Session, p: Principal, ticket_id: str, user_id: str) -> Ticket:
+    """Detach a specific user. If they were the primary, promote the next."""
+    with span("workflow.remove_assignee", username=p.username, user_id=p.user_id, ticket_id=ticket_id, target_user_id=user_id):
+        t = _load(db, ticket_id)
+        _check_visible(p, t)
+        is_self = (user_id == p.user_id)
+        is_chief = bool(t.current_sector_code and p.is_chief_of(t.current_sector_code))
+        if not (is_self or p.is_admin or is_chief):
+            _denied("remove_assignee", p, ticket_id, db, "not allowed to remove this assignee")
+
+        _remove_user_assignment(db, ticket_id, user_id)
+        if t.assignee_user_id == user_id:
+            new_primary = _promote_remaining_assignee(db, ticket_id)
+            db.execute(
+                update(Ticket)
+                .where(Ticket.id == ticket_id)
+                .values(
+                    assignee_user_id=new_primary,
+                    status=t.status if new_primary else sm.target_status(sm.ACTION_UNASSIGN, t.status) or t.status,
+                )
+            )
+            publish("notify_unassigned", {
+                "ticket_id":        ticket_id,
+                "previous_user_id": user_id,
+                "actor_user_id":    p.user_id,
+            })
+        audit_service.record(
+            db, actor=p, action=audit_events.TICKET_UNASSIGNED,
+            entity_type="ticket", entity_id=ticket_id, ticket_id=ticket_id,
+            old_value={"removed_assignee": user_id},
+            metadata={"action": "remove_assignee", "self": is_self},
+        )
+        return _load(db, ticket_id)
+
+
 def change_status(
     db: Session,
     p: Principal,
@@ -373,12 +495,6 @@ def change_status(
         if target_status == sm.DONE:
             return _mark_done(db, p, ticket_id, resolution=reason)
         if target_status == sm.CLOSED:
-            # Allow close from any active status (state machine permits it).
-            # If the ticket isn't already done, the operator must be entitled
-            # to drive workflow changes; the requester path (acknowledge a
-            # done ticket) is permitted by `can_close` directly.
-            if t.status != sm.DONE and not rbac.can_drive_status(p, t):
-                _denied("change_status", p, ticket_id, db, "not allowed to close this ticket")
             return _close(db, p, ticket_id)
         if target_status == sm.REOPENED:
             if not reason:
@@ -516,17 +632,8 @@ def close(db: Session, p: Principal, ticket_id: str, *, feedback: dict | None = 
 def _close(db: Session, p: Principal, ticket_id: str, *, feedback: dict | None = None) -> Ticket:
     t = _load(db, ticket_id)
     _check_visible(p, t)
-
-    # Two distinct paths:
-    #   1. Requester acknowledges a done ticket → can_close() applies.
-    #   2. Operator forces close from in_progress / reopened / done → must be
-    #      able to drive workflow status (admin / sector chief / assignee).
-    if t.status == sm.DONE:
-        if not (rbac.can_close(p, t) or rbac.can_drive_status(p, t)):
-            _denied(sm.ACTION_CLOSE, p, ticket_id, db, "only the beneficiary, admin or assignee can close")
-    else:
-        if not rbac.can_drive_status(p, t):
-            _denied(sm.ACTION_CLOSE, p, ticket_id, db, "not allowed to close this ticket from current state")
+    if not (rbac.can_close(p, t) or rbac.can_drive_status(p, t)):
+        _denied(sm.ACTION_CLOSE, p, ticket_id, db, "only the beneficiary, admin or assignee can close")
 
     new_status = sm.target_status(sm.ACTION_CLOSE, t.status)
     if new_status is None:
@@ -534,11 +641,7 @@ def _close(db: Session, p: Principal, ticket_id: str, *, feedback: dict | None =
 
     res = db.execute(
         update(Ticket)
-        .where(
-            Ticket.id == ticket_id,
-            Ticket.status.in_(tuple(sm._BY_ACTION[sm.ACTION_CLOSE].from_statuses)),
-            Ticket.is_deleted.is_(False),
-        )
+        .where(Ticket.id == ticket_id, Ticket.status == "done", Ticket.is_deleted.is_(False))
         .values(status=new_status, closed_at=datetime.now(timezone.utc))
         .returning(Ticket.id)
     )

@@ -191,6 +191,38 @@
     },
     {
       "namespace": "tickora",
+      "operation_name": "tickets_add_sector",
+      "model_name": "Empty",
+      "request_method": ["POST"],
+      "api_url": "/api/tickets/<ticket_id>/sectors/add",
+      "exec_method": { "module_name": "api.workflow", "method_name": "add_sector" }
+    },
+    {
+      "namespace": "tickora",
+      "operation_name": "tickets_remove_sector",
+      "model_name": "Empty",
+      "request_method": ["POST"],
+      "api_url": "/api/tickets/<ticket_id>/sectors/remove",
+      "exec_method": { "module_name": "api.workflow", "method_name": "remove_sector" }
+    },
+    {
+      "namespace": "tickora",
+      "operation_name": "tickets_add_assignee",
+      "model_name": "Empty",
+      "request_method": ["POST"],
+      "api_url": "/api/tickets/<ticket_id>/assignees/add",
+      "exec_method": { "module_name": "api.workflow", "method_name": "add_assignee" }
+    },
+    {
+      "namespace": "tickora",
+      "operation_name": "tickets_remove_assignee",
+      "model_name": "Empty",
+      "request_method": ["POST"],
+      "api_url": "/api/tickets/<ticket_id>/assignees/remove",
+      "exec_method": { "module_name": "api.workflow", "method_name": "remove_assignee" }
+    },
+    {
+      "namespace": "tickora",
       "operation_name": "tickets_mark_done",
       "model_name": "Empty",
       "request_method": ["POST"],
