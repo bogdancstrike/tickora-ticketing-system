@@ -112,6 +112,9 @@ export function StatusChanger({
       await queryClient.invalidateQueries({ queryKey: ['tickets'] })
       await queryClient.invalidateQueries({ queryKey: ['ticket', ticket.id] })
       await queryClient.invalidateQueries({ queryKey: ['ticketAudit', ticket.id] })
+      await queryClient.invalidateQueries({ queryKey: ['dashboardOverview'] })
+      await queryClient.invalidateQueries({ queryKey: ['dashboardSector'] })
+      await queryClient.invalidateQueries({ queryKey: ['dashboardUser'] })
     },
     onError: (err) => msg.error(err.message),
   })

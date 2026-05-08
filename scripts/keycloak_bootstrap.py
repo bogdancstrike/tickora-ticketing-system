@@ -6,7 +6,10 @@ Run after `docker compose up -d keycloak`. Creates:
 - confidential client `tickora-api` (service account on)
 - public client `tickora-spa` (PKCE)
 - realm roles per BRD §9.1
-- groups /tickora/sectors/<sN>/{members,chiefs} for s1..s10
+- hierarchical groups:
+  - /tickora for full platform access
+  - /tickora/sectors/<sN> for effective sector chief+member access
+  - /tickora/sectors/<sN>/{members,chiefs} for narrower sector access
 
 Idempotent: re-running is a no-op for already-existing entities.
 """
@@ -247,7 +250,10 @@ def main() -> int:
     ensure_realm(kc)
     for r in REALM_ROLES:
         ensure_role(kc, r)
+    ensure_group(kc, "/tickora")
+    ensure_group(kc, "/tickora/sectors")
     for code in SECTORS:
+        ensure_group(kc, f"/tickora/sectors/{code}")
         ensure_group(kc, f"/tickora/sectors/{code}/members")
         ensure_group(kc, f"/tickora/sectors/{code}/chiefs")
     ensure_client(kc, client_id=Config.KEYCLOAK_API_CLIENT_ID, public=False)

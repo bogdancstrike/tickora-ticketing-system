@@ -29,6 +29,9 @@ Legend: `[x]` done · `[~]` partial · `[ ]` pending
 - [x] `src/iam/principal.py` — `Principal`, `SectorMembership`, role constants
 - [x] `src/iam/token_verifier.py` — JWKS fetch+cache, JWT verify, Redis cache
 - [x] `src/iam/service.py` — user upsert, principal hydration, `/tickora/sectors/<sN>/...` group parser
+- [~] Hierarchical group semantics: `/tickora` → full platform access; parent sector group
+      (for example `/tickora/sectors/s10` or shorthand `sector10`) → effective chief+member
+      sector access. Backend parser work is in progress; profile/API polish still needs verification.
 - [x] `src/iam/decorators.py` — `@require_authenticated`, `@require_role`, `@require_any`
       (decorators return `(dict, status)` tuples — flask_restx overrides Flask errorhandler)
 - [x] `src/iam/rbac.py` — pure predicates: view/modify/assign/close/reopen/comments/admin/dashboard
@@ -93,12 +96,25 @@ Legend: `[x]` done · `[~]` partial · `[ ]` pending
 ## Phase 5 — Notifications + dashboards ✅
 
 - [x] Tasking infrastructure (Kafka producer/consumer + registry)
-- [x] Notification handlers (in-app, email stub, SSE) with idempotency
+- [x] Notification handlers (in-app, email stub, SSE)
+- [x] Participant-aware task notifications: requester/beneficiary + all assigned users are notified
+      for visible task events; private comment notifications stay staff/assignee-only and do not
+      notify beneficiaries/requesters.
+- [x] Comment edit/delete notification publishing added, preserving public/private visibility rules.
 - [x] SSE `/api/notifications/stream` for real-time delivery
 - [x] SLA service + background checker process
-- [x] Dashboard service + materialized views (`mv_dashboard_global_kpis`, `mv_dashboard_sector_kpis`)
+- [x] Dashboard service; headline KPIs now use live aggregate queries instead of stale materialized
+      view reads.
+- [x] Dashboard `closed_today` counts closed tickets with `closed_at` and falls back to `updated_at`
+      for legacy/manual rows where status is `closed` but `closed_at` is missing.
+- [x] Dashboard query invalidation from ticket workflow/review actions so UI counters refresh after changes.
+- [~] Materialized views (`mv_dashboard_global_kpis`, `mv_dashboard_sector_kpis`) still exist in
+      migrations, but runtime dashboard KPI reads no longer depend on them.
 - [x] Frontend dashboards with **Apache ECharts**
 - [x] Header notification dropdown with unread badge
+- [x] Integration coverage added for live dashboard KPIs and notification recipient visibility
+      (`test_dashboard_service.py`, `test_notifications.py`); local execution currently blocked
+      when `testcontainers` is not installed.
 
 ## Phase 6 — Admin module
 
@@ -107,11 +123,18 @@ Legend: `[x]` done · `[~]` partial · `[ ]` pending
 - [x] Review queue is its own dedicated page (`/review/:ticketId`), not a drawer
 - [x] Reviewer restriction: distributors route to a sector; only chief/admin pick the operator
 - [x] Inline status changer (TicketsPage table + ticket detail) with double confirmation
-- [x] Unified `Assign` dropdown + Unassign (workflow_service.unassign + change_status endpoint)
+- [x] Unified `Assign` dropdown + self-only `Unassign me`; targeted user removal uses
+      `remove_assignee` rather than the broad queue-level unassign action.
 - [x] Configurable metadata key catalogue (`metadata_key_definitions`) with per-key option lists
 - [x] Add metadata UI in review (selectable values when key has options, free text otherwise)
 - [x] Audit explorer: per-column filters/sort, quick search, "See graph" with D3 evolution chart
+- [~] Multi-assignment API + model support: `ticket_sectors` / `ticket_assignees`, serializer arrays
+      (`sector_codes`, `assignee_user_ids`), endpoint map entries, service helpers, and frontend client
+      methods are present; remaining UI polish and regression testing are still in progress.
 - [x] Profile page: chief sees a force-graph of their sector members
+- [~] Profile page: "Teams I lead" redesign with maximize/minimize fullscreen view is in progress.
+- [~] Profile page access tree for hierarchical RBAC is planned/in progress so users can see the
+      sectors and members implied by their group tree.
 - [x] Reusable common components: StatusTag, PriorityTag, AuditTimeline, format helpers, StatusChanger
 
 ## Phase 7 — Modern features (MVP-3)
@@ -144,7 +167,10 @@ Legend: `[x]` done · `[~]` partial · `[ ]` pending
 | `tests/integration/test_phase4_services.py` |  3 | ✅ |
 | `tests/integration/test_workflow_acceptance.py` |  3 | ✅ |
 | `tests/integration/test_workflow_concurrency.py` |  1 | ✅ |
-| **Total**                           | **74** | **✅** |
+| `tests/integration/test_rbac_new.py` | 11 | ✅ |
+| `tests/integration/test_dashboard_service.py` | 2 | 🟡 added; requires `testcontainers` locally |
+| `tests/integration/test_notifications.py` | 3 | 🟡 added; requires `testcontainers` locally |
+| **Tracked total**                           | **90** | **🟡 local integration dependency missing in this environment** |
 
 ---
 

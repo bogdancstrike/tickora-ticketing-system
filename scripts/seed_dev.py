@@ -37,8 +37,8 @@ USERS = [
         "first_name": "Ana",
         "last_name": "Admin",
         "type": "internal",
-        "roles": ["tickora_admin", "tickora_internal_user"],
-        "groups": [],
+        "roles": [],
+        "groups": ["/tickora"],
     },
     {
         "username": "bogdan",
@@ -46,8 +46,8 @@ USERS = [
         "first_name": "Bogdan",
         "last_name": "SuperAdmin",
         "type": "internal",
-        "roles": ["tickora_admin", "tickora_auditor", "tickora_distributor", "tickora_internal_user"],
-        "groups": [],
+        "roles": [],
+        "groups": ["/tickora"],
         "keycloak_subject": "93d10567-d264-4b06-948c-c1265d675845",
     },
     {
@@ -74,8 +74,8 @@ USERS = [
         "first_name": "Mihai",
         "last_name": "Chief",
         "type": "internal",
-        "roles": ["tickora_sector_chief", "tickora_sector_member", "tickora_internal_user"],
-        "groups": ["/tickora/sectors/s10/chiefs"],
+        "roles": [],
+        "groups": ["/tickora/sectors/s10"],
     },
     {
         "username": "member.s10",
@@ -143,6 +143,8 @@ def _kc_user(kc, spec: dict) -> str:
 
 
 def _assign_roles(kc, user_id: str, roles: list[str]) -> None:
+    if not roles:
+        return
     role_payloads = [kc.get_realm_role(role) for role in roles]
     kc.assign_realm_roles(user_id, role_payloads)
 
@@ -302,6 +304,7 @@ def seed_database(subjects: dict[str, str]) -> None:
         beneficiaries = {name: _beneficiary(db, user) for name, user in users.items()}
 
         _membership(db, users["chief.s10"], sectors["s10"], "chief")
+        _membership(db, users["chief.s10"], sectors["s10"], "member")
         _membership(db, users["member.s10"], sectors["s10"], "member")
         _membership(db, users["member.s2"], sectors["s2"], "member")
 

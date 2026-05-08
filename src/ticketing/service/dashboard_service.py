@@ -166,7 +166,7 @@ def sla(db: Session, principal: Principal) -> dict[str, Any]:
 def timeseries(db: Session, principal: Principal, *, days: int = 14) -> list[dict[str, Any]]:
     start = _today_start() - timedelta(days=days - 1)
     created_rows = _daily_counts(db, _visible_stmt(principal), Ticket.created_at, start)
-    closed_rows = _daily_counts(db, _visible_stmt(principal), Ticket.closed_at, start)
+    closed_rows = _daily_counts(db, _visible_stmt(principal), _closed_timestamp(), start)
     points = []
     for i in range(days):
         day = (start + timedelta(days=i)).date().isoformat()
@@ -195,11 +195,19 @@ def _today_start() -> datetime:
     return datetime(now.year, now.month, now.day, tzinfo=timezone.utc)
 
 
+def _closed_timestamp():
+    return func.coalesce(
+        Ticket.closed_at,
+        case((Ticket.status == "closed", Ticket.updated_at), else_=None),
+    ).label("closed_timestamp")
+
+
 def _global_kpis(db: Session) -> dict[str, int | float | None]:
     today = _today_start()
+    closed_timestamp = _closed_timestamp()
     active_count = func.sum(case((Ticket.status.in_(ACTIVE_STATUSES), 1), else_=0))
     new_today = func.sum(case((Ticket.created_at >= today, 1), else_=0))
-    closed_today = func.sum(case((Ticket.closed_at >= today, 1), else_=0))
+    closed_today = func.sum(case((closed_timestamp >= today, 1), else_=0))
     sla_breached = func.sum(case((Ticket.sla_status == "breached", 1), else_=0))
     reopened = func.sum(case((Ticket.reopened_count > 0, 1), else_=0))
     avg_assignment = func.avg(
@@ -382,8 +390,12 @@ def _oldest_tickets(
 
 
 def _daily_counts(db: Session, stmt, column, start: datetime) -> dict[str, int]:
-    base = stmt.where(column.is_not(None), column >= start).subquery()
-    col = base.c.get(column.key)
+    base = (
+        stmt.with_only_columns(column.label("bucket_value"))
+        .where(column.is_not(None), column >= start)
+        .subquery()
+    )
+    col = base.c.bucket_value
     day = func.date_trunc("day", col).label("day")
     rows = db.execute(select(day, func.count()).select_from(base).group_by(day)).all()
     return {value.date().isoformat(): int(count) for value, count in rows if value}

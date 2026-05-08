@@ -1,11 +1,12 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import {
-  Card, Descriptions, Row, Col, Statistic, Tag, Typography, Space, Empty, Divider, Avatar,
+  Avatar, Button, Card, Col, Descriptions, Divider, Empty, Flex, Modal, Row, Statistic, Tag, Tooltip, Typography, Space,
   theme as antTheme,
 } from 'antd'
 import {
-  UserOutlined, MailOutlined, SafetyCertificateOutlined, TeamOutlined, CalendarOutlined,
+  CalendarOutlined, CrownOutlined, FullscreenExitOutlined, FullscreenOutlined,
+  MailOutlined, SafetyCertificateOutlined, TeamOutlined, UserOutlined,
 } from '@ant-design/icons'
 import ReactECharts from 'echarts-for-react'
 import { useSessionStore } from '@/stores/sessionStore'
@@ -19,53 +20,191 @@ function initials(first?: string, last?: string, fallback = '?') {
   return ((first?.[0] || '') + (last?.[0] || '')).toUpperCase() || fallback
 }
 
-function ChiefSectorMembers({ sectorCode, name }: { sectorCode: string; name?: string }) {
+function displayUser(user: AssignableUserDto) {
+  return user.username || user.email || user.id
+}
+
+function ChiefSectorMembers({ sectorCode, name, expanded = false }: { sectorCode: string; name?: string; expanded?: boolean }) {
+  const { token } = antTheme.useToken()
   const members = useQuery({
     queryKey: ['sectorMembers', sectorCode],
     queryFn: () => listAssignableUsers(sectorCode),
     staleTime: 60_000,
   })
   const items: AssignableUserDto[] = members.data?.items || []
+  const chiefs = items.filter((u) => u.membership_role === 'chief')
+  const regular = items.filter((u) => u.membership_role !== 'chief')
 
   // Build an org-graph: chief at the centre, members radiating out.
   const option = useMemo(() => {
-    const chiefs = items.filter((u) => u.membership_role === 'chief')
-    const regular = items.filter((u) => u.membership_role !== 'chief')
-    const root = { name: name || sectorCode, value: items.length, symbolSize: 60, itemStyle: { color: '#1677ff' } }
+    const rootName = name || sectorCode
+    const root = {
+      name: rootName,
+      value: items.length,
+      symbolSize: expanded ? 78 : 58,
+      itemStyle: { color: '#1f4f46', borderColor: '#e6f4ff', borderWidth: 3 },
+      label: { color: '#fff', fontWeight: 700 },
+    }
     return {
+      backgroundColor: 'transparent',
       tooltip: { trigger: 'item' },
       series: [{
         type: 'graph',
         layout: 'force',
         roam: true,
-        label: { show: true, position: 'right', fontSize: 11 },
-        force: { repulsion: 240, edgeLength: 90 },
+        emphasis: { focus: 'adjacency' },
+        label: { show: true, position: 'right', fontSize: 11, color: token.colorText },
+        force: { repulsion: expanded ? 520 : 280, edgeLength: expanded ? 135 : 88, gravity: 0.08 },
         data: [
           root,
           ...chiefs.map((u) => ({
-            name: u.username || u.email || u.id,
-            symbolSize: 36,
-            itemStyle: { color: '#fa8c16' },
+            name: displayUser(u),
+            symbolSize: expanded ? 48 : 34,
+            itemStyle: { color: '#b7791f' },
             tooltip: { formatter: 'Chief · ' + (u.email || u.username) },
           })),
           ...regular.map((u) => ({
-            name: u.username || u.email || u.id,
-            symbolSize: 26,
-            itemStyle: { color: '#52c41a' },
+            name: displayUser(u),
+            symbolSize: expanded ? 36 : 25,
+            itemStyle: { color: '#2f7d62' },
             tooltip: { formatter: 'Member · ' + (u.email || u.username) },
           })),
         ],
-        edges: items.map((u) => ({ source: name || sectorCode, target: u.username || u.email || u.id })),
-        lineStyle: { color: 'source', curveness: 0.15, opacity: 0.5 },
+        edges: items.map((u) => ({ source: rootName, target: displayUser(u) })),
+        lineStyle: { color: 'source', curveness: 0.18, opacity: 0.38, width: 1.5 },
       }],
     }
-  }, [items, sectorCode, name])
+  }, [chiefs, expanded, items, name, regular, sectorCode, token.colorText])
 
   return (
-    <div>
-      <ReactECharts option={option} style={{ height: 280 }} />
+    <div style={{
+      border: `1px solid ${token.colorBorderSecondary}`,
+      borderRadius: 8,
+      background: token.colorBgContainer,
+      overflow: 'hidden',
+    }}>
+      <Flex justify="space-between" align="center" wrap="wrap" gap={12}
+            style={{ padding: '12px 14px', borderBottom: `1px solid ${token.colorBorderSecondary}` }}>
+        <Space size={8}>
+          <Typography.Title level={5} style={{ margin: 0 }}>{sectorCode}</Typography.Title>
+          <Tag color="gold">{chiefs.length} chiefs</Tag>
+          <Tag color="green">{regular.length} members</Tag>
+        </Space>
+        <Typography.Text type="secondary" style={{ fontSize: 12 }}>{items.length} visible users</Typography.Text>
+      </Flex>
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: expanded ? 'minmax(0, 1fr) 320px' : 'minmax(0, 1fr)',
+        gap: expanded ? 16 : 0,
+        padding: 12,
+      }}>
+        <div style={{
+          minHeight: expanded ? 520 : 300,
+          borderRadius: 8,
+          background: 'linear-gradient(180deg, rgba(47,125,98,0.08), rgba(31,79,70,0.02))',
+        }}>
+          <ReactECharts option={option} style={{ height: expanded ? 520 : 300 }} />
+        </div>
+        <div style={{ display: expanded ? 'block' : 'none', minWidth: 0 }}>
+          <Typography.Text type="secondary" style={{ fontSize: 12 }}>ROSTER</Typography.Text>
+          <div style={{ display: 'grid', gap: 8, marginTop: 10, maxHeight: 500, overflow: 'auto' }}>
+            {items.map((u) => (
+              <Flex key={`${u.id}-${u.membership_role}`} align="center" justify="space-between" gap={8}
+                    style={{ padding: 10, border: `1px solid ${token.colorBorderSecondary}`, borderRadius: 8 }}>
+                <Space size={8} style={{ minWidth: 0 }}>
+                  <Avatar size={30} style={{ background: u.membership_role === 'chief' ? '#b7791f' : '#2f7d62' }}>
+                    {displayUser(u)[0]?.toUpperCase()}
+                  </Avatar>
+                  <div style={{ minWidth: 0 }}>
+                    <Typography.Text strong ellipsis style={{ display: 'block', maxWidth: 190 }}>{displayUser(u)}</Typography.Text>
+                    <Typography.Text type="secondary" style={{ fontSize: 12 }}>{u.email || u.id}</Typography.Text>
+                  </div>
+                </Space>
+                <Tag color={u.membership_role === 'chief' ? 'gold' : 'green'}>{u.membership_role}</Tag>
+              </Flex>
+            ))}
+          </div>
+        </div>
+      </div>
       {items.length === 0 && <Empty description="No members yet" image={Empty.PRESENTED_IMAGE_SIMPLE} />}
     </div>
+  )
+}
+
+function TeamsILead({
+  sectors,
+}: {
+  sectors: Array<{ sectorCode: string; role: 'member' | 'chief' }>
+}) {
+  const { token } = antTheme.useToken()
+  const [fullscreen, setFullscreen] = useState(false)
+  const content = (expanded: boolean) => (
+    <div style={{ display: 'grid', gap: 16 }}>
+      <Flex wrap="wrap" gap={10}>
+        {sectors.map((s) => (
+          <div key={s.sectorCode} style={{
+            border: `1px solid ${token.colorBorderSecondary}`,
+            borderRadius: 8,
+            padding: '10px 12px',
+            minWidth: 132,
+            background: 'linear-gradient(180deg, rgba(183,121,31,0.10), rgba(47,125,98,0.04))',
+          }}>
+            <Space size={8}>
+              <CrownOutlined style={{ color: '#b7791f' }} />
+              <Typography.Text strong>{s.sectorCode}</Typography.Text>
+            </Space>
+            <div><Typography.Text type="secondary" style={{ fontSize: 12 }}>Lead access</Typography.Text></div>
+          </div>
+        ))}
+      </Flex>
+      <Row gutter={[16, 16]}>
+        {sectors.map((s) => (
+          <Col xs={24} xl={expanded || sectors.length === 1 ? 24 : 12} key={s.sectorCode}>
+            <ChiefSectorMembers sectorCode={s.sectorCode} name={s.sectorCode} expanded={expanded} />
+          </Col>
+        ))}
+      </Row>
+    </div>
+  )
+
+  return (
+    <>
+      <Card
+        title={<Space><UserOutlined /> Teams I lead</Space>}
+        extra={(
+          <Tooltip title="Maximize">
+            <Button type="text" icon={<FullscreenOutlined />} onClick={() => setFullscreen(true)} />
+          </Tooltip>
+        )}
+      >
+        {content(false)}
+      </Card>
+      <Modal
+        open={fullscreen}
+        footer={null}
+        width="100vw"
+        style={{ top: 0, maxWidth: '100vw', minHeight: '100vh', paddingBottom: 0 }}
+        styles={{
+          body: { height: 'calc(100vh - 84px)', overflow: 'auto' },
+        }}
+        closeIcon={null}
+        onCancel={() => setFullscreen(false)}
+        destroyOnHidden
+      >
+        <Flex justify="space-between" align="center" wrap="wrap" gap={12} style={{ marginBottom: 16 }}>
+          <div>
+            <Typography.Title level={3} style={{ margin: 0 }}>Teams I lead</Typography.Title>
+            <Typography.Text type="secondary">Sector leadership map and visible roster</Typography.Text>
+          </div>
+          <Tooltip title="Minimize">
+            <Button icon={<FullscreenExitOutlined />} onClick={() => setFullscreen(false)}>
+              Minimize
+            </Button>
+          </Tooltip>
+        </Flex>
+        {content(true)}
+      </Modal>
+    </>
   )
 }
 
@@ -209,18 +348,7 @@ export function ProfilePage() {
         {/* Chief-only: sector members graph */}
         {chiefSectors.length > 0 && (
           <Col xs={24}>
-            <Card title={<Space><UserOutlined /> Teams I lead</Space>}>
-              <Row gutter={[16, 16]}>
-                {chiefSectors.map((s) => (
-                  <Col xs={24} lg={chiefSectors.length === 1 ? 24 : 12} key={s.sectorCode}>
-                    <div style={{ border: `1px solid ${token.colorBorderSecondary}`, borderRadius: 8, padding: 12 }}>
-                      <Typography.Title level={5} style={{ marginTop: 0 }}>{s.sectorCode}</Typography.Title>
-                      <ChiefSectorMembers sectorCode={s.sectorCode} name={s.sectorCode} />
-                    </div>
-                  </Col>
-                ))}
-              </Row>
-            </Card>
+            <TeamsILead sectors={chiefSectors} />
           </Col>
         )}
       </Row>

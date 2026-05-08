@@ -18,7 +18,7 @@ import {
   createComment, deleteAttachment, deleteComment, downloadAttachmentUrl, getMe,
   getTicket, getTicketOptions, listAssignableUsers, listAttachments, listComments,
   listTicketAudit, listTickets, markDone, registerAttachment, reopenTicket, requestAttachmentUpload,
-  deleteTicket, listTicketMetadata, removeAssignee, removeSector, unassignTicket,
+  deleteTicket, listTicketMetadata, removeAssignee, removeSector,
   type AttachmentDto,
   type TicketDto,
 } from '@/api/tickets'
@@ -154,6 +154,9 @@ function WorkflowActions({ ticket }: { ticket: TicketDto }) {
     form.resetFields()
     await queryClient.invalidateQueries({ queryKey: ['tickets'] })
     await queryClient.invalidateQueries({ queryKey: ['ticket', ticket.id] })
+    await queryClient.invalidateQueries({ queryKey: ['dashboardOverview'] })
+    await queryClient.invalidateQueries({ queryKey: ['dashboardSector'] })
+    await queryClient.invalidateQueries({ queryKey: ['dashboardUser'] })
   }
 
   const run = useMutation({
@@ -161,7 +164,10 @@ function WorkflowActions({ ticket }: { ticket: TicketDto }) {
       if (action === 'assign_to_me') return assignToMe(ticket.id)
       if (action === 'assign_sector') return assignSector(ticket.id, values.sectorCode, values.reason)
       if (action === 'assign_to_user') return assignToUser(ticket.id, values.userId, values.reason)
-      if (action === 'unassign') return unassignTicket(ticket.id, values.reason)
+      if (action === 'unassign_me') {
+        if (!user?.id) throw new Error('No current user')
+        return removeAssignee(ticket.id, user.id)
+      }
       if (action === 'mark_done') return markDone(ticket.id, values.resolution)
       if (action === 'close') return closeTicket(ticket.id)
       if (action === 'reopen') return reopenTicket(ticket.id, values.reason)
@@ -192,12 +198,8 @@ function WorkflowActions({ ticket }: { ticket: TicketDto }) {
   if (canAssignSector(ticket, user)) assignItems.push({ key: 'assign_sector', label: 'Assign to sector…', icon: <RetweetOutlined /> })
   if (canAssignToUser(ticket, user)) assignItems.push({ key: 'assign_to_user', label: 'Assign to user…', icon: <UserSwitchOutlined /> })
 
-  // Unassign visibility: anyone can unassign if they're the current assignee;
-  // admins and the sector chief can also unassign anyone.
-  const isCurrentAssignee = !!user?.id && ticket.assignee_user_id === user.id
-  const isSectorChief = !!user?.sectors?.some((s) => s.sectorCode === ticket.current_sector_code && s.role === 'chief')
-  const canUnassign = !!ticket.assignee_user_id
-    && (isCurrentAssignee || user?.roles.includes('tickora_admin') || isSectorChief)
+  const isCurrentAssignee = !!user?.id && ticketAssigneeIds(ticket).includes(user.id)
+  const canUnassign = isCurrentAssignee
 
   return (
     <>
@@ -222,9 +224,9 @@ function WorkflowActions({ ticket }: { ticket: TicketDto }) {
           <Button
             icon={<UserDeleteOutlined />}
             loading={run.isPending}
-            onClick={() => setModal('unassign')}
+            onClick={() => setModal('unassign_me')}
           >
-            Unassign
+            Unassign me
           </Button>
         )}
         <StatusChanger ticket={ticket} mode="button" />
@@ -288,13 +290,13 @@ function WorkflowActions({ ticket }: { ticket: TicketDto }) {
               <Input.TextArea rows={4} placeholder="How was this ticket resolved?" />
             </Form.Item>
           )}
-          {modal === 'unassign' && (
+          {modal === 'unassign_me' && (
             <Alert type="info" showIcon style={{ marginBottom: 12 }}
-                   message={isCurrentAssignee ? 'Unassign yourself from this ticket' : 'Remove the current assignee'}
-                   description="The ticket will return to the sector queue and stay visible to its current sector." />
+                   message="Remove yourself from this ticket"
+                   description="Only your assignment will be removed. Other assignees stay on the ticket." />
           )}
-          {['assign_sector', 'assign_to_user', 'unassign', 'priority', 'reopen', 'cancel'].includes(modal || '') && (
-            <Form.Item name="reason" label={modal === 'unassign' ? 'Reason (optional)' : 'Reason'}
+          {['assign_sector', 'assign_to_user', 'priority', 'reopen', 'cancel'].includes(modal || '') && (
+            <Form.Item name="reason" label="Reason"
                        rules={['reopen', 'cancel'].includes(modal || '') ? [{ required: true, min: 3 }] : []}>
               <Input.TextArea rows={3} />
             </Form.Item>

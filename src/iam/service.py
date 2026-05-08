@@ -11,6 +11,12 @@ from src.core.redis_client import get_redis
 from src.iam.models import User
 from src.iam.principal import (
     Principal,
+    ROLE_ADMIN,
+    ROLE_AUDITOR,
+    ROLE_DISTRIBUTOR,
+    ROLE_INTERNAL_USER,
+    ROLE_SECTOR_CHIEF,
+    ROLE_SECTOR_MEMBER,
     SectorMembership,
 )
 from framework.commons.logger import logger as log
@@ -18,9 +24,128 @@ from framework.commons.logger import logger as log
 
 # Keycloak group paths under /tickora/sectors/<code>/{members,chiefs}
 _SECTOR_GROUP_PREFIX = "/tickora/sectors/"
+_GLOBAL_TICKORA_GROUPS = {"tickora", "/tickora"}
+_SECTOR_ROLE_GROUPS = {"members", "member", "chiefs", "chief"}
+
+
+def _normalize_group(group: str) -> str:
+    return (group or "").strip()
+
+
+def _normalize_sector_code(code: str) -> str:
+    value = (code or "").strip().lower()
+    if value.startswith("sector") and value[len("sector"):].isdigit():
+        return f"s{value[len('sector'):]}"
+    return value
+
+
+def _sector_membership_from_parts(parts: list[str]) -> list[SectorMembership]:
+    if len(parts) == 1 and parts[0]:
+        code = _normalize_sector_code(parts[0])
+        return [
+            SectorMembership(sector_code=code, role="chief"),
+            SectorMembership(sector_code=code, role="member"),
+        ]
+    if len(parts) != 2:
+        return []
+    code, kind = _normalize_sector_code(parts[0]), parts[1]
+    if not code or kind not in _SECTOR_ROLE_GROUPS:
+        return []
+    if kind in ("chiefs", "chief"):
+        return [SectorMembership(sector_code=code, role="chief")]
+    return [SectorMembership(sector_code=code, role="member")]
 
 
 def _parse_sector_groups(groups: list[str]) -> list[SectorMembership]:
+    out: dict[tuple[str, str], SectorMembership] = {}
+    for g in groups or []:
+        group = _normalize_group(g)
+        memberships: list[SectorMembership] = []
+        if group.startswith(_SECTOR_GROUP_PREFIX):
+            rest = group[len(_SECTOR_GROUP_PREFIX):]          # e.g. "s10/members" or "s10"
+            memberships = _sector_membership_from_parts(rest.strip("/").split("/"))
+        elif group.startswith("/tickora/"):
+            parts = [p for p in group.strip("/").split("/") if p]
+            if len(parts) >= 2 and parts[0] == "tickora" and parts[1] != "sectors":
+                memberships = _sector_membership_from_parts(parts[1:])
+        elif group and group not in _GLOBAL_TICKORA_GROUPS:
+            memberships = _sector_membership_from_parts([group])
+
+        for membership in memberships:
+            out[(membership.sector_code, membership.role)] = membership
+    return list(out.values())
+
+
+def _effective_roles_from_claims(claims: dict[str, Any]) -> frozenset[str]:
+    roles = set((claims.get("realm_access") or {}).get("roles") or [])
+    groups = {_normalize_group(g) for g in claims.get("groups") or []}
+    if groups.intersection(_GLOBAL_TICKORA_GROUPS):
+        roles.update({
+            ROLE_ADMIN,
+            ROLE_AUDITOR,
+            ROLE_DISTRIBUTOR,
+            ROLE_INTERNAL_USER,
+            ROLE_SECTOR_CHIEF,
+            ROLE_SECTOR_MEMBER,
+        })
+    memberships = _parse_sector_groups(list(groups))
+    if memberships:
+        roles.add(ROLE_INTERNAL_USER)
+    if any(m.role == "member" for m in memberships):
+        roles.add(ROLE_SECTOR_MEMBER)
+    if any(m.role == "chief" for m in memberships):
+        roles.update({ROLE_SECTOR_CHIEF, ROLE_SECTOR_MEMBER})
+    return frozenset(roles)
+
+
+def _access_tree(principal: Principal) -> dict[str, Any]:
+    sector_index: dict[str, set[str]] = {}
+    for membership in principal.sector_memberships:
+        sector_index.setdefault(membership.sector_code, set()).add(membership.role)
+    return {
+        "root": principal.username or principal.email or principal.user_id,
+        "full_access": principal.is_admin,
+        "roles": sorted(principal.global_roles),
+        "sectors": [
+            {
+                "sector_code": code,
+                "roles": sorted(roles),
+                "can_see_members": principal.is_admin or "chief" in roles or "member" in roles,
+            }
+            for code, roles in sorted(sector_index.items())
+        ],
+    }
+
+
+def access_tree_for_principal(principal: Principal) -> dict[str, Any]:
+    return _access_tree(principal)
+
+
+def _raw_realm_roles(claims: dict[str, Any]) -> set[str]:
+    return set((claims.get("realm_access") or {}).get("roles") or [])
+
+
+def _user_type_from_roles(roles: set[str]) -> str:
+    if "tickora_external_user" in roles:
+        return "external"
+    return "internal"
+
+
+def _role_names_for_user_type(claims: dict[str, Any]) -> set[str]:
+    roles = _effective_roles_from_claims(claims)
+    if roles:
+        return set(roles)
+    return _raw_realm_roles(claims)
+
+
+def _dedupe_memberships(memberships: list[SectorMembership]) -> tuple[SectorMembership, ...]:
+    return tuple(sorted(
+        {(m.sector_code, m.role): m for m in memberships}.values(),
+        key=lambda m: (m.sector_code, m.role),
+    ))
+
+
+def _legacy_parse_sector_groups(groups: list[str]) -> list[SectorMembership]:
     out: list[SectorMembership] = []
     for g in groups or []:
         if not g.startswith(_SECTOR_GROUP_PREFIX):
@@ -38,10 +163,7 @@ def _parse_sector_groups(groups: list[str]) -> list[SectorMembership]:
 
 
 def _user_type_from_claims(claims: dict[str, Any]) -> str:
-    roles = set(((claims.get("realm_access") or {}).get("roles") or []))
-    if "tickora_external_user" in roles:
-        return "external"
-    return "internal"
+    return _user_type_from_roles(_role_names_for_user_type(claims))
 
 
 def _seconds_until_expiry(claims: dict[str, Any]) -> int:
@@ -154,8 +276,8 @@ def principal_from_claims(claims: dict[str, Any]) -> Principal:
         pass
 
     user = get_or_create_user_from_claims(claims)
-    realm_roles = frozenset((claims.get("realm_access") or {}).get("roles") or [])
-    memberships = _parse_sector_groups(claims.get("groups") or [])
+    realm_roles = _effective_roles_from_claims(claims)
+    memberships = _dedupe_memberships(_parse_sector_groups(claims.get("groups") or []))
 
     principal = Principal(
         user_id          = user.id,
@@ -166,7 +288,7 @@ def principal_from_claims(claims: dict[str, Any]) -> Principal:
         last_name        = user.last_name,
         user_type        = user.user_type,
         global_roles     = realm_roles,
-        sector_memberships = tuple(memberships),
+        sector_memberships = memberships,
     )
     try:
         ttl = _seconds_until_expiry(claims)

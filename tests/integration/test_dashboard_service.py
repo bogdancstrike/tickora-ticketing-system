@@ -43,14 +43,28 @@ def test_global_kpis_use_live_ticket_data(db_session: Session):
     closed.created_at = datetime.now(timezone.utc) - timedelta(days=2)
     closed.closed_at = datetime.now(timezone.utc)
     closed.done_at = closed.closed_at - timedelta(hours=1)
+    closed_without_closed_at = create_ticket(
+        db_session,
+        beneficiary,
+        created_by=requester,
+        current_sector=sector,
+        status="closed",
+    )
+    closed_without_closed_at.created_at = datetime.now(timezone.utc) - timedelta(days=2)
+    closed_without_closed_at.closed_at = None
+    closed_without_closed_at.updated_at = datetime.now(timezone.utc)
     db_session.flush()
 
     after = dashboard_service.global_(db_session, admin)["kpis"]
-    assert after["total_tickets"] == 2
+    assert after["total_tickets"] == 3
     assert after["active_tickets"] == 1
     assert after["new_today"] == 1
-    assert after["closed_today"] == 1
+    assert after["closed_today"] == 2
     assert after["avg_resolution_minutes"] is not None
+
+    today = datetime.now(timezone.utc).date().isoformat()
+    today_point = next(p for p in dashboard_service.timeseries(db_session, admin) if p["date"] == today)
+    assert today_point["closed"] == 2
 
 
 def test_sector_kpis_use_live_ticket_data(db_session: Session):
