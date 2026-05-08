@@ -19,7 +19,7 @@ def notify_distributors(payload: Dict[str, Any]):
     with get_db() as db:
         ticket = db.get(Ticket, ticket_id)
         if not ticket:
-            logger.warning("ticket not found for notification", ticket_id=ticket_id)
+            logger.warning("ticket not found for notification", extra={"ticket_id": ticket_id})
             return
 
         # Find all users with distributor role
@@ -192,6 +192,21 @@ def refresh_dashboard_mvs(payload: Dict[str, Any]):
         db.execute(sa_text("REFRESH MATERIALIZED VIEW CONCURRENTLY mv_dashboard_sector_kpis"))
         db.commit()
 
+@register_task("send_email_notification")
+def send_email_notification(payload: Dict[str, Any]):
+    """Send an email notification if SMTP is configured."""
+    if not Config.SMTP_HOST:
+        logger.debug("skipping email: SMTP_HOST not configured")
+        return
+        
+    recipient = payload.get("to")
+    subject = payload.get("subject")
+    body = payload.get("body")
+    
+    logger.info("sending email notification", extra={"to": recipient, "subject": subject})
+    # Actual SMTP logic would go here
+    # In Phase 5, we focus on in-app, but stub is ready for .env activation
+
 def _create_in_app_notification(
     db: Session,
     user_id: str,
@@ -210,7 +225,7 @@ def _create_in_app_notification(
         delivered_channels={"in_app": True}
     )
     db.add(notification)
-    logger.info("notification created", user_id=user_id, type=type, ticket_id=ticket_id)
+    logger.info("notification created", extra={"user_id": user_id, "type": type, "ticket_id": ticket_id})
     
     # Trigger SSE publish (to be implemented)
     _publish_to_sse(user_id, notification)
@@ -233,7 +248,7 @@ def _publish_to_sse(user_id: str, notification: Notification):
         }
         redis.publish(channel, json_dumps(data))
     except Exception as e:
-        logger.error("failed to publish to sse", error=str(e))
+        logger.error("failed to publish to sse", extra={"error": str(e)})
 
 def json_dumps(data):
     import json

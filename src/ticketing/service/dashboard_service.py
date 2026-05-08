@@ -9,7 +9,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from framework.commons.logger import logger
-from sqlalchemy import case, func, or_, select, text as sa_text
+from sqlalchemy import case, func, or_, select, text as sa_text, cast as sa_cast, Text as sa_Text
 from sqlalchemy.orm import Session
 
 from src.core.errors import NotFoundError, PermissionDeniedError
@@ -283,7 +283,9 @@ def _sector_breakdown(db: Session, *, active_only: bool = False, limit: int | No
 
 
 def _workload(db: Session, sector_id: str) -> list[dict[str, Any]]:
-    assignee = func.coalesce(Ticket.assignee_user_id, "unassigned")
+    # We group by assignee. Coalesce NULL to a placeholder string.
+    # We must cast the column to Text before coalescing with a string to avoid UUID type errors in Postgres.
+    assignee = func.coalesce(sa_cast(Ticket.assignee_user_id, sa_Text), "unassigned")
     done_count = func.sum(case((Ticket.status.in_(DONE_STATUSES), 1), else_=0))
     active_count = func.sum(case((Ticket.status.in_(ACTIVE_STATUSES), 1), else_=0))
     stmt = (

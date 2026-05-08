@@ -19,7 +19,7 @@ def stream(app, operation, request, *, principal: Principal, **kwargs):
         channel = f"notifications:{user_id}"
         pubsub.subscribe(channel)
         
-        logger.info("sse stream started", user_id=user_id)
+        logger.info("sse stream started", extra={"user_id": user_id})
         
         # Send initial heartbeat or connection confirmation
         yield f"data: {json.dumps({'type': 'connection', 'status': 'connected'})}\n\n"
@@ -36,10 +36,10 @@ def stream(app, operation, request, *, principal: Principal, **kwargs):
                     # Heartbeat to keep connection alive
                     yield ": heartbeat\n\n"
         except Exception as e:
-            logger.error("sse stream error", user_id=user_id, error=str(e))
+            logger.error("sse stream error", extra={"user_id": user_id, "error": str(e)})
         finally:
             pubsub.unsubscribe(channel)
-            logger.info("sse stream closed", user_id=user_id)
+            logger.info("sse stream closed", extra={"user_id": user_id})
 
     return Response(
         stream_with_context(event_stream()),

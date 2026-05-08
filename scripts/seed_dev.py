@@ -17,7 +17,7 @@ from sqlalchemy import select
 from scripts.keycloak_bootstrap import REALM, admin, ensure_realm, main as bootstrap_keycloak
 from src.core.db import get_db
 from src.iam.models import User
-from src.ticketing.models import Beneficiary, Sector, SectorMembership, Ticket, TicketComment
+from src.ticketing.models import Beneficiary, Sector, SectorMembership, Ticket, TicketComment, TicketMetadata
 
 PASSWORD = "Tickora123!"
 
@@ -39,6 +39,16 @@ USERS = [
         "type": "internal",
         "roles": ["tickora_admin", "tickora_internal_user"],
         "groups": [],
+    },
+    {
+        "username": "bogdan",
+        "email": "bogdan@tickora.local",
+        "first_name": "Bogdan",
+        "last_name": "SuperAdmin",
+        "type": "internal",
+        "roles": ["tickora_admin", "tickora_auditor", "tickora_distributor", "tickora_internal_user"],
+        "groups": [],
+        "keycloak_subject": "93d10567-d264-4b06-948c-c1265d675845",
     },
     {
         "username": "auditor",

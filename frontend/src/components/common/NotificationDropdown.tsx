@@ -20,9 +20,10 @@ export function NotificationDropdown() {
   const user = useSessionStore(s => s.user)
 
   useEffect(() => {
-    if (!user) return
+    const token = useSessionStore.getState().token
+    if (!user || !token) return
 
-    const eventSource = new EventSource(`${API_BASE}/api/notifications/stream`, {
+    const eventSource = new EventSource(`${API_BASE}/api/notifications/stream?access_token=${token}`, {
       withCredentials: true,
     })
 
