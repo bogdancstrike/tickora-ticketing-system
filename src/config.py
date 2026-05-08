@@ -64,6 +64,7 @@ class Config:
     KAFKA_IDLE_SLEEP_SEC          = float(os.getenv("KAFKA_IDLE_SLEEP_SEC", "0"))
     KAFKA_COMMIT_TICK_SEC         = float(os.getenv("KAFKA_COMMIT_TICK_SEC", "0.2"))
     KAFKA_MAX_JOBS_PER_TP_PER_TICK = int(os.getenv("KAFKA_MAX_JOBS_PER_TP_PER_TICK", "20"))
+    INLINE_TASKS_IN_DEV            = _bool("INLINE_TASKS_IN_DEV", DEV_MODE)
 
     # ── MinIO / S3 ─────────────────────────────────────────────────────────
     S3_ENDPOINT_URL   = os.getenv("S3_ENDPOINT_URL", "http://localhost:9000")

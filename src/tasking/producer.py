@@ -7,6 +7,7 @@ from kafka import KafkaProducer
 from framework.commons.logger import logger
 from src.config import Config
 from src.core.correlation import get_correlation_id
+from src.core.db import enqueue_after_commit
 
 _PRODUCER_LOCK = threading.Lock()
 _PRODUCER: Optional[KafkaProducer] = None
@@ -38,6 +39,20 @@ def publish(task_name: str, payload: Dict[str, Any], topic: Optional[str] = None
         "payload": payload,
         "correlation_id": get_correlation_id(),
     }
+
+    if Config.INLINE_TASKS_IN_DEV:
+        def run_inline() -> None:
+            try:
+                _ensure_local_handlers_registered()
+                from src.tasking.registry import get_handler
+                logger.info("executing task inline", extra={"task_name": task_name})
+                get_handler(task_name)(payload)
+            except Exception as exc:
+                logger.error("inline task failed", extra={"task_name": task_name, "error": str(exc)})
+
+        enqueue_after_commit(run_inline)
+        logger.debug("task queued for inline execution", extra={"task_name": task_name})
+        return
     
     try:
         producer = _get_producer()
@@ -53,3 +68,10 @@ def publish(task_name: str, payload: Dict[str, Any], topic: Optional[str] = None
         # Depending on criticality, we might want to raise here
         # or rely on recovery.py for retry logic if we persisted it.
         raise
+
+
+def _ensure_local_handlers_registered() -> None:
+    # Import task modules for API/dev inline execution. The worker does this at
+    # process startup; API-only dev runs need the same registration before a
+    # queued task can be executed without Kafka.
+    import src.ticketing.notifications  # noqa: F401

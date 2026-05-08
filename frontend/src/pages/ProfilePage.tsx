@@ -251,7 +251,6 @@ export function ProfilePage() {
             <Divider style={{ margin: '16px 0' }} />
             <Descriptions size="small" column={1}>
               <Descriptions.Item label="Username"><Typography.Text code>{user.username || '—'}</Typography.Text></Descriptions.Item>
-              <Descriptions.Item label="User ID"><Typography.Text type="secondary" style={{ fontSize: 11 }}>{user.id}</Typography.Text></Descriptions.Item>
             </Descriptions>
           </Card>
         </Col>

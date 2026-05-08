@@ -1,5 +1,6 @@
 """SQLAlchemy engine, session factory, and request-scoped context manager."""
 from contextlib import contextmanager
+from contextvars import ContextVar
 from typing import Iterator
 
 from sqlalchemy import create_engine
@@ -22,19 +23,37 @@ _engine = create_engine(
 )
 
 _SessionFactory = sessionmaker(bind=_engine, autoflush=False, autocommit=False, future=True)
+_CURRENT_SESSION: ContextVar[Session | None] = ContextVar("tickora_current_session", default=None)
+
+
+def current_session() -> Session | None:
+    return _CURRENT_SESSION.get()
+
+
+def enqueue_after_commit(task) -> None:
+    session = current_session()
+    if session is None:
+        task()
+        return
+    session.info.setdefault("after_commit_tasks", []).append(task)
 
 
 @contextmanager
 def get_db() -> Iterator[Session]:
     """Yield a Session, commit on success, rollback on error, always close."""
     session = _SessionFactory()
+    token = _CURRENT_SESSION.set(session)
     try:
         yield session
         session.commit()
+        tasks = list(session.info.pop("after_commit_tasks", []))
+        for task in tasks:
+            task()
     except Exception:
         session.rollback()
         raise
     finally:
+        _CURRENT_SESSION.reset(token)
         session.close()
 
 
