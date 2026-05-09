@@ -244,6 +244,7 @@ function AuditWidget({ config }: { config: any }) {
 
 function RecentCommentsWidget({ config }: { config: any }) {
   const navigate = useNavigate()
+  const { token } = antTheme.useToken()
   const { data, isLoading } = useQuery({
     queryKey: ['widgetComments', config.ticketId],
     queryFn: () => config.ticketId ? listComments(config.ticketId) : Promise.resolve({ items: [] }),
@@ -395,17 +396,17 @@ function WelcomeWidget() {
 function SlaOverviewWidget() {
   const { data } = useQuery({
     queryKey: ['monitorOverview'],
-    queryFn: getMonitorOverview,
+    queryFn: () => getMonitorOverview(),
   })
   
   return (
     <div style={{ padding: 16 }}>
       <Row gutter={16}>
         <Col span={12}>
-           <Statistic title="Breached" value={data?.global?.kpis.sla_breached ?? 0} valueStyle={{ color: '#cf1322' }} />
+           <Statistic title="Breached" value={data?.global?.kpis.sla_breached ?? 0} styles={{ content: { color: '#cf1322' } }} />
         </Col>
         <Col span={12}>
-           <Statistic title="Critical" value={data?.distributor?.kpis.critical_pending ?? 0} valueStyle={{ color: '#d46b08' }} />
+           <Statistic title="Critical" value={data?.distributor?.kpis.critical_pending ?? 0} styles={{ content: { color: '#d46b08' } }} />
         </Col>
       </Row>
     </div>
@@ -470,6 +471,7 @@ function UserWorkloadWidget({ config }: { config: any }) {
 
 function StaleTicketsWidget({ config }: { config: any }) {
     const navigate = useNavigate()
+    const { token } = antTheme.useToken()
     const { data, isLoading } = useQuery<any>({
         queryKey: ['monitorStale', config.sectorCode, config.hours],
         queryFn: () => config.sectorCode ? getMonitorSector(config.sectorCode) : getMonitorOverview(),

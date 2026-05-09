@@ -1,4 +1,3 @@
-"""Customizable dashboards and widgets service."""
 from __future__ import annotations
 
 from datetime import datetime, timezone
@@ -14,8 +13,14 @@ from src.ticketing.service.ticket_service import _visibility_filter
 from src.ticketing.state_machine import ACTIVE_STATUSES
 
 
+def get_setting(db: Session, key: str, default: Any = None) -> Any:
+    """Helper to fetch a global system setting from the database."""
+    s = db.get(SystemSetting, key)
+    return s.value if s else default
+
 
 def _visible_stmt(principal: Principal):
+    """Helper to build a visible-ticket statement for the current principal."""
     stmt = select(Ticket).where(Ticket.is_deleted.is_(False))
     vis = _visibility_filter(principal)
     if vis is not None:
@@ -24,18 +29,25 @@ def _visible_stmt(principal: Principal):
 
 
 def _check_dashboard_access(p: Principal) -> None:
+    """RBAC check: currently all authenticated users can manage their own dashboards."""
     # Everyone is allowed to have dashboards now.
     pass
 
 
 def list_dashboards(db: Session, p: Principal) -> list[dict[str, Any]]:
+    """List all dashboards owned by the given principal."""
     _check_dashboard_access(p)
-    stmt = select(CustomDashboard).where(CustomDashboard.owner_user_id == p.user_id).order_by(CustomDashboard.created_at.desc())
+    stmt = (
+        select(CustomDashboard)
+        .where(CustomDashboard.owner_user_id == p.user_id)
+        .order_by(CustomDashboard.created_at.desc())
+    )
     rows = list(db.scalars(stmt))
     return [_serialize_dashboard(r) for r in rows]
 
 
 def get_dashboard(db: Session, p: Principal, dashboard_id: str) -> dict[str, Any]:
+    """Retrieve a full dashboard with all its widgets."""
     _check_dashboard_access(p)
     d = db.get(CustomDashboard, dashboard_id)
     if d is None or d.owner_user_id != p.user_id:
@@ -44,6 +56,7 @@ def get_dashboard(db: Session, p: Principal, dashboard_id: str) -> dict[str, Any
 
 
 def create_dashboard(db: Session, p: Principal, payload: dict[str, Any]) -> dict[str, Any]:
+    """Create a new custom dashboard."""
     _check_dashboard_access(p)
     title = str(payload.get("title") or "New Dashboard").strip()
     
@@ -59,6 +72,7 @@ def create_dashboard(db: Session, p: Principal, payload: dict[str, Any]) -> dict
 
 
 def update_dashboard(db: Session, p: Principal, dashboard_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+    """Update dashboard metadata."""
     _check_dashboard_access(p)
     d = db.get(CustomDashboard, dashboard_id)
     if d is None or d.owner_user_id != p.user_id:
@@ -76,6 +90,7 @@ def update_dashboard(db: Session, p: Principal, dashboard_id: str, payload: dict
 
 
 def delete_dashboard(db: Session, p: Principal, dashboard_id: str) -> None:
+    """Permanently delete a dashboard and its widgets."""
     _check_dashboard_access(p)
     d = db.get(CustomDashboard, dashboard_id)
     if d is None or d.owner_user_id != p.user_id:
@@ -85,45 +100,35 @@ def delete_dashboard(db: Session, p: Principal, dashboard_id: str) -> None:
 
 
 def upsert_widget(db: Session, p: Principal, dashboard_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+    """Create or update a widget configuration within a dashboard."""
     _check_dashboard_access(p)
     d = db.get(CustomDashboard, dashboard_id)
     if d is None or d.owner_user_id != p.user_id:
         raise NotFoundError("dashboard not found")
-    
+
     widget_id = payload.get("id")
-    w = None
     if widget_id:
         w = db.get(DashboardWidget, widget_id)
-        if w and w.dashboard_id != d.id:
-            w = None
-    
-    if w is None:
+        if w is None or w.dashboard_id != d.id:
+            raise NotFoundError("widget not found")
+    else:
         w = DashboardWidget(dashboard_id=d.id, type=payload["type"])
         db.add(w)
-    
-    if "title" in payload:
-        w.title = payload["title"]
-    if "config" in payload:
-        w.config = payload["config"] or {}
-    if "x" in payload: w.x = int(payload["x"])
-    if "y" in payload: w.y = int(payload["y"])
-    if "w" in payload: w.w = int(payload["w"])
-    if "h" in payload: w.h = int(payload["h"])
-    
+
+    for field in ("title", "config", "x", "y", "w", "h"):
+        if field in payload:
+            setattr(w, field, payload[field])
+
     db.flush()
     return _serialize_widget(w)
 
 
 def delete_widget(db: Session, p: Principal, dashboard_id: str, widget_id: str) -> None:
+    """Remove a specific widget from a dashboard."""
     _check_dashboard_access(p)
     w = db.get(DashboardWidget, widget_id)
     if w is None or w.dashboard_id != dashboard_id:
         raise NotFoundError("widget not found")
-    
-    d = db.get(CustomDashboard, w.dashboard_id)
-    if d.owner_user_id != p.user_id:
-        raise PermissionDeniedError("not allowed")
-    
     db.delete(w)
     db.flush()
 
@@ -164,8 +169,6 @@ def sync_widget_catalogue(db: Session) -> None:
         wd.display_name = name
         wd.description = desc
         wd.icon = icon
-        wd.is_active = True
-    
     db.flush()
 
 
@@ -208,7 +211,7 @@ def auto_configure_dashboard(db: Session, p: Principal, dashboard_id: str, mode:
     elif p.is_internal:
         widgets_to_add.extend([
             {"type": "monitor_kpi", "x": 4, "y": 0, "w": 8, "h": 3, "config": {"scope": "personal"}},
-            {"type": "ticket_list", "x": 0, "y": 3, "w": 8, "h": 4, "title": "My Ticket Queue", "config": {"scope": "personal"}},
+            {"type": "ticket_list", "x": 0, "y": 3, "w": 8, "h": 4, "title": "My Active Queue", "config": {"scope": "personal"}},
             {"type": "recent_comments", "x": 8, "y": 3, "w": 4, "h": 4, "config": {"scope": "personal"}},
         ])
     else:  # Beneficiary
@@ -260,6 +263,7 @@ def auto_configure_dashboard(db: Session, p: Principal, dashboard_id: str, mode:
 
 
 def _serialize_dashboard(d: CustomDashboard, full: bool = False) -> dict[str, Any]:
+    """Serialize a dashboard instance to a dict."""
     res = {
         "id": d.id,
         "title": d.title,
@@ -275,37 +279,12 @@ def _serialize_dashboard(d: CustomDashboard, full: bool = False) -> dict[str, An
 
 
 def _serialize_widget(w: DashboardWidget) -> dict[str, Any]:
+    """Serialize a widget instance to a dict."""
     return {
         "id": w.id,
         "type": w.type,
         "title": w.title,
         "config": w.config,
-        "x": w.x,
-        "y": w.y,
-        "w": w.w,
-        "h": w.h,
-    }
- w.config,
-        "x": w.x,
-        "y": w.y,
-        "w": w.w,
-        "h": w.h,
-    }
-n res
-
-
-def _serialize_widget(w: DashboardWidget) -> dict[str, Any]:
-    return {
-        "id": w.id,
-        "type": w.type,
-        "title": w.title,
-        "config": w.config,
-        "x": w.x,
-        "y": w.y,
-        "w": w.w,
-        "h": w.h,
-    }
- w.config,
         "x": w.x,
         "y": w.y,
         "w": w.w,

@@ -221,10 +221,9 @@ def seed_database(subjects: dict[str, str]) -> None:
             if u.username in ["member.s10", "chief.s10"]: _membership(db, u, sectors[5], "member")
             if u.username == "member.s2": _membership(db, u, sectors[1], "member")
         
-        db.execute(text("TRUNCATE tickets, ticket_comments, ticket_status_history, ticket_metadata CASCADE"))
-        db.commit()
+        db.execute(text("TRUNCATE tickets, ticket_comments, ticket_status_history, ticket_metadatas CASCADE"))
+        db.flush()
 
-    with get_db() as db:
         print(f"[db] seeding 500 tickets...")
         now = datetime.now(timezone.utc)
         all_st = list(ALL_STATUSES)
@@ -251,7 +250,7 @@ def seed_database(subjects: dict[str, str]) -> None:
                 finished_at = created_at + timedelta(hours=random.randint(1, 48))
 
             t = Ticket(
-                ticket_code=f"TK-MOCK-{i:06d}",
+                ticket_code=f"TK-SEED-{i:06d}",
                 title=fake.sentence(nb_words=6),
                 txt=fake.paragraph(nb_sentences=3),
                 status=status,

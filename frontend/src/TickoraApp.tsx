@@ -3,6 +3,7 @@ import type { ReactNode } from 'react'
 import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom'
 import {
   ConfigProvider, Layout, Menu, theme as antTheme, Typography, Space, Button, Tooltip, Dropdown, Grid, Drawer,
+  App,
 } from 'antd'
 import {
   LineChartOutlined, UnorderedListOutlined, CheckSquareOutlined, AuditOutlined, SettingOutlined,
@@ -279,40 +280,42 @@ function useBackendSessionBootstrap() {
 function Shell() {
   useBackendSessionBootstrap()
   return (
-    <Layout style={{ height: '100vh' }}>
-      <AppSidebar />
-      <Layout>
-        <AppHeader />
-        <Content style={{ overflow: 'auto' }}>
-          <Routes>
-            <Route path="/"          element={<Navigate to="/tickets" replace />} />
-            <Route path="/monitor"   element={<MonitorPage />} />
-            <Route path="/dashboard" element={<DashboardPage />} />
-            <Route path="/tickets"   element={<TicketsPage />} />
-            <Route path="/tickets/:ticketId" element={<TicketDetailPage />} />
-            <Route path="/create"    element={<CreateTicketPage />} />
-            <Route path="/profile"   element={<ProfilePage />} />
-            <Route
-              path="/review"
-              element={<RequireRole roles={[ROLE_ADMIN, ROLE_DISTRIBUTOR]}><ReviewTicketsPage /></RequireRole>}
-            />
-            <Route
-              path="/review/:ticketId"
-              element={<RequireRole roles={[ROLE_ADMIN, ROLE_DISTRIBUTOR]}><ReviewTicketPage /></RequireRole>}
-            />
-            <Route
-              path="/audit"
-              element={<RequireRole roles={[ROLE_ADMIN, ROLE_AUDITOR]}><AuditExplorerPage /></RequireRole>}
-            />
-            <Route
-              path="/admin"
-              element={<RequireRootGroup><AdminPage /></RequireRootGroup>}
-            />
-            <Route path="*"          element={<Navigate to="/tickets" replace />} />
-          </Routes>
-        </Content>
+    <App>
+      <Layout style={{ height: '100vh' }}>
+        <AppSidebar />
+        <Layout>
+          <AppHeader />
+          <Content style={{ overflow: 'auto' }}>
+            <Routes>
+              <Route path="/"          element={<Navigate to="/tickets" replace />} />
+              <Route path="/monitor"   element={<MonitorPage />} />
+              <Route path="/dashboard" element={<DashboardPage />} />
+              <Route path="/tickets"   element={<TicketsPage />} />
+              <Route path="/tickets/:ticketId" element={<TicketDetailPage />} />
+              <Route path="/create"    element={<CreateTicketPage />} />
+              <Route path="/profile"   element={<ProfilePage />} />
+              <Route
+                path="/review"
+                element={<RequireRole roles={[ROLE_ADMIN, ROLE_DISTRIBUTOR]}><ReviewTicketsPage /></RequireRole>}
+              />
+              <Route
+                path="/review/:ticketId"
+                element={<RequireRole roles={[ROLE_ADMIN, ROLE_DISTRIBUTOR]}><ReviewTicketPage /></RequireRole>}
+              />
+              <Route
+                path="/audit"
+                element={<RequireRole roles={[ROLE_ADMIN, ROLE_AUDITOR]}><AuditExplorerPage /></RequireRole>}
+              />
+              <Route
+                path="/admin"
+                element={<RequireRootGroup><AdminPage /></RequireRootGroup>}
+              />
+              <Route path="*"          element={<Navigate to="/tickets" replace />} />
+            </Routes>
+          </Content>
+        </Layout>
       </Layout>
-    </Layout>
+    </App>
   )
 }
 
