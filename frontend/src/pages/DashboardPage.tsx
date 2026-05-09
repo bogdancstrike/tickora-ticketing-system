@@ -38,7 +38,8 @@ function BreakdownChart({ data, title, color = '#1677ff' }: { data: DashboardBre
 
   const option = {
     tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
-    grid: { left: '3%', right: '4%', bottom: '3%', top: '10%', containLabel: true },
+    legend: { top: 0, data: [title] },
+    grid: { left: '3%', right: '4%', bottom: '3%', top: 34, containLabel: true },
     xAxis: { type: 'category', data: data.map((i) => labelize(i.key)), axisTick: { alignWithLabel: true } },
     yAxis: { type: 'value' },
     series: [{ name: title, type: 'bar', barWidth: '60%', data: data.map((i) => i.count), itemStyle: { color, borderRadius: [4, 4, 0, 0] } }],
@@ -65,11 +66,16 @@ function DoughnutChart({ data, title }: { data: DashboardBreakdown[]; title: str
   return <ReactECharts option={option} style={{ height: 240 }} />
 }
 
-function ChartPanel({ title, children }: { title: string; children: React.ReactNode }) {
+function ChartPanel({ title, description, children }: { title: string; description?: string; children: React.ReactNode }) {
   const { token } = antTheme.useToken()
   return (
     <div style={{ border: `1px solid ${token.colorBorderSecondary}`, borderRadius: 8, padding: 16, minHeight: 286 }}>
       <Typography.Title level={5} style={{ marginTop: 0 }}>{title}</Typography.Title>
+      {description && (
+        <Typography.Text type="secondary" style={{ display: 'block', marginTop: -4, marginBottom: 8, fontSize: 12 }}>
+          {description}
+        </Typography.Text>
+      )}
       {children}
     </div>
   )
@@ -106,10 +112,10 @@ function SectorPanel({ sector }: { sector: DashboardSector }) {
       </div>
       <KpiGrid values={sector.kpis} />
       <Row gutter={[16, 16]}>
-        <Col xs={24} xl={8}><ChartPanel title="Status"><BreakdownChart data={sector.by_status} title="Status" /></ChartPanel></Col>
-        <Col xs={24} xl={8}><ChartPanel title="Priority"><BreakdownChart data={sector.by_priority} title="Priority" color="#fa8c16" /></ChartPanel></Col>
-        <Col xs={24} xl={8}><ChartPanel title="Oldest Active"><OldestTickets tickets={sector.oldest} /></ChartPanel></Col>
-        <Col xs={24}><ChartPanel title="Workload"><Table rowKey="assignee_user_id" size="small" pagination={false} columns={columns} dataSource={sector.workload} /></ChartPanel></Col>
+        <Col xs={24} xl={8}><ChartPanel title="Status" description="Tickets currently routed to this sector, grouped by workflow status."><BreakdownChart data={sector.by_status} title="Tickets" /></ChartPanel></Col>
+        <Col xs={24} xl={8}><ChartPanel title="Priority" description="Tickets currently routed to this sector, grouped by priority."><BreakdownChart data={sector.by_priority} title="Tickets" color="#fa8c16" /></ChartPanel></Col>
+        <Col xs={24} xl={8}><ChartPanel title="Oldest Active" description="Oldest open tickets in this sector queue."><OldestTickets tickets={sector.oldest} /></ChartPanel></Col>
+        <Col xs={24}><ChartPanel title="Workload" description="Active and completed tickets by assignee in this sector."><Table rowKey="assignee_user_id" size="small" pagination={false} columns={columns} dataSource={sector.workload} /></ChartPanel></Col>
       </Row>
     </div>
   )
@@ -203,17 +209,17 @@ export function DashboardPage() {
         <div style={{ display: 'grid', gap: 16 }}>
           <KpiGrid values={overview.data.global.kpis} />
           <Row gutter={[16, 16]}>
-            <Col xs={24} xl={8}><ChartPanel title="Status"><BreakdownChart data={overview.data.global.by_status} title="Status" /></ChartPanel></Col>
-            <Col xs={24} xl={8}><ChartPanel title="Priority"><BreakdownChart data={overview.data.global.by_priority} title="Priority" color="#fa8c16" /></ChartPanel></Col>
-            <Col xs={24} xl={8}><ChartPanel title="Beneficiary Type"><BreakdownChart data={overview.data.global.by_beneficiary_type} title="Beneficiary Type" color="#52c41a" /></ChartPanel></Col>
+            <Col xs={24} xl={8}><ChartPanel title="Status" description="All non-deleted tickets grouped by workflow status."><BreakdownChart data={overview.data.global.by_status} title="Tickets" /></ChartPanel></Col>
+            <Col xs={24} xl={8}><ChartPanel title="Priority" description="All non-deleted tickets grouped by priority."><BreakdownChart data={overview.data.global.by_priority} title="Tickets" color="#fa8c16" /></ChartPanel></Col>
+            <Col xs={24} xl={8}><ChartPanel title="Beneficiary Type" description="All non-deleted tickets grouped by requester type."><BreakdownChart data={overview.data.global.by_beneficiary_type} title="Tickets" color="#52c41a" /></ChartPanel></Col>
             {overview.data.global.by_category?.length ? (
-              <Col xs={24} xl={12}><ChartPanel title="Categories"><DoughnutChart data={overview.data.global.by_category} title="Category" /></ChartPanel></Col>
+              <Col xs={24} xl={12}><ChartPanel title="Categories" description="All non-deleted tickets grouped by category."><DoughnutChart data={overview.data.global.by_category} title="Tickets" /></ChartPanel></Col>
             ) : null}
             {overview.data.global.by_sector?.length ? (
-              <Col xs={24} xl={12}><ChartPanel title="Volume by sector">
+              <Col xs={24} xl={12}><ChartPanel title="Total tickets by sector" description="All non-deleted tickets grouped by current sector, including open and closed tickets.">
                 <BreakdownChart
                   data={overview.data.global.by_sector.map((s) => ({ key: s.sector_code, count: s.count }))}
-                  title="Sector"
+                  title="Tickets"
                   color="#13a8a8"
                 />
               </ChartPanel></Col>
@@ -229,8 +235,8 @@ export function DashboardPage() {
         <div style={{ display: 'grid', gap: 16 }}>
           <KpiGrid values={overview.data.distributor.kpis} />
           <Row gutter={[16, 16]}>
-            <Col xs={24} xl={12}><ChartPanel title="Pending Priority"><BreakdownChart data={overview.data.distributor.by_priority} title="Priority" color="#fa8c16" /></ChartPanel></Col>
-            <Col xs={24} xl={12}><ChartPanel title="Oldest Review Items"><OldestTickets tickets={overview.data.distributor.oldest} /></ChartPanel></Col>
+            <Col xs={24} xl={12}><ChartPanel title="Pending Priority" description="Tickets waiting for distribution or sector assignment, grouped by priority."><BreakdownChart data={overview.data.distributor.by_priority} title="Tickets" color="#fa8c16" /></ChartPanel></Col>
+            <Col xs={24} xl={12}><ChartPanel title="Oldest Review Items" description="Oldest tickets still waiting in the distribution queue."><OldestTickets tickets={overview.data.distributor.oldest} /></ChartPanel></Col>
           </Row>
         </div>
       ),
@@ -248,8 +254,8 @@ export function DashboardPage() {
           <Typography.Text type="secondary">{personal.username || personal.email || personal.user_id}</Typography.Text>
           <KpiGrid values={personal.kpis} />
           <Row gutter={[16, 16]}>
-            <Col xs={24} xl={12}><ChartPanel title="User Status"><BreakdownChart data={personal.by_status} title="Status" /></ChartPanel></Col>
-            <Col xs={24} xl={12}><ChartPanel title="Oldest Assigned"><OldestTickets tickets={personal.oldest} /></ChartPanel></Col>
+            <Col xs={24} xl={12}><ChartPanel title="User Status" description="Visible tickets involving the selected user, grouped by status."><BreakdownChart data={personal.by_status} title="Tickets" /></ChartPanel></Col>
+            <Col xs={24} xl={12}><ChartPanel title="Oldest Assigned" description="Oldest active tickets assigned to the selected user."><OldestTickets tickets={personal.oldest} /></ChartPanel></Col>
           </Row>
         </div>
       ),
@@ -260,7 +266,7 @@ export function DashboardPage() {
       children: (
         <div style={{ display: 'grid', gap: 16 }}>
           <KpiGrid values={overview.data.beneficiary.kpis} />
-          <ChartPanel title="Requester Status"><BreakdownChart data={overview.data.beneficiary.by_status} title="Status" /></ChartPanel>
+          <ChartPanel title="Requester Status" description="Tickets created by or linked to you as requester, grouped by status."><BreakdownChart data={overview.data.beneficiary.by_status} title="Tickets" /></ChartPanel>
         </div>
       ),
     },
@@ -315,6 +321,9 @@ export function DashboardPage() {
       {timeseriesOption && (
         <div style={{ border: `1px solid ${token.colorBorderSecondary}`, borderRadius: 8, padding: 16, minHeight: 280 }}>
           <Typography.Title level={5} style={{ marginTop: 0 }}>Created vs Closed · last 30 days</Typography.Title>
+          <Typography.Text type="secondary" style={{ display: 'block', marginTop: -4, marginBottom: 8, fontSize: 12 }}>
+            Daily ticket creation and closure counts visible to your role.
+          </Typography.Text>
           <ReactECharts option={timeseriesOption} style={{ height: 260 }} />
         </div>
       )}

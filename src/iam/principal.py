@@ -33,6 +33,7 @@ class Principal:
     user_type: str = "internal"                    # "internal" | "external"
     global_roles: frozenset[str] = field(default_factory=frozenset)
     sector_memberships: tuple[SectorMembership, ...] = ()
+    has_root_group: bool = False                    # exact /tickora group only
 
     # ── Role helpers ───────────────────────────────────────────────────────
     @property

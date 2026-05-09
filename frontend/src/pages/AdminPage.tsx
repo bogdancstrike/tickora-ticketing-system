@@ -87,20 +87,33 @@ function OverviewTab() {
           </Panel>
         </Col>
         <Col xs={24} xl={12}>
-          <Panel title="Recent audit">
+          <Panel title="SLA posture" icon={<SafetyCertificateOutlined />}>
+            <MetricPanel values={{ breached: overview.data?.sla.breached, due_24h: overview.data?.sla.due_24h }} />
+            <div style={{ marginTop: 12 }}>
+              <BarChart data={overview.data?.sla.by_status || []} title="Tickets by SLA status" color="#f5222d" />
+            </div>
+          </Panel>
+        </Col>
+        <Col xs={24} xl={12}>
+          <Panel title="Backlog sectors" icon={<ApartmentOutlined />}>
             <List
               size="small"
-              dataSource={overview.data?.recent_audit || []}
-              locale={{ emptyText: <Empty description="No audit events" image={Empty.PRESENTED_IMAGE_SIMPLE} /> }}
+              dataSource={overview.data?.global_dashboard.top_backlog_sectors || []}
+              locale={{ emptyText: <Empty description="No backlog sectors" image={Empty.PRESENTED_IMAGE_SIMPLE} /> }}
               renderItem={(item) => (
                 <List.Item>
                   <List.Item.Meta
-                    title={<Space><Tag>{item.action}</Tag><Typography.Text>{item.actor_username || 'system'}</Typography.Text></Space>}
-                    description={`${item.entity_type}${item.ticket_id ? ` · ${item.ticket_id}` : ''}`}
+                    title={<Space><Tag>{item.sector_code}</Tag><Typography.Text>{item.sector_name}</Typography.Text></Space>}
+                    description={`${item.count} active tickets`}
                   />
                 </List.Item>
               )}
             />
+          </Panel>
+        </Col>
+        <Col xs={24}>
+          <Panel title="Platform configuration" icon={<DatabaseOutlined />}>
+            <MetricPanel values={overview.data?.system || {}} />
           </Panel>
         </Col>
       </Row>

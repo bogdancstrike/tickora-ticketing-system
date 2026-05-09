@@ -79,6 +79,11 @@ def _effective_roles_from_claims(claims: dict[str, Any]) -> frozenset[str]:
     return frozenset(roles)
 
 
+def _has_root_tickora_group(claims: dict[str, Any]) -> bool:
+    groups = {_normalize_group(g) for g in claims.get("groups") or []}
+    return bool(groups.intersection(_GLOBAL_TICKORA_GROUPS))
+
+
 def _access_tree(principal: Principal) -> dict[str, Any]:
     sector_index: dict[str, set[str]] = {}
     for membership in principal.sector_memberships:
@@ -178,6 +183,7 @@ def _principal_to_cache(p: Principal) -> str:
         "last_name": p.last_name,
         "user_type": p.user_type,
         "global_roles": sorted(p.global_roles),
+        "has_root_group": p.has_root_group,
         "sector_memberships": [
             {"sector_code": m.sector_code, "role": m.role}
             for m in p.sector_memberships
@@ -196,6 +202,7 @@ def _principal_from_cache(raw: str) -> Principal:
         last_name=data.get("last_name"),
         user_type=data.get("user_type") or "internal",
         global_roles=frozenset(data.get("global_roles") or []),
+        has_root_group=bool(data.get("has_root_group")),
         sector_memberships=tuple(
             SectorMembership(sector_code=m["sector_code"], role=m["role"])
             for m in data.get("sector_memberships") or []
@@ -270,6 +277,7 @@ def principal_from_claims(claims: dict[str, Any]) -> Principal:
         user_type        = user.user_type,
         global_roles     = realm_roles,
         sector_memberships = memberships,
+        has_root_group    = _has_root_tickora_group(claims),
     )
     try:
         ttl = _seconds_until_expiry(claims)

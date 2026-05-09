@@ -9,6 +9,7 @@ export interface SessionUser {
   createdAt?: string | null
   roles: string[]
   sectors?: { sectorCode: string; role: 'member' | 'chief' }[]
+  hasRootGroup?: boolean
 }
 
 interface SessionStore {

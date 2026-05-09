@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from typing import Any
+from uuid import UUID
 
 from framework.commons.logger import logger
 from sqlalchemy import and_, case, desc, func, or_, select
@@ -44,8 +45,8 @@ ACTIVE_STATUSES = ("pending", "assigned_to_sector", "in_progress", "reopened")
 
 
 def require_admin(principal: Principal) -> None:
-    if not principal.is_admin:
-        raise PermissionDeniedError("admin role required")
+    if not principal.has_root_group:
+        raise PermissionDeniedError("root /tickora group required")
 
 
 def overview(db: Session, principal: Principal) -> dict[str, Any]:
@@ -734,12 +735,20 @@ def _positive_int(value: Any, field: str) -> int:
 
 
 def _ticket_by_ref(db: Session, ticket_ref: str) -> Ticket:
-    ticket = db.get(Ticket, ticket_ref)
+    ticket = db.get(Ticket, ticket_ref) if _looks_like_uuid(ticket_ref) else None
     if ticket is None:
         ticket = db.scalar(select(Ticket).where(Ticket.ticket_code == ticket_ref))
     if ticket is None or ticket.is_deleted:
         raise NotFoundError("ticket not found")
     return ticket
+
+
+def _looks_like_uuid(value: str) -> bool:
+    try:
+        UUID(str(value))
+        return True
+    except ValueError:
+        return False
 
 
 def _rows_to_breakdown(rows) -> list[dict[str, Any]]:

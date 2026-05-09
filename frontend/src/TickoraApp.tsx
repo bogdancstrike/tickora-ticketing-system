@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import type { ReactNode } from 'react'
 import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom'
 import {
   ConfigProvider, Layout, Menu, theme as antTheme, Typography, Space, Button, Tooltip, Dropdown,
@@ -53,7 +54,7 @@ const NAV_ITEMS = [
     key: '/admin',
     label: 'Admin',
     icon: <SettingOutlined />,
-    roles: [ROLE_ADMIN],
+    rootOnly: true,
   },
 ]
 
@@ -63,7 +64,11 @@ function AppSidebar() {
   const { token } = antTheme.useToken()
   const [collapsed, setCollapsed] = useState(false)
   const hasAny = useSessionStore((s) => s.hasAny)
-  const visibleItems = NAV_ITEMS.filter((item) => !item.roles || hasAny(item.roles))
+  const user = useSessionStore((s) => s.user)
+  const visibleItems = NAV_ITEMS.filter((item) => {
+    if ('rootOnly' in item && item.rootOnly) return !!user?.hasRootGroup
+    return !item.roles || hasAny(item.roles)
+  })
 
   const selectedKey = visibleItems.find((n) => location.pathname.startsWith(n.key))?.key || '/dashboard'
 
@@ -93,6 +98,14 @@ function AppSidebar() {
       />
     </Sider>
   )
+}
+
+function RequireRootGroup({ children }: { children: ReactNode }) {
+  const user = useSessionStore((s) => s.user)
+  if (!user?.hasRootGroup) {
+    return <Typography.Title level={3} style={{ padding: 24 }}>403 · Root Tickora access required</Typography.Title>
+  }
+  return <>{children}</>
 }
 
 function AppHeader() {
@@ -166,7 +179,7 @@ function Shell() {
             />
             <Route
               path="/admin"
-              element={<RequireRole roles={[ROLE_ADMIN]}><AdminPage /></RequireRole>}
+              element={<RequireRootGroup><AdminPage /></RequireRootGroup>}
             />
             <Route path="*"          element={<Navigate to="/dashboard" replace />} />
           </Routes>

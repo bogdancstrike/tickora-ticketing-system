@@ -7,14 +7,14 @@ from src.core.errors import PermissionDeniedError, ValidationError
 from src.iam.principal import ROLE_ADMIN
 from src.ticketing.service import admin_service
 
-from .conftest import create_sector, create_user, principal_for
+from .conftest import create_beneficiary, create_sector, create_ticket, create_user, principal_for
 
 
 def test_admin_can_grant_membership_and_see_hierarchy(db_session: Session):
     admin_user = create_user(db_session, "admin-service")
     target = create_user(db_session, "operator-service")
     sector = create_sector(db_session, "adm1")
-    admin = principal_for(admin_user, roles={ROLE_ADMIN})
+    admin = principal_for(admin_user, roles={ROLE_ADMIN}, has_root_group=True)
 
     membership = admin_service.grant_membership(db_session, admin, target.id, sector.code, "chief")
 
@@ -31,7 +31,7 @@ def test_admin_can_list_sectors_with_membership_counts(db_session: Session):
     admin_user = create_user(db_session, "admin-sector-list")
     target = create_user(db_session, "operator-sector-list")
     sector = create_sector(db_session, "adm2")
-    admin = principal_for(admin_user, roles={ROLE_ADMIN})
+    admin = principal_for(admin_user, roles={ROLE_ADMIN}, has_root_group=True)
     admin_service.grant_membership(db_session, admin, target.id, sector.code, "member")
 
     sectors = admin_service.list_sectors(db_session, admin)
@@ -58,7 +58,7 @@ def test_admin_service_rejects_non_admin(db_session: Session):
 
 def test_admin_can_manage_sla_policy(db_session: Session):
     admin_user = create_user(db_session, "sla-admin-service")
-    admin = principal_for(admin_user, roles={ROLE_ADMIN})
+    admin = principal_for(admin_user, roles={ROLE_ADMIN}, has_root_group=True)
 
     policy = admin_service.upsert_sla_policy(db_session, admin, {
         "name": "Critical response",
@@ -75,7 +75,7 @@ def test_admin_can_manage_sla_policy(db_session: Session):
 
 def test_sla_policy_requires_positive_minutes(db_session: Session):
     admin_user = create_user(db_session, "sla-admin-invalid")
-    admin = principal_for(admin_user, roles={ROLE_ADMIN})
+    admin = principal_for(admin_user, roles={ROLE_ADMIN}, has_root_group=True)
 
     with pytest.raises(ValidationError):
         admin_service.upsert_sla_policy(db_session, admin, {
@@ -84,3 +84,32 @@ def test_sla_policy_requires_positive_minutes(db_session: Session):
             "first_response_minutes": 0,
             "resolution_minutes": 120,
         })
+
+
+def test_admin_can_crud_ticket_metadata_values(db_session: Session):
+    admin_user = create_user(db_session, "metadata-admin")
+    requester = create_user(db_session, "metadata-requester")
+    beneficiary = create_beneficiary(db_session, requester)
+    ticket = create_ticket(db_session, beneficiary, created_by=requester)
+    admin = principal_for(admin_user, roles={ROLE_ADMIN}, has_root_group=True)
+
+    created = admin_service.upsert_ticket_metadata(db_session, admin, {
+        "ticket_code": ticket.ticket_code,
+        "key": "impact",
+        "value": "department",
+        "label": "Impact",
+    })
+    assert created["ticket_code"] == ticket.ticket_code
+    assert created["key"] == "impact"
+    assert admin_service.ticket_metadatas(db_session, admin, search="department")[0]["id"] == created["id"]
+
+    updated = admin_service.upsert_ticket_metadata(db_session, admin, {
+        "id": created["id"],
+        "key": "impact",
+        "value": "organization",
+        "label": "Impact",
+    })
+    assert updated["value"] == "organization"
+
+    admin_service.delete_ticket_metadata(db_session, admin, created["id"])
+    assert admin_service.ticket_metadatas(db_session, admin, key="impact") == []

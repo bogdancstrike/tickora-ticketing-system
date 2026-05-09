@@ -1,8 +1,8 @@
 import { useMemo, useState } from 'react'
-import { Dropdown, Modal, Form, Input, Button, Space, message } from 'antd'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { Dropdown, Modal, Form, Input, Button, Select, Space, message } from 'antd'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { DownOutlined, SwapOutlined } from '@ant-design/icons'
-import { changeTicketStatus, type TicketDto } from '@/api/tickets'
+import { assignSector, changeTicketStatus, getTicketOptions, type TicketDto } from '@/api/tickets'
 import { useSessionStore } from '@/stores/sessionStore'
 import { StatusTag } from './StatusTag'
 
@@ -69,10 +69,15 @@ export function StatusChanger({
 }) {
   const [pending, setPending] = useState<string | null>(null)
   const [step, setStep] = useState<1 | 2>(1)
-  const [form] = Form.useForm<{ reason?: string }>()
+  const [form] = Form.useForm<{ reason?: string; sector_code?: string }>()
   const [msg, holder] = message.useMessage()
   const queryClient = useQueryClient()
   const user = useSessionStore((s) => s.user)
+  const options = useQuery({
+    queryKey: ['ticketOptions'],
+    queryFn: getTicketOptions,
+    staleTime: 300_000,
+  })
 
   const transitions = useMemo<Transition[]>(() => {
     if (!user) return []
@@ -102,8 +107,10 @@ export function StatusChanger({
   }, [ticket, user])
 
   const change = useMutation({
-    mutationFn: ({ status, reason }: { status: string; reason?: string }) =>
-      changeTicketStatus(ticket.id, status, reason),
+    mutationFn: ({ status, reason, sectorCode }: { status: string; reason?: string; sectorCode?: string }) =>
+      status === 'assigned_to_sector' && sectorCode
+        ? assignSector(ticket.id, sectorCode, reason)
+        : changeTicketStatus(ticket.id, status, reason),
     onSuccess: async () => {
       msg.success('Status changed')
       setPending(null)
@@ -179,11 +186,30 @@ export function StatusChanger({
               const reasonMeta = REASON_LABELS[pending]
               const showField = REQUIRES_REASON.has(pending) || OPTIONAL_REASON.has(pending)
               const required = REQUIRES_REASON.has(pending)
+              const requiresSector = pending === 'assigned_to_sector'
               return (
                 <>
                   <p>You are about to change <code>{ticket.ticket_code}</code> from <b>{ticket.status}</b> to <b>{pending}</b>.</p>
-                  {showField && (
-                    <Form form={form} layout="vertical">
+                  {(showField || requiresSector) && (
+                    <Form form={form} layout="vertical" initialValues={{ sector_code: ticket.current_sector_code || undefined }}>
+                      {requiresSector && (
+                        <Form.Item
+                          name="sector_code"
+                          label="Target sector"
+                          rules={[{ required: true, message: 'Select the sector that should receive this ticket' }]}
+                        >
+                          <Select
+                            showSearch
+                            optionFilterProp="label"
+                            loading={options.isLoading}
+                            placeholder="Select sector"
+                            options={(options.data?.sectors || []).map((s) => ({
+                              value: s.code,
+                              label: `${s.code} · ${s.name}`,
+                            }))}
+                          />
+                        </Form.Item>
+                      )}
                       <Form.Item
                         name="reason"
                         label={reasonMeta?.label || (required ? 'Reason' : 'Reason (optional)')}
@@ -196,7 +222,7 @@ export function StatusChanger({
                   <Space style={{ marginTop: 8 }}>
                     <Button onClick={() => { setPending(null); form.resetFields() }}>Cancel</Button>
                     <Button type="primary" onClick={async () => {
-                      if (required) {
+                      if (required || requiresSector) {
                         try { await form.validateFields() } catch { return }
                       }
                       setStep(2)
@@ -211,7 +237,11 @@ export function StatusChanger({
                 <Space>
                   <Button onClick={() => setStep(1)}>Back</Button>
                   <Button type="primary" danger loading={change.isPending}
-                          onClick={() => change.mutate({ status: pending, reason: form.getFieldValue('reason') })}>
+                          onClick={() => change.mutate({
+                            status: pending,
+                            reason: form.getFieldValue('reason'),
+                            sectorCode: form.getFieldValue('sector_code'),
+                          })}>
                     Yes, confirm change
                   </Button>
                 </Space>

@@ -60,7 +60,8 @@ const onTokens = () => {
   const groups: string[] = t?.groups || []
   const previous = useSessionStore.getState().user
   const roles = new Set<string>(t?.realm_access?.roles || [])
-  if (groups.some((g) => g === '/tickora' || g === 'tickora')) {
+  const hasRootGroup = groups.some((g) => g === '/tickora' || g === 'tickora')
+  if (hasRootGroup) {
     FULL_ACCESS_ROLES.forEach((role) => roles.add(role))
   }
   const sectors = tokenSectors(groups)
@@ -72,6 +73,7 @@ const onTokens = () => {
     lastName:  t.family_name,
     roles:     Array.from(roles),
     sectors:   sectors.length ? sectors : previous?.sectors,
+    hasRootGroup,
   })
 }
 

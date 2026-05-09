@@ -1,19 +1,24 @@
-import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import type { ReactNode } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import {
-  Alert, Button, Flex, Form, Input, Select, Typography, message, theme as antTheme,
+  Alert, Button, Flex, Form, Input, Tag, Typography, message, theme as antTheme,
 } from 'antd'
 import { SaveOutlined } from '@ant-design/icons'
 import { createTicket, type CreateTicketPayload } from '@/api/tickets'
+import { useSessionStore } from '@/stores/sessionStore'
 
 export function CreateTicketPage() {
   const [form] = Form.useForm<CreateTicketPayload>()
-  const [beneficiaryType, setBeneficiaryType] = useState<'internal' | 'external'>('internal')
   const [msg, holder] = message.useMessage()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const { token } = antTheme.useToken()
+  const user = useSessionStore((s) => s.user)
+  const beneficiaryType: 'internal' | 'external' =
+    user?.roles.includes('tickora_external_user') && !user?.roles.includes('tickora_internal_user')
+      ? 'external'
+      : 'internal'
 
   const create = useMutation({
     mutationFn: createTicket,
@@ -39,20 +44,17 @@ export function CreateTicketPage() {
         <Form
           form={form}
           layout="vertical"
-          initialValues={{ beneficiary_type: 'internal' }}
-          onFinish={(values) => create.mutate(values)}
-          onValuesChange={(changed) => {
-            if (changed.beneficiary_type) setBeneficiaryType(changed.beneficiary_type)
-          }}
+          initialValues={{ beneficiary_type: beneficiaryType }}
+          onFinish={(values) => create.mutate({ ...values, beneficiary_type: beneficiaryType })}
         >
-          <Flex gap={12} wrap="wrap">
-            <Form.Item name="beneficiary_type" label="Beneficiary" rules={[{ required: true }]} style={{ minWidth: 180 }}>
-              <Select options={[
-                { value: 'internal', label: 'Internal' },
-                { value: 'external', label: 'External' },
-              ]} />
-            </Form.Item>
-          </Flex>
+          <Form.Item name="beneficiary_type" hidden><Input /></Form.Item>
+          <Alert
+            showIcon
+            type="info"
+            style={{ marginBottom: 16 }}
+            message={<SpaceText label="Beneficiary type" value={<Tag>{beneficiaryType}</Tag>} />}
+            description="This is derived from your account role and cannot be changed while creating a ticket."
+          />
 
           {beneficiaryType === 'external' && (
             <>
@@ -94,5 +96,14 @@ export function CreateTicketPage() {
         </Form>
       </div>
     </div>
+  )
+}
+
+function SpaceText({ label, value }: { label: string; value: ReactNode }) {
+  return (
+    <Flex align="center" gap={8}>
+      <Typography.Text>{label}</Typography.Text>
+      {value}
+    </Flex>
   )
 }

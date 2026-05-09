@@ -127,6 +127,7 @@ def principal_for(
     *,
     roles: set[str] | None = None,
     sectors: tuple[SectorMembership, ...] = (),
+    has_root_group: bool = False,
 ) -> Principal:
     return Principal(
         user_id=user.id,
@@ -138,6 +139,7 @@ def principal_for(
         user_type=user.user_type,
         global_roles=frozenset(roles or set()),
         sector_memberships=sectors,
+        has_root_group=has_root_group,
     )
 
 

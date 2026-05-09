@@ -23,6 +23,10 @@ def _qs() -> dict:
 @require_authenticated
 def create(app, operation, request, *, principal: Principal, **kwargs):
     raw = _payload()
+    raw.setdefault(
+        "beneficiary_type",
+        "external" if principal.user_type == "external" else "internal",
+    )
     try:
         body = CreateTicketIn(**raw)
     except PydValidationError as e:
