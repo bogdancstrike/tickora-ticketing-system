@@ -111,6 +111,7 @@ function UserSelect({ name, label, sectorCode }: { name: any, label: string, sec
 
 function TicketListWidget({ config }: { config: any }) {
   const navigate = useNavigate()
+  const { token } = antTheme.useToken()
   const { data, isLoading } = useQuery({
     queryKey: ['widgetTickets', config],
     queryFn: () => listTickets({
@@ -160,7 +161,7 @@ function TicketListWidget({ config }: { config: any }) {
 function KpiWidget({ config }: { config: any }) {
   const { data } = useQuery({
     queryKey: ['monitorOverview'],
-    queryFn: getMonitorOverview,
+    queryFn: () => getMonitorOverview(),
     staleTime: 60_000,
   })
   
@@ -193,6 +194,7 @@ function KpiWidget({ config }: { config: any }) {
 
 function AuditWidget({ config }: { config: any }) {
   const navigate = useNavigate()
+  const { token } = antTheme.useToken()
   const { data, isLoading } = useQuery({
     queryKey: ['auditWidget', config],
     queryFn: () => {
@@ -514,6 +516,7 @@ function StaleTicketsWidget({ config }: { config: any }) {
 
 function NotReviewedWidget({ config }: { config: any }) {
     const navigate = useNavigate()
+    const { token } = antTheme.useToken()
     const { data, isLoading } = useQuery({
         queryKey: ['monitorOverview'],
         queryFn: () => getMonitorOverview(),
@@ -552,6 +555,7 @@ function NotReviewedWidget({ config }: { config: any }) {
 
 function ReviewedTodayWidget({ config }: { config: any }) {
     const navigate = useNavigate()
+    const { token } = antTheme.useToken()
     const { data, isLoading } = useQuery({
         queryKey: ['monitorOverview'],
         queryFn: () => getMonitorOverview(),
@@ -1080,7 +1084,7 @@ function DashboardDetail({ dashboardId, onBack }: { dashboardId: string, onBack:
                     </Form.Item>
                   )
               }
-              if (type === 'sector_stats' || type === 'user_workload' || type === 'workload_balancer' || type === 'bottleneck_analysis') {
+              if (type === 'sector_stats' || type === 'user_workload' || type === 'workload_balancer' || type === 'bottleneck_analysis' || type === 'not_reviewed' || type === 'reviewed_today') {
                  return (
                     <>
                         <SectorSelect name={['config', 'sectorCode']} label="Target Sector" />
