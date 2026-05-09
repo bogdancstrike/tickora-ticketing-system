@@ -18,7 +18,15 @@ from sqlalchemy.orm import Session
 from src.core.errors import BusinessRuleError, NotFoundError, PermissionDeniedError, ValidationError
 from src.iam.keycloak_admin import KeycloakAdminClient
 from src.iam.models import User
-from src.iam.principal import Principal, ROLE_ADMIN
+from src.iam.principal import (
+    ROLE_ADMIN,
+    ROLE_AUDITOR,
+    ROLE_DISTRIBUTOR,
+    ROLE_INTERNAL_USER,
+    ROLE_EXTERNAL_USER,
+    ROLE_SERVICE,
+    Principal,
+)
 from src.ticketing import events
 from src.ticketing.models import (
     AuditEvent,
@@ -32,17 +40,17 @@ from src.ticketing.models import (
     TicketMetadata,
 )
 from src.ticketing.service import audit_service, monitor_service
+from src.ticketing.state_machine import ACTIVE_STATUSES
 
 ADMIN_ROLES = {
-    "tickora_admin",
-    "tickora_auditor",
-    "tickora_distributor",
-    "tickora_internal_user",
-    "tickora_external_user",
-    "tickora_service_account",
+    ROLE_ADMIN,
+    ROLE_AUDITOR,
+    ROLE_DISTRIBUTOR,
+    ROLE_INTERNAL_USER,
+    ROLE_EXTERNAL_USER,
+    ROLE_SERVICE,
 }
 MEMBERSHIP_ROLES = {"member", "chief"}
-ACTIVE_STATUSES = ("pending", "assigned_to_sector", "in_progress", "reopened")
 
 
 def require_admin(principal: Principal) -> None:

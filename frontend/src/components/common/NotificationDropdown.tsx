@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react'
-import { Badge, Button, Dropdown, Empty, List, Space, Tag, Tooltip, Typography, theme as antTheme } from 'antd'
+import { Badge, Button, Dropdown, Empty, Space, Tag, Tooltip, Typography, theme as antTheme } from 'antd'
 import { BellOutlined, CheckOutlined } from '@ant-design/icons'
 import { useNavigate } from 'react-router-dom'
 import { useSessionStore } from '@/stores/sessionStore'
@@ -166,55 +166,59 @@ export function NotificationDropdown() {
           </Button>
         )}
       </div>
-      <List
-        size="small"
-        dataSource={notifications}
-        locale={{ emptyText: <Empty description="No notifications" image={Empty.PRESENTED_IMAGE_SIMPLE} /> }}
-        renderItem={(item) => (
-          <List.Item
+      <div style={{ maxHeight: 480, overflow: 'auto' }}>
+        {notifications.map((item) => (
+          <div
+            key={item.id}
             onClick={() => onClickItem(item)}
-            actions={[
-              !item.read && (
-                <Tooltip key="read" title="Mark as read">
-                  <Button
-                    size="small"
-                    type="text"
-                    icon={<CheckOutlined />}
-                    onClick={(event) => {
-                      event.stopPropagation()
-                      markOneRead(item)
-                    }}
-                  />
-                </Tooltip>
-              ),
-            ].filter(Boolean)}
+            className="tickora-row-clickable"
             style={{
               padding: '10px 14px',
               cursor: item.ticket_id ? 'pointer' : 'default',
               background: item.read ? 'transparent' : token.colorPrimaryBg,
               borderInlineStart: item.read ? 'none' : `3px solid ${token.colorPrimary}`,
+              borderBottom: `1px solid ${token.colorBorderSecondary}`,
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'start',
+              gap: 12
             }}
           >
-            <List.Item.Meta
-              title={
-                <Space size={6}>
+            <div style={{ flex: 1 }}>
+              <div style={{ marginBottom: 4 }}>
+                <Space size={6} wrap>
                   <Tag color={TYPE_COLOR[item.type] || 'default'}>{item.type.replace(/_/g, ' ')}</Tag>
                   <Typography.Text strong>{item.title}</Typography.Text>
                 </Space>
-              }
-              description={
-                <Space orientation="vertical" size={0} style={{ width: '100%' }}>
-                  <Typography.Text type="secondary">{item.body}</Typography.Text>
-                  <Typography.Text type="secondary" style={{ fontSize: 11 }}>
-                    {new Date(item.created_at).toLocaleString()}
-                  </Typography.Text>
-                </Space>
-              }
-            />
-          </List.Item>
+              </div>
+              <div style={{ display: 'grid', gap: 2 }}>
+                <Typography.Text type="secondary" style={{ fontSize: 13 }}>{item.body}</Typography.Text>
+                <Typography.Text type="secondary" style={{ fontSize: 11 }}>
+                  {new Date(item.created_at).toLocaleString()}
+                </Typography.Text>
+              </div>
+            </div>
+            {!item.read && (
+              <Tooltip key="read" title="Mark as read">
+                <Button
+                  size="small"
+                  type="text"
+                  icon={<CheckOutlined />}
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    markOneRead(item)
+                  }}
+                />
+              </Tooltip>
+            )}
+          </div>
+        ))}
+        {notifications.length === 0 && (
+          <div style={{ padding: 20 }}>
+            <Empty description="No notifications" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+          </div>
         )}
-        style={{ maxHeight: 480, overflow: 'auto' }}
-      />
+      </div>
     </div>
   )
 

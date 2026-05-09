@@ -48,23 +48,28 @@ function ChartPanel({ title, description, children }: { title: string; descripti
 
 function OldestTickets({ tickets }: { tickets: MonitorOldTicket[] }) {
   const navigate = useNavigate()
+  const { token } = antTheme.useToken()
   return (
-    <List
-      dataSource={tickets}
-      locale={{ emptyText: <Empty description="No active tickets" image={Empty.PRESENTED_IMAGE_SIMPLE} /> }}
-      renderItem={(ticket) => (
-        <List.Item 
-          style={{ cursor: 'pointer' }} 
+    <div style={{ padding: '4px 0' }}>
+      {tickets.map((ticket) => (
+        <div 
+          key={ticket.id}
+          style={{ padding: '8px 12px', cursor: 'pointer', borderBottom: `1px solid ${token.colorBorderSecondary}` }} 
           onClick={() => navigate(`/tickets/${ticket.id}`)}
           className="tickora-row-clickable"
         >
-          <List.Item.Meta
-            title={<Space><Typography.Text strong>{ticket.ticket_code}</Typography.Text><Tag>{ticket.status}</Tag><Tag color={ticket.priority === 'critical' ? 'red' : undefined}>{ticket.priority}</Tag></Space>}
-            description={ticket.title || 'Untitled ticket'}
-          />
-        </List.Item>
+          <div style={{ display: 'grid', gap: 4 }}>
+            <Space><Typography.Text strong>{ticket.ticket_code}</Typography.Text><Tag>{ticket.status}</Tag><Tag color={ticket.priority === 'critical' ? 'red' : undefined}>{ticket.priority}</Tag></Space>
+            <div style={{ color: token.colorTextDescription }}>{ticket.title || 'Untitled ticket'}</div>
+          </div>
+        </div>
+      ))}
+      {tickets.length === 0 && (
+        <div style={{ padding: 20 }}>
+          <Empty description="No active tickets" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+        </div>
       )}
-    />
+    </div>
   )
 }
 

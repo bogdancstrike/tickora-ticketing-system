@@ -9,11 +9,10 @@ from sqlalchemy.orm import Session
 
 from src.core.errors import NotFoundError, PermissionDeniedError, ValidationError
 from src.iam.principal import Principal
-from src.ticketing.models import CustomDashboard, DashboardWidget, WidgetDefinition, Ticket
+from src.ticketing.models import CustomDashboard, DashboardWidget, WidgetDefinition, Ticket, SystemSetting
 from src.ticketing.service.ticket_service import _visibility_filter
+from src.ticketing.state_machine import ACTIVE_STATUSES
 
-
-ACTIVE_STATUSES = ("pending", "assigned_to_sector", "in_progress", "reopened")
 
 
 def _visible_stmt(principal: Principal):

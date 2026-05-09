@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
-  Alert, Button, Card, Checkbox, Col, Descriptions, Empty, Flex, Form, Input, List, Modal, Row, Select,
+  Alert, Button, Card, Checkbox, Col, Descriptions, Empty, Flex, Form, Input, Modal, Row, Select,
   Space, Table, Tag, Typography, message, theme as antTheme, Upload,
 } from 'antd'
 import type { ColumnsType, TablePaginationConfig } from 'antd/es/table'
@@ -535,32 +535,35 @@ function AttachmentList({ ticketId }: { ticketId: string }) {
   if (!data?.items.length) return <Empty description="No attachments found" image={Empty.PRESENTED_IMAGE_SIMPLE} />
 
   return (
-    <List
-      dataSource={data.items}
-      renderItem={(item) => (
-        <List.Item
-          actions={[
-            <Button key="download" size="small" type="link" href={downloadAttachmentUrl(item.id)} target="_blank">Download</Button>,
-            (user?.id === item.uploaded_by_user_id || user?.roles.includes('tickora_admin')) && (
-              <Button key="del" size="small" type="link" danger onClick={() => remove.mutate(item.id)}>Delete</Button>
-            )
-          ]}
+    <div style={{ display: 'grid', gap: 12 }}>
+      {data.items.map((item) => (
+        <div 
+          key={item.id} 
+          style={{ padding: '8px 12px', background: token.colorFillAlter, borderRadius: 8, border: `1px solid ${token.colorBorderSecondary}` }}
         >
-          <List.Item.Meta
-            avatar={<PaperClipOutlined style={{ fontSize: 18, color: token.colorTextSecondary }} />}
-            title={item.file_name}
-            description={
-              <Space split="·">
-                <span>{bytes(item.size_bytes)}</span>
-                <Tag color={item.visibility === 'private' ? 'orange' : 'green'}>{item.visibility}</Tag>
-                <span>scan: {item.scan_result || 'clean'}</span>
-                <span>{fmt(item.created_at)}</span>
-              </Space>
-            }
-          />
-        </List.Item>
-      )}
-    />
+          <Flex justify="space-between" align="center" gap={12}>
+            <Flex gap={12} align="center" style={{ flex: 1 }}>
+              <PaperClipOutlined style={{ fontSize: 18, color: token.colorTextSecondary }} />
+              <div>
+                <Typography.Text strong style={{ display: 'block' }}>{item.file_name}</Typography.Text>
+                <Space split="·" style={{ fontSize: 12 }}>
+                  <Typography.Text type="secondary">{bytes(item.size_bytes)}</Typography.Text>
+                  <Tag color={item.visibility === 'private' ? 'orange' : 'green'} style={{ fontSize: 10, lineHeight: '14px', margin: 0 }}>{item.visibility}</Tag>
+                  <Typography.Text type="secondary">scan: {item.scan_result || 'clean'}</Typography.Text>
+                  <Typography.Text type="secondary">{fmt(item.created_at)}</Typography.Text>
+                </Space>
+              </div>
+            </Flex>
+            <Space>
+              <Button size="small" type="link" href={downloadAttachmentUrl(item.id)} target="_blank">Download</Button>
+              {(user?.id === item.uploaded_by_user_id || user?.roles.includes('tickora_admin')) && (
+                <Button size="small" type="link" danger onClick={() => remove.mutate(item.id)}>Delete</Button>
+              )}
+            </Space>
+          </Flex>
+        </div>
+      ))}
+    </div>
   )
 }
 

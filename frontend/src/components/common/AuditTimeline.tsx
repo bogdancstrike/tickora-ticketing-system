@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { Card, Descriptions, Empty, List, Space, Tag, Typography, theme as antTheme, Tooltip } from 'antd'
+import { Card, Descriptions, Empty, Space, Tag, Typography, theme as antTheme, Tooltip } from 'antd'
 import { CaretRightOutlined, CaretDownOutlined } from '@ant-design/icons'
 import type { AuditEventDto } from '@/api/tickets'
 import { fmtDateTime, fmtRelative } from './format'
@@ -118,12 +118,11 @@ export function AuditTimeline({ events, loading }: { events: AuditEventDto[]; lo
     return <Empty description="No audit events" image={Empty.PRESENTED_IMAGE_SIMPLE} />
   }
   return (
-    <List
-      loading={loading}
-      dataSource={events}
-      split={false}
-      renderItem={(e) => (
+    <div style={{ position: 'relative' }}>
+      {loading && <div style={{ textAlign: 'center', padding: 20 }}><Typography.Text type="secondary">Loading...</Typography.Text></div>}
+      {events.map((e) => (
         <AuditCard
+          key={e.id}
           event={e}
           expanded={expanded.has(e.id)}
           onToggle={() =>
@@ -135,7 +134,7 @@ export function AuditTimeline({ events, loading }: { events: AuditEventDto[]; lo
             })
           }
         />
-      )}
-    />
+      ))}
+    </div>
   )
 }

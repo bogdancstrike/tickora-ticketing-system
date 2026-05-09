@@ -19,9 +19,7 @@ from src.iam.principal import Principal
 from src.iam.models import User
 from src.ticketing.models import Beneficiary, Sector, SectorMembership, Ticket, TicketComment, TicketStatusHistory
 from src.ticketing.service.ticket_service import _visibility_filter
-
-ACTIVE_STATUSES = ("pending", "assigned_to_sector", "in_progress", "reopened")
-DONE_STATUSES = ("done", "closed")
+from src.ticketing.state_machine import ACTIVE_STATUSES, DONE_STATUSES
 
 
 def monitor_overview(db: Session, principal: Principal, *, days: int = 30) -> dict[str, Any]:

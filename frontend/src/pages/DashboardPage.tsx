@@ -125,14 +125,14 @@ function TicketListWidget({ config }: { config: any }) {
 
   if (isLoading) return <div style={{ textAlign: 'center', padding: 20 }}><Spin /></div>
 
+  const items = (data?.items || []).slice(0, 20)
+
   return (
-    <List
-      size="small"
-      dataSource={(data?.items || []).slice(0, 20)}
-      locale={{ emptyText: <Empty description="No tickets match filters" image={Empty.PRESENTED_IMAGE_SIMPLE} /> }}
-      renderItem={(t: TicketDto) => (
-        <List.Item 
-          style={{ padding: '8px 12px', cursor: 'pointer' }}
+    <div style={{ padding: '4px 0' }}>
+      {items.map((t: TicketDto) => (
+        <div
+          key={t.id}
+          style={{ padding: '8px 12px', cursor: 'pointer', borderBottom: `1px solid ${token.colorBorderSecondary}` }}
           onClick={() => navigate(`/tickets/${t.id}`)}
           className="tickora-row-clickable"
         >
@@ -146,9 +146,14 @@ function TicketListWidget({ config }: { config: any }) {
               <Typography.Text type="secondary">{t.ticket_code}</Typography.Text>
             </Space>
           </div>
-        </List.Item>
+        </div>
+      ))}
+      {items.length === 0 && (
+        <div style={{ padding: 20 }}>
+          <Empty description="No tickets match filters" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+        </div>
       )}
-    />
+    </div>
   )
 }
 
@@ -203,30 +208,37 @@ function AuditWidget({ config }: { config: any }) {
 
   if (isLoading) return <div style={{ textAlign: 'center', padding: 20 }}><Spin /></div>
 
+  const items = (data?.items || []).slice(0, config.limit || 15)
+
   return (
-    <List
-      size="small"
-      dataSource={(data?.items || []).slice(0, config.limit || 15)}
-      locale={{ emptyText: <Empty description="No events found" image={Empty.PRESENTED_IMAGE_SIMPLE} /> }}
-      renderItem={(a: any) => (
-        <List.Item 
-          style={{ padding: '8px 12px', fontSize: 12, cursor: a.ticket_id ? 'pointer' : 'default' }}
+    <div style={{ padding: '4px 0' }}>
+      {items.map((a: any) => (
+        <div 
+          key={a.id}
+          style={{ padding: '8px 12px', fontSize: 12, cursor: a.ticket_id ? 'pointer' : 'default', borderBottom: `1px solid ${token.colorBorderSecondary}` }}
           onClick={() => a.ticket_id && navigate(`/tickets/${a.ticket_id}`)}
           className={a.ticket_id ? 'tickora-row-clickable' : ''}
         >
-          <List.Item.Meta
-            avatar={<Avatar size="small" icon={<UserOutlined />} />}
-            title={<Typography.Text style={{ fontSize: 12 }}><b>{a.actor_username}</b> {a.action.replace(/_/g, ' ')}</Typography.Text>}
-            description={
-              <Space orientation="vertical" size={0}>
-                 <Typography.Text type="secondary" style={{ fontSize: 11 }}>{fmtDateTime(a.created_at)}</Typography.Text>
-                 {a.ticket_id && <Typography.Text type="link" style={{ fontSize: 10 }}>Ticket: {a.ticket_id.slice(0,8)}</Typography.Text>}
-              </Space>
-            }
-          />
-        </List.Item>
+          <Flex gap={12} align="start">
+            <Avatar size="small" icon={<UserOutlined />} />
+            <div style={{ flex: 1 }}>
+              <Typography.Text style={{ fontSize: 12 }}><b>{a.actor_username}</b> {a.action.replace(/_/g, ' ')}</Typography.Text>
+              <div style={{ marginTop: 4 }}>
+                <Space direction="vertical" size={0}>
+                   <Typography.Text type="secondary" style={{ fontSize: 11 }}>{fmtDateTime(a.created_at)}</Typography.Text>
+                   {a.ticket_id && <Typography.Text type="link" style={{ fontSize: 10 }}>Ticket: {a.ticket_id.slice(0,8)}</Typography.Text>}
+                </Space>
+              </div>
+            </div>
+          </Flex>
+        </div>
+      ))}
+      {items.length === 0 && (
+        <div style={{ padding: 20 }}>
+          <Empty description="No events found" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+        </div>
       )}
-    />
+    </div>
   )
 }
 
@@ -241,23 +253,29 @@ function RecentCommentsWidget({ config }: { config: any }) {
   if (!config.ticketId) return <div style={{ padding: 20 }}><Empty description="Select a ticket to watch comments" /></div>
   if (isLoading) return <div style={{ textAlign: 'center', padding: 20 }}><Spin /></div>
 
+  const items = (data?.items || []).slice(0, 10)
+
   return (
-    <List
-      size="small"
-      dataSource={(data?.items || []).slice(0, 10)}
-      renderItem={(c: any) => (
-        <List.Item 
-          style={{ padding: '8px 12px', cursor: 'pointer' }}
+    <div style={{ padding: '4px 0' }}>
+      {items.map((c: any) => (
+        <div 
+          key={c.id}
+          style={{ padding: '8px 12px', cursor: 'pointer', borderBottom: `1px solid ${token.colorBorderSecondary}` }}
           onClick={() => navigate(`/tickets/${config.ticketId}`)}
           className="tickora-row-clickable"
         >
-          <List.Item.Meta
-            title={<Typography.Text strong style={{ fontSize: 12 }}>{c.author_display || c.author_username}</Typography.Text>}
-            description={<div style={{ fontSize: 11, maxHeight: 40, overflow: 'hidden' }}>{c.body}</div>}
-          />
-        </List.Item>
+          <div style={{ display: 'grid', gap: 2 }}>
+            <Typography.Text strong style={{ fontSize: 12 }}>{c.author_display || c.author_username}</Typography.Text>
+            <div style={{ fontSize: 11, maxHeight: 40, overflow: 'hidden' }}>{c.body}</div>
+          </div>
+        </div>
+      ))}
+      {items.length === 0 && (
+        <div style={{ padding: 20 }}>
+          <Empty description="No comments yet" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+        </div>
       )}
-    />
+    </div>
   )
 }
 
@@ -463,13 +481,11 @@ function StaleTicketsWidget({ config }: { config: any }) {
     const tickets = (config.sectorCode ? (data as any)?.stale_tickets : (data as any)?.stale_tickets) || []
 
     return (
-        <List
-            size="small"
-            dataSource={tickets}
-            locale={{ emptyText: <Empty description="No stale tickets" image={Empty.PRESENTED_IMAGE_SIMPLE} /> }}
-            renderItem={(t: any) => (
-                <List.Item
-                    style={{ padding: '8px 12px', cursor: 'pointer' }}
+        <div style={{ padding: '4px 0' }}>
+            {tickets.map((t: any) => (
+                <div
+                    key={t.id}
+                    style={{ padding: '8px 12px', cursor: 'pointer', borderBottom: `1px solid ${token.colorBorderSecondary}` }}
                     onClick={() => navigate(`/tickets/${t.id}`)}
                     className="tickora-row-clickable"
                 >
@@ -483,9 +499,14 @@ function StaleTicketsWidget({ config }: { config: any }) {
                             <Typography.Text type="secondary">{t.ticket_code}</Typography.Text>
                         </Space>
                     </div>
-                </List.Item>
+                </div>
+            ))}
+            {tickets.length === 0 && (
+                <div style={{ padding: 20 }}>
+                    <Empty description="No stale tickets" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+                </div>
             )}
-        />
+        </div>
     )
 }
 
@@ -498,16 +519,14 @@ function NotReviewedWidget({ config }: { config: any }) {
     })
 
     if (isLoading) return <div style={{ textAlign: 'center', padding: 20 }}><Spin /></div>
-    const tickets = data?.distributor?.not_reviewed || []
+    const tickets = (data?.distributor?.not_reviewed || []).slice(0, config.limit || 20)
 
     return (
-        <List
-            size="small"
-            dataSource={tickets.slice(0, config.limit || 20)}
-            locale={{ emptyText: <Empty description="No pending tickets" image={Empty.PRESENTED_IMAGE_SIMPLE} /> }}
-            renderItem={(t: any) => (
-                <List.Item
-                    style={{ padding: '8px 12px', cursor: 'pointer' }}
+        <div style={{ padding: '4px 0' }}>
+            {tickets.map((t: any) => (
+                <div
+                    key={t.id}
+                    style={{ padding: '8px 12px', cursor: 'pointer', borderBottom: `1px solid ${token.colorBorderSecondary}` }}
                     onClick={() => navigate(`/tickets/${t.id}`)}
                     className="tickora-row-clickable"
                 >
@@ -518,9 +537,14 @@ function NotReviewedWidget({ config }: { config: any }) {
                         </Flex>
                         <Typography.Text type="secondary" style={{ fontSize: 11 }}>{t.ticket_code} · {fmtDateTime(t.created_at)}</Typography.Text>
                     </div>
-                </List.Item>
+                </div>
+            ))}
+            {tickets.length === 0 && (
+                <div style={{ padding: 20 }}>
+                    <Empty description="No pending tickets" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+                </div>
             )}
-        />
+        </div>
     )
 }
 
@@ -533,16 +557,14 @@ function ReviewedTodayWidget({ config }: { config: any }) {
     })
 
     if (isLoading) return <div style={{ textAlign: 'center', padding: 20 }}><Spin /></div>
-    const tickets = data?.distributor?.reviewed_today || []
+    const tickets = (data?.distributor?.reviewed_today || []).slice(0, config.limit || 20)
 
     return (
-        <List
-            size="small"
-            dataSource={tickets.slice(0, config.limit || 20)}
-            locale={{ emptyText: <Empty description="No tickets reviewed today" image={Empty.PRESENTED_IMAGE_SIMPLE} /> }}
-            renderItem={(t: any) => (
-                <List.Item
-                    style={{ padding: '8px 12px', cursor: 'pointer' }}
+        <div style={{ padding: '4px 0' }}>
+            {tickets.map((t: any) => (
+                <div
+                    key={t.id}
+                    style={{ padding: '8px 12px', cursor: 'pointer', borderBottom: `1px solid ${token.colorBorderSecondary}` }}
                     onClick={() => navigate(`/tickets/${t.id}`)}
                     className="tickora-row-clickable"
                 >
@@ -553,9 +575,14 @@ function ReviewedTodayWidget({ config }: { config: any }) {
                         </Flex>
                         <Typography.Text type="secondary" style={{ fontSize: 11 }}>{t.ticket_code} · Reviewed recently</Typography.Text>
                     </div>
-                </List.Item>
+                </div>
+            ))}
+            {tickets.length === 0 && (
+                <div style={{ padding: 20 }}>
+                    <Empty description="No tickets reviewed today" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+                </div>
             )}
-        />
+        </div>
     )
 }
 
@@ -1124,7 +1151,7 @@ export function DashboardPage() {
               actions={[
                 <DeleteOutlined key="del" onMouseDown={e => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); del.mutate(d.id) }} />
               ]}
-              bodyStyle={{ padding: 16 }}
+              styles={{ body: { padding: 16 } }}
             >
               <Card.Meta 
                 avatar={<AppstoreOutlined style={{ fontSize: 24, color: token.colorPrimary }} />}

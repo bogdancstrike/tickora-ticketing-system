@@ -282,7 +282,7 @@ export function AuditExplorerPage() {
       <Drawer
         title={graphTicketId ? `Ticket evolution · ${graphTicketId}` : 'Ticket evolution'}
         open={!!graphTicketId}
-        width={720}
+        size="large"
         onClose={() => setGraphTicketId(null)}
         extra={
           graphTicketId
