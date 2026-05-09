@@ -15,6 +15,7 @@ export interface MeDto {
   created_at?: string | null
   roles: string[]
   sectors: SectorMembershipDto[]
+  has_root_group?: boolean
 }
 
 export interface TicketDto {

@@ -14,6 +14,7 @@ from src.iam.principal import (
     ROLE_ADMIN,
     SectorMembership,
 )
+from src.iam.keycloak_admin import KeycloakAdminClient
 from framework.commons.logger import logger as log
 
 
@@ -71,16 +72,38 @@ def _parse_sector_groups(groups: list[str]) -> list[SectorMembership]:
     return list(out.values())
 
 
-def _effective_roles_from_claims(claims: dict[str, Any]) -> frozenset[str]:
+def _keycloak_group_paths(user_id: str | None) -> list[str]:
+    if not user_id:
+        return []
+    try:
+        groups = KeycloakAdminClient.get().get_user_groups(user_id)
+        return [
+            (group.get("path") or group.get("name") or "").strip()
+            for group in groups
+            if (group.get("path") or group.get("name") or "").strip()
+        ]
+    except Exception as exc:
+        log.warning("keycloak_user_groups_unavailable", extra={"user_id": user_id, "error": str(exc)})
+        return []
+
+
+def _groups_for_claims(claims: dict[str, Any]) -> list[str]:
+    groups = list(claims.get("groups") or [])
+    if not groups or not {_normalize_group(g) for g in groups}.intersection(_GLOBAL_TICKORA_GROUPS):
+        groups.extend(_keycloak_group_paths(claims.get("sub")))
+    return sorted({_normalize_group(g) for g in groups if _normalize_group(g)})
+
+
+def _effective_roles_from_claims(claims: dict[str, Any], groups: list[str] | None = None) -> frozenset[str]:
     roles = set((claims.get("realm_access") or {}).get("roles") or [])
-    groups = {_normalize_group(g) for g in claims.get("groups") or []}
-    if groups.intersection(_GLOBAL_TICKORA_GROUPS):
+    normalized_groups = {_normalize_group(g) for g in (groups if groups is not None else claims.get("groups") or [])}
+    if normalized_groups.intersection(_GLOBAL_TICKORA_GROUPS):
         roles.add(ROLE_ADMIN)
     return frozenset(roles)
 
 
-def _has_root_tickora_group(claims: dict[str, Any]) -> bool:
-    groups = {_normalize_group(g) for g in claims.get("groups") or []}
+def _has_root_tickora_group(groups: list[str]) -> bool:
+    groups = {_normalize_group(g) for g in groups or []}
     return bool(groups.intersection(_GLOBAL_TICKORA_GROUPS))
 
 
@@ -170,7 +193,7 @@ def _principal_cache_key(claims: dict[str, Any]) -> str:
             sort_keys=True,
         )
         token_id = hashlib.sha256(material.encode("utf-8")).hexdigest()
-    return f"tickora:principal:{claims.get('sub')}:{token_id}"
+    return f"tickora:principal:v2:{claims.get('sub')}:{token_id}"
 
 
 def _principal_to_cache(p: Principal) -> str:
@@ -264,8 +287,9 @@ def principal_from_claims(claims: dict[str, Any]) -> Principal:
         pass
 
     user = get_or_create_user_from_claims(claims)
-    realm_roles = _effective_roles_from_claims(claims)
-    memberships = _dedupe_memberships(_parse_sector_groups(claims.get("groups") or []))
+    groups = _groups_for_claims(claims)
+    realm_roles = _effective_roles_from_claims(claims, groups)
+    memberships = _dedupe_memberships(_parse_sector_groups(groups))
 
     principal = Principal(
         user_id          = user.id,
@@ -277,7 +301,7 @@ def principal_from_claims(claims: dict[str, Any]) -> Principal:
         user_type        = user.user_type,
         global_roles     = realm_roles,
         sector_memberships = memberships,
-        has_root_group    = _has_root_tickora_group(claims),
+        has_root_group    = _has_root_tickora_group(groups),
     )
     try:
         ttl = _seconds_until_expiry(claims)

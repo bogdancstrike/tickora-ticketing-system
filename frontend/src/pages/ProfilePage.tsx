@@ -239,6 +239,7 @@ export function ProfilePage() {
       createdAt: me.data.created_at,
       roles: me.data.roles,
       sectors: me.data.sectors.map((s) => ({ sectorCode: s.sector_code, role: s.role })),
+      hasRootGroup: me.data.has_root_group,
     })
   }, [me.data, setUser])
 

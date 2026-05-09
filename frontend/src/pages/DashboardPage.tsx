@@ -24,7 +24,7 @@ function KpiGrid({ values }: { values: Record<string, number | null | undefined>
     <Row gutter={[12, 12]}>
       {Object.entries(values).map(([key, value]) => (
         <Col key={key} xs={12} md={8} xl={6}>
-          <div style={{ border: `1px solid ${token.colorBorderSecondary}`, borderRadius: 8, padding: 14, minHeight: 94 }}>
+          <div style={{ background: token.colorBgContainer, border: `1px solid ${token.colorBorderSecondary}`, borderRadius: 8, padding: 14, minHeight: 94, boxShadow: token.boxShadowTertiary }}>
             <Statistic title={labelize(key)} value={value ?? '-'} precision={typeof value === 'number' && !Number.isInteger(value) ? 1 : 0} />
           </div>
         </Col>
@@ -69,7 +69,7 @@ function DoughnutChart({ data, title }: { data: DashboardBreakdown[]; title: str
 function ChartPanel({ title, description, children }: { title: string; description?: string; children: React.ReactNode }) {
   const { token } = antTheme.useToken()
   return (
-    <div style={{ border: `1px solid ${token.colorBorderSecondary}`, borderRadius: 8, padding: 16, minHeight: 286 }}>
+    <div style={{ background: token.colorBgContainer, border: `1px solid ${token.colorBorderSecondary}`, borderRadius: 8, padding: 16, minHeight: 286, boxShadow: token.boxShadowTertiary }}>
       <Typography.Title level={5} style={{ marginTop: 0 }}>{title}</Typography.Title>
       {description && (
         <Typography.Text type="secondary" style={{ display: 'block', marginTop: -4, marginBottom: 8, fontSize: 12 }}>
@@ -98,7 +98,7 @@ function OldestTickets({ tickets }: { tickets: DashboardOldTicket[] }) {
   )
 }
 
-function SectorPanel({ sector }: { sector: DashboardSector }) {
+function SectorPanel({ sector, controls }: { sector: DashboardSector; controls?: React.ReactNode }) {
   const columns: ColumnsType<DashboardSector['workload'][number]> = [
     { title: 'Assignee', dataIndex: 'assignee_user_id', ellipsis: true },
     { title: 'Active', dataIndex: 'active', width: 100 },
@@ -106,10 +106,13 @@ function SectorPanel({ sector }: { sector: DashboardSector }) {
   ]
   return (
     <div style={{ display: 'grid', gap: 16 }}>
-      <div>
-        <Typography.Title level={4} style={{ margin: 0 }}>{sector.sector_code} · {sector.sector_name}</Typography.Title>
-        <Typography.Text type="secondary">Sector queue, SLA, and workload</Typography.Text>
-      </div>
+      <Flex justify="space-between" align="start" wrap="wrap" gap={12}>
+        <div>
+          <Typography.Title level={4} style={{ margin: 0 }}>{sector.sector_code} · {sector.sector_name}</Typography.Title>
+          <Typography.Text type="secondary">Sector queue, SLA, and workload</Typography.Text>
+        </div>
+        {controls}
+      </Flex>
       <KpiGrid values={sector.kpis} />
       <Row gutter={[16, 16]}>
         <Col xs={24} xl={8}><ChartPanel title="Status" description="Tickets currently routed to this sector, grouped by workflow status."><BreakdownChart data={sector.by_status} title="Tickets" /></ChartPanel></Col>
@@ -166,6 +169,36 @@ export function DashboardPage() {
 
   const activeSector = selectedSector.data || overview.data?.sectors[0]
   const personal = selectedUser.data || overview.data?.personal
+  const sectorControls = canSelectSector ? (
+    <Space wrap>
+      <Select
+        allowClear
+        showSearch
+        placeholder="Sector"
+        value={sectorCode}
+        onChange={(value) => { setSectorCode(value); setUserId(undefined) }}
+        optionFilterProp="label"
+        style={{ width: 240 }}
+        options={sectorOptions}
+      />
+      {sectorCode && (
+        <Select
+          allowClear
+          showSearch
+          placeholder="User"
+          value={userId}
+          onChange={setUserId}
+          optionFilterProp="label"
+          loading={users.isLoading}
+          style={{ width: 260 }}
+          options={(users.data?.items || []).map((u) => ({
+            value: u.id,
+            label: `${u.username || u.email || u.id} · ${u.membership_role}`,
+          }))}
+        />
+      )}
+    </Space>
+  ) : null
 
   const timeseriesOption = useMemo(() => {
     if (!overview.data?.timeseries) return null
@@ -244,7 +277,7 @@ export function DashboardPage() {
     activeSector && {
       key: 'sector',
       label: 'Sector',
-      children: <SectorPanel sector={activeSector} />,
+      children: <SectorPanel sector={activeSector} controls={sectorControls} />,
     },
     personal && {
       key: 'personal',
@@ -279,37 +312,7 @@ export function DashboardPage() {
           <Typography.Title level={3} style={{ margin: 0 }}>Dashboard</Typography.Title>
           <Typography.Text type="secondary">Role-scoped operational metrics</Typography.Text>
         </div>
-        <Space wrap>
-          {canSelectSector && (
-            <Select
-              allowClear
-              showSearch
-              placeholder="Sector"
-              value={sectorCode}
-              onChange={(value) => { setSectorCode(value); setUserId(undefined) }}
-              optionFilterProp="label"
-              style={{ width: 220 }}
-              options={sectorOptions}
-            />
-          )}
-          {sectorCode && (
-            <Select
-              allowClear
-              showSearch
-              placeholder="User"
-              value={userId}
-              onChange={setUserId}
-              optionFilterProp="label"
-              loading={users.isLoading}
-              style={{ width: 260 }}
-              options={(users.data?.items || []).map((u) => ({
-                value: u.id,
-                label: `${u.username || u.email || u.id} · ${u.membership_role}`,
-              }))}
-            />
-          )}
-          <Button icon={<ReloadOutlined />} onClick={() => overview.refetch()} />
-        </Space>
+        <Button icon={<ReloadOutlined />} onClick={() => overview.refetch()} />
       </Flex>
 
       {overview.error && <Alert type="error" message={overview.error.message} showIcon />}
@@ -319,7 +322,7 @@ export function DashboardPage() {
       <Tabs items={tabs as any} />
 
       {timeseriesOption && (
-        <div style={{ border: `1px solid ${token.colorBorderSecondary}`, borderRadius: 8, padding: 16, minHeight: 280 }}>
+        <div style={{ background: token.colorBgContainer, border: `1px solid ${token.colorBorderSecondary}`, borderRadius: 8, padding: 16, minHeight: 280, boxShadow: token.boxShadowTertiary }}>
           <Typography.Title level={5} style={{ marginTop: 0 }}>Created vs Closed · last 30 days</Typography.Title>
           <Typography.Text type="secondary" style={{ display: 'block', marginTop: -4, marginBottom: 8, fontSize: 12 }}>
             Daily ticket creation and closure counts visible to your role.

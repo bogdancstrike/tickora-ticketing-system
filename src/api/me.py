@@ -92,6 +92,7 @@ def me(app, operation, request, *, principal: Principal, **kwargs):
         "user_type":        principal.user_type,
         "roles":            sorted(principal.global_roles),
         "sectors":          _sector_payload(principal),
+        "has_root_group":   principal.has_root_group,
         "is_admin":       principal.is_admin,
         "is_auditor":     principal.is_auditor,
         "is_distributor": principal.is_distributor,

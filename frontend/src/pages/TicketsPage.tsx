@@ -64,6 +64,7 @@ function useSessionBootstrap() {
         lastName: query.data.last_name,
         roles: query.data.roles,
         sectors: query.data.sectors.map((s) => ({ sectorCode: s.sector_code, role: s.role })),
+        hasRootGroup: query.data.has_root_group,
       })
     }
   }, [query.data, setUser])

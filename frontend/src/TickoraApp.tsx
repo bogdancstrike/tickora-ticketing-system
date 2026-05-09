@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom'
 import {
@@ -9,7 +9,7 @@ import {
   BgColorsOutlined, MenuFoldOutlined, MenuUnfoldOutlined, UserOutlined, LogoutOutlined,
   IdcardOutlined,
 } from '@ant-design/icons'
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { useQuery, QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { useKeycloak } from '@react-keycloak/web'
 import { useThemeStore } from '@/stores/themeStore'
 import { useSessionStore } from '@/stores/sessionStore'
@@ -23,6 +23,7 @@ import { ProfilePage } from '@/pages/ProfilePage'
 import { AdminPage } from '@/pages/AdminPage'
 import { RequireRole } from '@/auth/RequireRole'
 import { NotificationDropdown } from '@/components/common/NotificationDropdown'
+import { getMe } from '@/api/tickets'
 
 const { Header, Sider, Content } = Layout
 const { Text } = Typography
@@ -151,7 +152,33 @@ function AppHeader() {
   )
 }
 
+function useBackendSessionBootstrap() {
+  const setUser = useSessionStore((s) => s.setUser)
+  const query = useQuery({
+    queryKey: ['me'],
+    queryFn: getMe,
+    staleTime: 60_000,
+    retry: 1,
+  })
+
+  useEffect(() => {
+    if (!query.data) return
+    setUser({
+      id: query.data.user_id,
+      username: query.data.username,
+      email: query.data.email,
+      firstName: query.data.first_name,
+      lastName: query.data.last_name,
+      createdAt: query.data.created_at,
+      roles: query.data.roles,
+      sectors: query.data.sectors.map((s) => ({ sectorCode: s.sector_code, role: s.role })),
+      hasRootGroup: query.data.has_root_group,
+    })
+  }, [query.data, setUser])
+}
+
 function Shell() {
+  useBackendSessionBootstrap()
   return (
     <Layout style={{ height: '100vh' }}>
       <AppSidebar />
