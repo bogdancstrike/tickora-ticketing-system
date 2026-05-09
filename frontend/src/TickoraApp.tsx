@@ -177,6 +177,7 @@ function AppHeader() {
         onClose={() => setDrawerDrawerVisible(false)}
         open={drawerVisible}
         styles={{ body: { padding: 0 } }}
+        size="default"
         width="280px"
       >
         <Menu

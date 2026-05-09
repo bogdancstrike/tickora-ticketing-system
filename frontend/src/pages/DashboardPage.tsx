@@ -4,6 +4,7 @@ import ReactECharts from 'echarts-for-react'
 import {
   Alert, Button, Card, Col, Empty, Flex, Form, Input, List, Modal, Row, Select, Space,
   Spin, Statistic, Table, Tag, Typography, message, theme as antTheme, Avatar, Checkbox,
+  Switch, Divider,
 } from 'antd'
 import {
   AppstoreAddOutlined, AppstoreOutlined, DeleteOutlined, EditOutlined, PlusOutlined,
@@ -11,7 +12,7 @@ import {
   ClockCircleOutlined, AuditOutlined, UnorderedListOutlined, CheckCircleOutlined,
   SendOutlined, ThunderboltOutlined, SearchOutlined, BarChartOutlined, PieChartOutlined,
   MessageOutlined, FieldTimeOutlined, DatabaseOutlined, DashboardOutlined,
-  CarryOutOutlined, SmileOutlined,
+  CarryOutOutlined, SmileOutlined, InfoCircleOutlined, TeamOutlined,
 } from '@ant-design/icons'
 import { Responsive, WidthProvider } from 'react-grid-layout'
 import 'react-grid-layout/css/styles.css'
@@ -21,12 +22,12 @@ import {
   createDashboard, deleteDashboard, deleteWidget, getDashboard,
   listDashboards, updateDashboard, upsertWidget,
   listTickets, getMonitorOverview, listAudit, listTicketAudit,
-  getMonitorSector,
+  getMonitorSector, listComments,
   type CustomDashboardDto, type DashboardWidgetDto, type TicketDto,
 } from '@/api/tickets'
 import { useSessionStore } from '@/stores/sessionStore'
 import { StatusTag, STATUS_OPTIONS } from '@/components/common/StatusTag'
-import { PriorityTag } from '@/components/common/PriorityTag'
+import { PriorityTag, PRIORITY_OPTIONS } from '@/components/common/PriorityTag'
 import { fmtDateTime } from '@/components/common/format'
 import { useNavigate } from 'react-router-dom'
 import { apiClient } from '@/api/client'
@@ -39,7 +40,13 @@ function TicketListWidget({ config }: { config: any }) {
   const navigate = useNavigate()
   const { data, isLoading } = useQuery({
     queryKey: ['widgetTickets', config],
-    queryFn: () => listTickets(config),
+    queryFn: () => listTickets({
+        status: config.status || undefined,
+        priority: config.priority || undefined,
+        assignee_user_id: config.assignee_user_id || undefined,
+        current_sector_code: config.current_sector_code || undefined,
+        limit: config.limit || 10,
+    }),
     staleTime: 30_000,
   })
 
@@ -48,8 +55,8 @@ function TicketListWidget({ config }: { config: any }) {
   return (
     <List
       size="small"
-      dataSource={(data?.items || []).slice(0, 15)}
-      locale={{ emptyText: <Empty description="No tickets" image={Empty.PRESENTED_IMAGE_SIMPLE} /> }}
+      dataSource={(data?.items || []).slice(0, 20)}
+      locale={{ emptyText: <Empty description="No tickets match filters" image={Empty.PRESENTED_IMAGE_SIMPLE} /> }}
       renderItem={(t: TicketDto) => (
         <List.Item 
           style={{ padding: '8px 12px', cursor: 'pointer' }}
@@ -82,13 +89,16 @@ function KpiWidget({ config }: { config: any }) {
   const val = useMemo(() => {
     if (!data) return '-'
     const p = config.path || 'personal.kpis.assigned_active'
-    if (p === 'personal.kpis.assigned_active') return data.personal.kpis.assigned_active
-    if (p === 'personal.beneficiary_kpis.active') return data.personal.beneficiary_kpis.active
-    if (p === 'global.kpis.total_tickets') return data.global?.kpis.total_tickets
-    if (p === 'global.kpis.sla_breached') return data.global?.kpis.sla_breached
-    if (p === 'global.kpis.active_tickets') return data.global?.kpis.active_tickets
-    if (p === 'distributor.kpis.pending_review') return data.distributor?.kpis.pending_review
-    return '-'
+    try {
+        const parts = p.split('.')
+        let current: any = data
+        for (const part of parts) {
+            current = current[part]
+        }
+        return current ?? 0
+    } catch (e) {
+        return '-'
+    }
   }, [data, config.path])
 
   return (
@@ -96,7 +106,7 @@ function KpiWidget({ config }: { config: any }) {
       <Statistic 
         title={config.label || 'Metric'} 
         value={val} 
-        valueStyle={{ color: config.color || undefined, fontWeight: 700 }}
+        styles={{ content: { color: config.color || undefined, fontWeight: 700 } }}
         prefix={config.icon === 'warning' ? <WarningOutlined /> : undefined}
       />
     </div>
@@ -106,7 +116,14 @@ function KpiWidget({ config }: { config: any }) {
 function AuditWidget({ config }: { config: any }) {
   const { data, isLoading } = useQuery({
     queryKey: ['auditWidget', config],
-    queryFn: () => config.ticketId ? listTicketAudit(config.ticketId) : listAudit({ limit: config.limit || 10, action: config.action }),
+    queryFn: () => {
+        if (config.ticketId) return listTicketAudit(config.ticketId)
+        return listAudit({ 
+            limit: config.limit || 10, 
+            action: config.action || undefined,
+            actor_user_id: config.userId || undefined
+        })
+    },
     staleTime: 30_000,
   })
 
@@ -115,14 +132,15 @@ function AuditWidget({ config }: { config: any }) {
   return (
     <List
       size="small"
-      dataSource={(data?.items || []).slice(0, config.limit || 10)}
+      dataSource={(data?.items || []).slice(0, config.limit || 15)}
+      locale={{ emptyText: <Empty description="No events found" image={Empty.PRESENTED_IMAGE_SIMPLE} /> }}
       renderItem={(a: any) => (
         <List.Item style={{ padding: '8px 12px', fontSize: 12 }}>
           <List.Item.Meta
             avatar={<Avatar size="small" icon={<UserOutlined />} />}
             title={<Typography.Text style={{ fontSize: 12 }}><b>{a.actor_username}</b> {a.action.replace(/_/g, ' ')}</Typography.Text>}
             description={
-              <Space direction="vertical" size={0}>
+              <Space orientation="vertical" size={0}>
                  <Typography.Text type="secondary" style={{ fontSize: 11 }}>{fmtDateTime(a.created_at)}</Typography.Text>
                  {a.ticket_id && <Typography.Text type="link" style={{ fontSize: 10 }}>Ticket: {a.ticket_id.slice(0,8)}</Typography.Text>}
               </Space>
@@ -134,18 +152,72 @@ function AuditWidget({ config }: { config: any }) {
   )
 }
 
-function ProfileWidget() {
+function RecentCommentsWidget({ config }: { config: any }) {
+  const navigate = useNavigate()
+  // Note: Backend currently doesn't have global comments feed, using a hack or assuming /api/comments works
+  // For now, let's assume we can only show comments for a specific ticket if configured, 
+  // or a placeholder if no global feed exists.
+  const { data, isLoading } = useQuery({
+    queryKey: ['widgetComments', config.ticketId],
+    queryFn: () => config.ticketId ? listComments(config.ticketId) : Promise.resolve({ items: [] }),
+    enabled: !!config.ticketId
+  })
+
+  if (!config.ticketId) return <div style={{ padding: 20 }}><Empty description="Select a ticket to watch comments" /></div>
+  if (isLoading) return <div style={{ textAlign: 'center', padding: 20 }}><Spin /></div>
+
+  return (
+    <List
+      size="small"
+      dataSource={(data?.items || []).slice(0, 10)}
+      renderItem={(c: any) => (
+        <List.Item style={{ padding: '8px 12px' }}>
+          <List.Item.Meta
+            title={<Typography.Text strong style={{ fontSize: 12 }}>{c.author_display || c.author_username}</Typography.Text>}
+            description={<div style={{ fontSize: 11, maxHeight: 40, overflow: 'hidden' }}>{c.body}</div>}
+          />
+        </List.Item>
+      )}
+    />
+  )
+}
+
+function ProfileWidget({ config }: { config: any }) {
   const user = useSessionStore(s => s.user)
   const navigate = useNavigate()
   if (!user) return null
+  
+  const showSectors = config.showSectors !== false
+  const showRoles = config.showRoles !== false
+
   return (
-    <div style={{ padding: 16, textAlign: 'center', height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-      <Avatar size={64} icon={<UserOutlined />} style={{ margin: '0 auto 12px', background: '#1677ff' }} />
-      <Typography.Title level={5} style={{ margin: 0 }}>{user.username}</Typography.Title>
-      <Typography.Text type="secondary" style={{ fontSize: 12 }}>{user.email}</Typography.Text>
-      <div style={{ marginTop: 12 }}>
-        <Button size="small" type="link" onClick={() => navigate('/profile')}>View Profile</Button>
+    <div style={{ padding: 16, height: '100%', overflow: 'auto' }}>
+      <div style={{ textAlign: 'center', marginBottom: 16 }}>
+        <Avatar size={64} icon={<UserOutlined />} style={{ margin: '0 auto 8px', background: '#1677ff' }} />
+        <Typography.Title level={5} style={{ margin: 0 }}>{user.username}</Typography.Title>
+        <Typography.Text type="secondary" style={{ fontSize: 12 }}>{user.email}</Typography.Text>
       </div>
+      
+      {showSectors && (
+        <div style={{ marginBottom: 12 }}>
+           <Typography.Text type="secondary" strong style={{ fontSize: 11, display: 'block', marginBottom: 4 }}>SECTORS</Typography.Text>
+           <Space wrap size={[0, 4]}>
+              {(user.sectors || []).map(s => <Tag key={`${s.sectorCode}-${s.role}`} color="blue">{s.sectorCode}</Tag>)}
+              {!user.sectors?.length && <Typography.Text type="secondary" italic style={{ fontSize: 12 }}>None</Typography.Text>}
+           </Space>
+        </div>
+      )}
+
+      {showRoles && (
+        <div style={{ marginBottom: 12 }}>
+           <Typography.Text type="secondary" strong style={{ fontSize: 11, display: 'block', marginBottom: 4 }}>ROLES</Typography.Text>
+           <Space wrap size={[0, 4]}>
+              {(user.roles || []).map(r => <Tag key={r}>{r.replace('tickora_', '')}</Tag>)}
+           </Space>
+        </div>
+      )}
+
+      <Button block size="small" type="link" onClick={() => navigate('/profile')}>Full Profile</Button>
     </div>
   )
 }
@@ -186,7 +258,7 @@ function SystemHealthWidget() {
   const { data, isLoading } = useQuery({
     queryKey: ['healthCheck'],
     queryFn: async () => {
-        const { data } = await apiClient.get('/api/health')
+        const { data } = await apiClient.get('/health')
         return data
     },
     refetchInterval: 30_000
@@ -250,7 +322,7 @@ function SectorStatsWidget({ config }: { config: any }) {
     enabled: !!config.sectorCode,
   })
 
-  if (!config.sectorCode) return <Empty description="Set sector code" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+  if (!config.sectorCode) return <div style={{ padding: 20 }}><Empty description="Configure sector" image={Empty.PRESENTED_IMAGE_SIMPLE} /></div>
   if (isLoading) return <div style={{ textAlign: 'center', padding: 20 }}><Spin /></div>
   if (!data) return <Empty />
 
@@ -278,7 +350,7 @@ function UserWorkloadWidget({ config }: { config: any }) {
       enabled: !!config.sectorCode,
     })
   
-    if (!config.sectorCode) return <Empty description="Set sector code" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+    if (!config.sectorCode) return <div style={{ padding: 20 }}><Empty description="Configure sector" image={Empty.PRESENTED_IMAGE_SIMPLE} /></div>
     if (isLoading) return <div style={{ textAlign: 'center', padding: 20 }}><Spin /></div>
   
     return (
@@ -299,13 +371,13 @@ const WIDGET_TYPES = [
     { type: 'ticket_list', label: 'Ticket List', icon: <UnorderedListOutlined />, configurable: true },
     { type: 'monitor_kpi', label: 'KPI Statistic', icon: <BarChartOutlined />, configurable: true },
     { type: 'audit_stream', label: 'Audit Log', icon: <AuditOutlined />, configurable: true },
+    { type: 'profile_card', label: 'My Profile', icon: <UserOutlined />, configurable: true },
     { type: 'recent_comments', label: 'Recent Comments', icon: <MessageOutlined />, configurable: true },
     { type: 'sector_stats', label: 'Sector Chart', icon: <PieChartOutlined />, configurable: true },
     { type: 'user_workload', label: 'User Workload', icon: <TeamOutlined />, configurable: true },
     { type: 'shortcuts', label: 'Quick Links', icon: <SendOutlined />, configurable: true },
     { type: 'clock', label: 'Clock', icon: <FieldTimeOutlined />, configurable: false },
     { type: 'system_health', label: 'System Health', icon: <DatabaseOutlined />, configurable: false },
-    { type: 'profile_card', label: 'Profile Card', icon: <UserOutlined />, configurable: false },
     { type: 'sla_overview', label: 'SLA Overview', icon: <CarryOutOutlined />, configurable: false },
     { type: 'welcome_banner', label: 'Welcome Banner', icon: <SmileOutlined />, configurable: false },
 ]
@@ -314,7 +386,7 @@ function WidgetRenderer({ widget }: { widget: DashboardWidgetDto }) {
   if (widget.type === 'ticket_list') return <TicketListWidget config={widget.config} />
   if (widget.type === 'monitor_kpi') return <KpiWidget config={widget.config} />
   if (widget.type === 'audit_stream') return <AuditWidget config={widget.config} />
-  if (widget.type === 'profile_card') return <ProfileWidget />
+  if (widget.type === 'profile_card') return <ProfileWidget config={widget.config} />
   if (widget.type === 'shortcuts') return <ShortcutsWidget config={widget.config} />
   if (widget.type === 'clock') return <ClockWidget />
   if (widget.type === 'system_health') return <SystemHealthWidget />
@@ -322,6 +394,7 @@ function WidgetRenderer({ widget }: { widget: DashboardWidgetDto }) {
   if (widget.type === 'sla_overview') return <SlaOverviewWidget />
   if (widget.type === 'sector_stats') return <SectorStatsWidget config={widget.config} />
   if (widget.type === 'user_workload') return <UserWorkloadWidget config={widget.config} />
+  if (widget.type === 'recent_comments') return <RecentCommentsWidget config={widget.config} />
 
   return <Empty description={`Widget type ${widget.type} coming soon`} image={Empty.PRESENTED_IMAGE_SIMPLE} />
 }
@@ -398,6 +471,25 @@ function DashboardDetail({ dashboardId, onBack }: { dashboardId: string, onBack:
     onSuccess: () => { setEditingTitle(false); qc.invalidateQueries({ queryKey: ['customDashboard', dashboardId] }) }
   })
 
+  const autoArrange = useMutation({
+    mutationFn: async () => {
+        const widgets = dashboard?.widgets || []
+        const cols = 3
+        const w_val = 4
+        const h_val = 6
+        for (let i = 0; i < widgets.length; i++) {
+            const w = widgets[i]
+            const x = (i % cols) * w_val
+            const y = Math.floor(i / cols) * h_val
+            await upsertWidget(dashboardId, { id: w.id, x, y, w: w_val, h: h_val })
+        }
+    },
+    onSuccess: () => {
+        qc.invalidateQueries({ queryKey: ['customDashboard', dashboardId] })
+        message.success('Widgets rearranged')
+    }
+  })
+
   useEffect(() => {
     if (editingWidget) {
         form.setFieldsValue({
@@ -428,7 +520,8 @@ function DashboardDetail({ dashboardId, onBack }: { dashboardId: string, onBack:
           )}
         </Space>
         <Space>
-           <Button icon={<AppstoreAddOutlined />} type="primary" onClick={() => setIsAddingWidget(true)}>Add Widget</Button>
+           <Button icon={<ThunderboltOutlined />} loading={autoArrange.isPending} onClick={() => autoArrange.mutate()}>Auto-arrange</Button>
+           <Button icon={<AppstoreAddOutlined />} type="primary" onClick={() => { setEditingWidget(null); setIsAddingWidget(true) }}>Add Widget</Button>
            <Button icon={<ReloadOutlined />} onClick={() => qc.invalidateQueries({ queryKey: ['customDashboard', dashboardId] })} />
         </Space>
       </Flex>
@@ -453,9 +546,17 @@ function DashboardDetail({ dashboardId, onBack }: { dashboardId: string, onBack:
                 <Typography.Text strong style={{ fontSize: 12 }}>{w.title || w.type}</Typography.Text>
                 <Space size={2}>
                   {WIDGET_TYPES.find(t => t.type === w.type)?.configurable && (
-                    <Button size="small" type="text" icon={<SettingOutlined />} onClick={() => setEditingWidget(w)} />
+                    <Button 
+                        size="small" type="text" icon={<SettingOutlined />} 
+                        onMouseDown={e => e.stopPropagation()}
+                        onClick={() => setEditingWidget(w)} 
+                    />
                   )}
-                  <Button size="small" type="text" danger icon={<DeleteOutlined />} onClick={() => removeWidget.mutate(w.id)} />
+                  <Button 
+                    size="small" type="text" danger icon={<DeleteOutlined />} 
+                    onMouseDown={e => e.stopPropagation()}
+                    onClick={() => removeWidget.mutate(w.id)} 
+                  />
                 </Space>
               </div>
               <div style={{ flex: 1, overflow: 'auto' }}>
@@ -483,7 +584,7 @@ function DashboardDetail({ dashboardId, onBack }: { dashboardId: string, onBack:
       </Modal>
 
       <Modal 
-        title="Configure Widget" 
+        title={editingWidget ? "Configure Widget" : "Add Widget"} 
         open={!!editingWidget} 
         onCancel={() => { setEditingWidget(null); form.resetFields() }} 
         onOk={() => form.submit()}
@@ -492,76 +593,110 @@ function DashboardDetail({ dashboardId, onBack }: { dashboardId: string, onBack:
           <Form.Item name="title" label="Widget Title" rules={[{ required: true }]}>
             <Input />
           </Form.Item>
-          {editingWidget?.type === 'ticket_list' && (
-            <>
-                <Form.Item name={['config', 'assignee_user_id']} label="Filter by Assignee ID (Optional)">
-                <Input placeholder="Leave empty for all" />
-                </Form.Item>
-                <Form.Item name={['config', 'current_sector_code']} label="Filter by Sector Code (Optional)">
-                <Input placeholder="E.g., s1" />
-                </Form.Item>
-                <Form.Item name={['config', 'status']} label="Filter by Status">
-                <Select allowClear options={STATUS_OPTIONS} />
-                </Form.Item>
-            </>
-          )}
-          {editingWidget?.type === 'monitor_kpi' && (
-            <>
-                <Form.Item name={['config', 'path']} label="Metric Data Point" rules={[{ required: true }]}>
-                <Select options={[
-                    { value: 'personal.kpis.assigned_active', label: 'Personal: Active Assigned' },
-                    { value: 'personal.beneficiary_kpis.active', label: 'Personal: My Active Requests' },
-                    { value: 'global.kpis.active_tickets', label: 'Global: Active Total' },
-                    { value: 'global.kpis.sla_breached', label: 'Global: SLA Breaches' },
-                    { value: 'distributor.kpis.pending_review', label: 'Distribution: Pending Review' },
-                ]} />
-                </Form.Item>
-                <Form.Item name={['config', 'label']} label="Display Label">
-                <Input placeholder="E.g., Breached" />
-                </Form.Item>
-                <Form.Item name={['config', 'color']} label="Metric Color">
-                <Input placeholder="CSS color (e.g. #ff4d4f)" />
-                </Form.Item>
-            </>
-          )}
-          {editingWidget?.type === 'audit_stream' && (
-            <>
-                <Form.Item name={['config', 'ticketId']} label="Filter by Ticket ID (Optional)">
-                <Input placeholder="Leave empty for global pulse" />
-                </Form.Item>
-                <Form.Item name={['config', 'limit']} label="Event Limit">
-                <Select options={[5, 10, 15, 20].map(v => ({ value: v, label: v }))} />
-                </Form.Item>
-            </>
-          )}
-          {editingWidget?.type === 'shortcuts' && (
-            <Form.Item name={['config', 'items']} label="Enabled Links">
-                <Checkbox.Group options={[
-                { label: 'Create', value: 'create' },
-                { label: 'Queue', value: 'tickets' },
-                { label: 'Monitor', value: 'monitor' },
-                { label: 'Admin', value: 'admin' },
-                ]} />
-            </Form.Item>
-          )}
-          {editingWidget?.type === 'sector_stats' && (
-             <>
-                <Form.Item name={['config', 'sectorCode']} label="Sector Code" rules={[{ required: true }]}>
-                   <Input placeholder="E.g., s1" />
-                </Form.Item>
-                <Form.Item name={['config', 'groupBy']} label="Group By" initialValue="status">
-                   <Select options={[
-                       { value: 'status', label: 'Status' },
-                       { value: 'priority', label: 'Priority' },
-                   ]} />
-                </Form.Item>
-             </>
-          )}
-          {editingWidget?.type === 'user_workload' && (
-             <Form.Item name={['config', 'sectorCode']} label="Sector Code" rules={[{ required: true }]}>
-                <Input placeholder="E.g., s10" />
-             </Form.Item>
-          )}
+          
+          <Form.Item noStyle shouldUpdate={(prev, cur) => prev.type !== cur.type}>
+            {({ getFieldValue }) => {
+              const type = editingWidget?.type
+              
+              if (type === 'ticket_list') {
+                  return (
+                    <>
+                      <Form.Item name={['config', 'assignee_user_id']} label="Assignee ID">
+                        <Input placeholder="User UUID or leave empty" />
+                      </Form.Item>
+                      <Form.Item name={['config', 'current_sector_code']} label="Sector Code">
+                        <Input placeholder="e.g. s1, s10" />
+                      </Form.Item>
+                      <Form.Item name={['config', 'status']} label="Ticket Status">
+                        <Select allowClear options={STATUS_OPTIONS} />
+                      </Form.Item>
+                      <Form.Item name={['config', 'priority']} label="Ticket Priority">
+                        <Select allowClear options={PRIORITY_OPTIONS} />
+                      </Form.Item>
+                      <Form.Item name={['config', 'limit']} label="Max Items">
+                        <Select options={[5, 10, 20, 50].map(v => ({ value: v, label: v }))} />
+                      </Form.Item>
+                    </>
+                  )
+              }
+              if (type === 'monitor_kpi') {
+                  return (
+                    <>
+                      <Form.Item name={['config', 'path']} label="Data Point" rules={[{ required: true }]}>
+                        <Select options={[
+                            { value: 'personal.kpis.assigned_active', label: 'Personal: Active Assigned' },
+                            { value: 'personal.beneficiary_kpis.active', label: 'Personal: My Active Requests' },
+                            { value: 'global.kpis.total_tickets', label: 'Global: Total Tickets (System)' },
+                            { value: 'global.kpis.active_tickets', label: 'Global: Active Total' },
+                            { value: 'global.kpis.sla_breached', label: 'Global: SLA Breaches' },
+                            { value: 'distributor.kpis.pending_review', label: 'Distribution: Pending Review' },
+                        ]} />
+                      </Form.Item>
+                      <Form.Item name={['config', 'label']} label="Override Label">
+                        <Input placeholder="Leave empty for default" />
+                      </Form.Item>
+                      <Form.Item name={['config', 'color']} label="Metric Color">
+                        <Input placeholder="#hex or CSS name" />
+                      </Form.Item>
+                    </>
+                  )
+              }
+              if (type === 'audit_stream') {
+                  return (
+                    <>
+                      <Form.Item name={['config', 'ticketId']} label="Filter by Ticket ID">
+                        <Input placeholder="Track specific task history" />
+                      </Form.Item>
+                      <Form.Item name={['config', 'userId']} label="Filter by Actor User ID">
+                        <Input placeholder="Track specific person's actions" />
+                      </Form.Item>
+                      <Form.Item name={['config', 'limit']} label="Max Events">
+                        <Select options={[5, 10, 20, 30].map(v => ({ value: v, label: v }))} />
+                      </Form.Item>
+                    </>
+                  )
+              }
+              if (type === 'profile_card') {
+                  return (
+                    <>
+                       <Form.Item name={['config', 'showSectors']} valuePropName="checked" label="Show My Sectors">
+                          <Switch />
+                       </Form.Item>
+                       <Form.Item name={['config', 'showRoles']} valuePropName="checked" label="Show My Roles">
+                          <Switch />
+                       </Form.Item>
+                    </>
+                  )
+              }
+              if (type === 'shortcuts') {
+                  return (
+                    <Form.Item name={['config', 'items']} label="Enabled Shortcuts">
+                        <Checkbox.Group options={[
+                            { label: 'Create', value: 'create' },
+                            { label: 'Queue', value: 'tickets' },
+                            { label: 'Monitor', value: 'monitor' },
+                            { label: 'Admin', value: 'admin' },
+                        ]} />
+                    </Form.Item>
+                  )
+              }
+              if (type === 'sector_stats' || type === 'user_workload') {
+                 return (
+                    <Form.Item name={['config', 'sectorCode']} label="Sector Code" rules={[{ required: true }]}>
+                        <Input placeholder="e.g. s1" />
+                    </Form.Item>
+                 )
+              }
+              if (type === 'recent_comments') {
+                  return (
+                    <Form.Item name={['config', 'ticketId']} label="Watch Ticket (ID)" rules={[{ required: true }]}>
+                       <Input placeholder="Comments feed for specific task" />
+                    </Form.Item>
+                  )
+              }
+              return null
+            }}
+          </Form.Item>
         </Form>
       </Modal>
     </div>
@@ -618,7 +753,7 @@ export function DashboardPage() {
               hoverable
               onClick={() => setActiveDashboardId(d.id)}
               actions={[
-                <DeleteOutlined key="del" onClick={(e) => { e.stopPropagation(); del.mutate(d.id) }} />
+                <DeleteOutlined key="del" onMouseDown={e => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); del.mutate(d.id) }} />
               ]}
             >
               <Card.Meta 
