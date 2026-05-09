@@ -3,10 +3,11 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Alert, Button, Card, Checkbox, Col, Descriptions, Empty, Flex, Form, Input, List, Modal, Row, Select,
-  Space, Table, Tag, Typography, message, theme as antTheme,
+  Space, Table, Tag, Typography, message, theme as antTheme, Upload,
 } from 'antd'
 import type { ColumnsType, TablePaginationConfig } from 'antd/es/table'
 import type { SorterResult } from 'antd/es/table/interface'
+import type { UploadFile, UploadProps } from 'antd'
 import {
   CheckCircleOutlined, CloseCircleOutlined, EditOutlined, PlayCircleOutlined,
   PaperClipOutlined, PlusOutlined, ReloadOutlined, RetweetOutlined, StopOutlined, UserSwitchOutlined,
@@ -323,6 +324,7 @@ function CommentBox({
   const [msg, holder] = message.useMessage()
   const queryClient = useQueryClient()
   const user = useSessionStore((s) => s.user)
+  const [fileList, setFileList] = useState<UploadFile[]>([])
 
   // Operators (staff working on the ticket) can post private comments;
   // beneficiaries / external requesters are public-only.
@@ -347,21 +349,65 @@ function CommentBox({
     queryKey: ['comments', ticketId],
     queryFn: () => listComments(ticketId),
   })
+
   const add = useMutation({
-    mutationFn: (values: { body: string; is_public?: boolean }) =>
-      createComment(ticketId, values.body, (canPostPrivate ? values.is_public !== false : true) ? 'public' : 'private'),
+    mutationFn: async (values: { body: string; is_public?: boolean }) => {
+      const visibility = (canPostPrivate ? values.is_public !== false : true) ? 'public' : 'private'
+      const comment = await createComment(ticketId, values.body, visibility)
+      
+      // Sequential uploads for any attached files
+      for (const fileItem of fileList) {
+        if (!fileItem.originFileObj) continue
+        const file = fileItem.originFileObj as File
+        const req = await requestAttachmentUpload(ticketId, file)
+        await fetch(req.upload_url, {
+          method: 'PUT',
+          headers: { 'Content-Type': file.type || 'application/octet-stream' },
+          body: file,
+        })
+        await registerAttachment(ticketId, file, req.storage_key, comment.id)
+      }
+      return comment
+    },
     onSuccess: async () => {
       form.resetFields()
+      setFileList([])
       await queryClient.invalidateQueries({ queryKey: ['comments', ticketId] })
+      await queryClient.invalidateQueries({ queryKey: ['attachments', ticketId] })
       await queryClient.invalidateQueries({ queryKey: ['ticketAudit', ticketId] })
+      msg.success('Comment posted')
     },
     onError: (err) => msg.error(err.message),
   })
+
   const remove = useMutation({
     mutationFn: deleteComment,
-    onSuccess: async () => queryClient.invalidateQueries({ queryKey: ['comments', ticketId] }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['comments', ticketId] })
+      await queryClient.invalidateQueries({ queryKey: ['attachments', ticketId] })
+    },
     onError: (err) => msg.error(err.message),
   })
+
+  const { data: allAttachments } = useQuery({
+    queryKey: ['attachments', ticketId],
+    queryFn: () => listAttachments(ticketId),
+  })
+
+  const uploadProps: UploadProps = {
+    onRemove: (file) => {
+      const index = fileList.indexOf(file)
+      const newFileList = fileList.slice()
+      newFileList.splice(index, 1)
+      setFileList(newFileList)
+    },
+    beforeUpload: (file) => {
+      setFileList([...fileList, file])
+      return false
+    },
+    fileList,
+    multiple: true,
+  }
 
   return (
     <div style={{ display: 'grid', gap: 12 }}>
@@ -372,6 +418,13 @@ function CommentBox({
             <Form.Item name="body" rules={[{ required: true, min: 2 }]} style={{ marginBottom: 8 }}>
               <Input.TextArea rows={3} placeholder="Write a comment…" />
             </Form.Item>
+            
+            <div style={{ marginBottom: 12 }}>
+              <Upload {...uploadProps}>
+                <Button size="small" icon={<PaperClipOutlined />}>Attach files</Button>
+              </Upload>
+            </div>
+
             <Flex justify="space-between" align="center">
               {canPostPrivate ? (
                 <Form.Item name="is_public" valuePropName="checked" style={{ marginBottom: 0 }}>
@@ -399,6 +452,8 @@ function CommentBox({
         {(comments.data?.items || []).map((item) => {
           const display = item.author_display || item.author_username || item.author_email || 'user'
           const isMine = !!user?.id && item.author_user_id === user.id
+          const itemAttachments = (allAttachments?.items || []).filter(a => a.comment_id === item.id)
+
           return (
             <div key={item.id} style={{
               display: 'flex', gap: 12, padding: 12,
@@ -433,6 +488,20 @@ function CommentBox({
                 <Typography.Paragraph style={{ whiteSpace: 'pre-wrap', marginTop: 6, marginBottom: 0 }}>
                   {item.body}
                 </Typography.Paragraph>
+
+                {itemAttachments.length > 0 && (
+                  <div style={{ marginTop: 12, display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                    {itemAttachments.map(a => (
+                      <a key={a.id} href={downloadAttachmentUrl(a.id)} target="_blank" rel="noreferrer" style={{
+                        padding: '4px 10px', background: 'rgba(0,0,0,0.03)', borderRadius: 4,
+                        fontSize: 12, display: 'flex', alignItems: 'center', gap: 6,
+                        border: '1px solid rgba(0,0,0,0.06)'
+                      }}>
+                        <PaperClipOutlined /> {a.file_name} <Typography.Text type="secondary" style={{ fontSize: 11 }}>({bytes(a.size_bytes)})</Typography.Text>
+                      </a>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
           )
@@ -442,85 +511,53 @@ function CommentBox({
   )
 }
 
-function AttachmentUploader({ ticketId, disabled }: { ticketId: string; disabled?: boolean }) {
-  const [visibility, setVisibility] = useState<AttachmentDto['visibility']>('private')
-  const [msg, holder] = message.useMessage()
+function AttachmentList({ ticketId }: { ticketId: string }) {
+  const { token } = antTheme.useToken()
+  const user = useSessionStore(s => s.user)
   const queryClient = useQueryClient()
-  const attachments = useQuery({
+  const { data, isLoading } = useQuery({
     queryKey: ['attachments', ticketId],
     queryFn: () => listAttachments(ticketId),
   })
-  const upload = useMutation({
-    mutationFn: async (file: File) => {
-      const req = await requestAttachmentUpload(ticketId, file, visibility)
-      await fetch(req.upload_url, {
-        method: 'PUT',
-        headers: { 'Content-Type': file.type || 'application/octet-stream' },
-        body: file,
-      })
-      return registerAttachment(ticketId, file, req.storage_key, visibility)
-    },
-    onSuccess: async () => {
-      msg.success('Attachment uploaded')
-      await queryClient.invalidateQueries({ queryKey: ['attachments', ticketId] })
-      await queryClient.invalidateQueries({ queryKey: ['ticketAudit', ticketId] })
-    },
-    onError: (err) => msg.error(err.message),
-  })
+
   const remove = useMutation({
     mutationFn: deleteAttachment,
-    onSuccess: async () => queryClient.invalidateQueries({ queryKey: ['attachments', ticketId] }),
-    onError: (err) => msg.error(err.message),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['attachments', ticketId] })
+      await queryClient.invalidateQueries({ queryKey: ['comments', ticketId] })
+    },
   })
 
+  if (isLoading) return <Typography.Text type="secondary">Loading attachments…</Typography.Text>
+  if (!data?.items.length) return <Empty description="No attachments found" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+
   return (
-    <div style={{ display: 'grid', gap: 16 }}>
-      {holder}
-      {!disabled && (
-        <Flex wrap="wrap" gap={8} align="center">
-          <Select value={visibility} onChange={setVisibility} style={{ width: 130 }} options={[
-            { value: 'public', label: 'Public' },
-            { value: 'private', label: 'Private' },
-          ]} />
-          <Button icon={<PaperClipOutlined />} loading={upload.isPending}>
-            <label style={{ cursor: 'pointer' }}>
-              Upload
-              <input
-                type="file"
-                hidden
-                onChange={(event) => {
-                  const file = event.target.files?.[0]
-                  event.target.value = ''
-                  if (file) upload.mutate(file)
-                }}
-              />
-            </label>
-          </Button>
-        </Flex>
+    <List
+      dataSource={data.items}
+      renderItem={(item) => (
+        <List.Item
+          actions={[
+            <Button key="download" size="small" type="link" href={downloadAttachmentUrl(item.id)} target="_blank">Download</Button>,
+            (user?.id === item.uploaded_by_user_id || user?.roles.includes('tickora_admin')) && (
+              <Button key="del" size="small" type="link" danger onClick={() => remove.mutate(item.id)}>Delete</Button>
+            )
+          ]}
+        >
+          <List.Item.Meta
+            avatar={<PaperClipOutlined style={{ fontSize: 18, color: token.colorTextSecondary }} />}
+            title={item.file_name}
+            description={
+              <Space split="·">
+                <span>{bytes(item.size_bytes)}</span>
+                <Tag color={item.visibility === 'private' ? 'orange' : 'green'}>{item.visibility}</Tag>
+                <span>scan: {item.scan_result || 'clean'}</span>
+                <span>{fmt(item.created_at)}</span>
+              </Space>
+            }
+          />
+        </List.Item>
       )}
-      <List
-        loading={attachments.isLoading}
-        dataSource={attachments.data?.items || []}
-        locale={{ emptyText: <Empty description="No attachments" /> }}
-        renderItem={(item) => (
-          <List.Item
-            actions={[
-              <Button key="download" size="small" type="link" href={downloadAttachmentUrl(item.id)} target="_blank">
-                Download
-              </Button>,
-              <Button key="delete" size="small" type="link" danger onClick={() => remove.mutate(item.id)}>
-                Delete
-              </Button>,
-            ]}
-          >
-            <List.Item.Meta
-              title={<Space><Tag>{item.visibility}</Tag><Typography.Text>{item.file_name}</Typography.Text></Space>}
-              description={`${bytes(item.size_bytes)} · ${item.content_type || 'application/octet-stream'} · scan ${item.scan_result || 'pending'}`}
-            />
-          </List.Item>
-        )}
-      />
-    </div>
+    />
   )
 }
 
@@ -662,7 +699,7 @@ function TicketDetails({ ticketId }: { ticketId?: string }) {
               <CommentBox ticketId={ticket.id} disabled={isClosed} ticket={ticket} />
             </Card>
             <Card title="Attachments" size="small">
-              <AttachmentUploader ticketId={ticket.id} disabled={isClosed} />
+              <AttachmentList ticketId={ticket.id} />
             </Card>
             {(() => {
               const isAdmin = user?.roles.includes('tickora_admin')

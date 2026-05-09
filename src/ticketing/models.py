@@ -16,7 +16,7 @@ from sqlalchemy import (
     text,
 )
 from sqlalchemy.dialects.postgresql import INET, JSONB, UUID
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.core.db import Base
 
@@ -192,7 +192,7 @@ class TicketAttachment(Base):
 
     id:         Mapped[str] = mapped_column(UUID(as_uuid=False), primary_key=True, default=_uuid)
     ticket_id:  Mapped[str] = mapped_column(UUID(as_uuid=False), ForeignKey("tickets.id"), nullable=False)
-    comment_id: Mapped[str | None] = mapped_column(UUID(as_uuid=False), ForeignKey("ticket_comments.id"))
+    comment_id: Mapped[str] = mapped_column(UUID(as_uuid=False), ForeignKey("ticket_comments.id"), nullable=False)
     uploaded_by_user_id: Mapped[str | None] = mapped_column(UUID(as_uuid=False), ForeignKey("users.id"))
 
     file_name:    Mapped[str] = mapped_column(String(500), nullable=False)
@@ -202,7 +202,6 @@ class TicketAttachment(Base):
     storage_bucket: Mapped[str] = mapped_column(String(255), nullable=False)
     storage_key:    Mapped[str] = mapped_column(Text, nullable=False)
 
-    visibility:        Mapped[str] = mapped_column(String(20), nullable=False, default="private")
     checksum_sha256:   Mapped[str | None] = mapped_column(String(128))
     is_scanned:        Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     scan_result:       Mapped[str | None] = mapped_column(String(50))
@@ -212,6 +211,9 @@ class TicketAttachment(Base):
     deleted_at:         Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    # Relationship to parent comment
+    comment: Mapped[TicketComment] = relationship("TicketComment", backref="attachments", lazy="select")
 
 
 # ── History tables ──────────────────────────────────────────────────────────

@@ -416,13 +416,11 @@ export const listAttachments = async (ticketId: string): Promise<{ items: Attach
 export const requestAttachmentUpload = async (
   ticketId: string,
   file: File,
-  visibility: AttachmentDto['visibility'],
 ): Promise<{ upload_url: string; storage_key: string; storage_bucket: string; expires_in: number }> => {
   const { data } = await apiClient.post(`/api/tickets/${ticketId}/attachments/upload-url`, {
     file_name: file.name,
     content_type: file.type || 'application/octet-stream',
     size_bytes: file.size,
-    visibility,
   })
   return data
 }
@@ -431,14 +429,14 @@ export const registerAttachment = async (
   ticketId: string,
   file: File,
   storageKey: string,
-  visibility: AttachmentDto['visibility'],
+  commentId: string,
 ): Promise<AttachmentDto> => {
   const { data } = await apiClient.post(`/api/tickets/${ticketId}/attachments`, {
     storage_key: storageKey,
     file_name: file.name,
     content_type: file.type || 'application/octet-stream',
     size_bytes: file.size,
-    visibility,
+    comment_id: commentId,
   })
   return data
 }

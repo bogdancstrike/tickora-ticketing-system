@@ -15,7 +15,7 @@ from src.core.errors import NotFoundError, PermissionDeniedError, ValidationErro
 from src.iam import rbac
 from src.iam.principal import Principal
 from src.ticketing import events
-from src.ticketing.models import TicketAttachment
+from src.ticketing.models import TicketAttachment, TicketComment
 from src.ticketing.service import audit_service, ticket_service
 
 SAFE_NAME = re.compile(r"[^A-Za-z0-9._-]+")
@@ -32,12 +32,6 @@ def _storage_key(ticket_id: str, file_name: str) -> str:
     return posixpath.join("tickets", ticket_id, str(uuid.uuid4()), _safe_filename(file_name))
 
 
-def _validate_visibility(value: str) -> str:
-    if value not in ("public", "private"):
-        raise ValidationError("visibility must be public or private")
-    return value
-
-
 def request_upload_url(
     db: Session,
     principal: Principal,
@@ -46,12 +40,10 @@ def request_upload_url(
     file_name: str,
     content_type: str | None,
     size_bytes: int,
-    visibility: str = "private",
 ) -> dict:
     ticket = ticket_service.get(db, principal, ticket_id)
     if not rbac.can_upload_attachment(principal, ticket):
         raise PermissionDeniedError("not allowed to upload attachments")
-    _validate_visibility(visibility)
     file_name = _safe_filename(file_name)
     if size_bytes <= 0:
         raise ValidationError("size_bytes must be positive")
@@ -82,15 +74,18 @@ def register(
     storage_key: str,
     file_name: str,
     size_bytes: int,
+    comment_id: str,
     content_type: str | None = None,
     checksum_sha256: str | None = None,
-    visibility: str = "private",
-    comment_id: str | None = None,
 ) -> TicketAttachment:
     ticket = ticket_service.get(db, principal, ticket_id)
     if not rbac.can_upload_attachment(principal, ticket):
         raise PermissionDeniedError("not allowed to register attachments")
-    visibility = _validate_visibility(visibility)
+    
+    comment = db.get(TicketComment, comment_id)
+    if comment is None or comment.ticket_id != ticket.id:
+        raise ValidationError("invalid comment_id")
+
     file_name = _safe_filename(file_name)
     if size_bytes <= 0:
         raise ValidationError("size_bytes must be positive")
@@ -110,7 +105,6 @@ def register(
         size_bytes=size_bytes,
         storage_bucket=Config.S3_BUCKET_ATTACHMENTS,
         storage_key=storage_key,
-        visibility=visibility,
         checksum_sha256=checksum_sha256,
         is_scanned=True,
         scan_result="clean",
@@ -124,19 +118,23 @@ def register(
         entity_type="attachment",
         entity_id=attachment.id,
         ticket_id=ticket.id,
-        new_value={"file_name": file_name, "visibility": visibility, "size_bytes": size_bytes},
+        new_value={"file_name": file_name, "visibility": comment.visibility, "size_bytes": size_bytes},
     )
     return attachment
 
 
 def list_(db: Session, principal: Principal, ticket_id: str) -> list[TicketAttachment]:
     ticket = ticket_service.get(db, principal, ticket_id)
-    stmt = select(TicketAttachment).where(
-        TicketAttachment.ticket_id == ticket.id,
-        TicketAttachment.is_deleted.is_(False),
+    stmt = (
+        select(TicketAttachment)
+        .join(TicketComment, TicketComment.id == TicketAttachment.comment_id)
+        .where(
+            TicketAttachment.ticket_id == ticket.id,
+            TicketAttachment.is_deleted.is_(False),
+        )
     )
     if not rbac.can_see_private_comments(principal, ticket):
-        stmt = stmt.where(TicketAttachment.visibility == "public")
+        stmt = stmt.where(TicketComment.visibility == "public")
     return list(db.scalars(stmt.order_by(TicketAttachment.created_at.desc(), TicketAttachment.id.desc())))
 
 
@@ -145,7 +143,7 @@ def _load_authorized(db: Session, principal: Principal, attachment_id: str) -> t
     if attachment is None or attachment.is_deleted:
         raise NotFoundError("attachment not found")
     ticket = ticket_service.get(db, principal, attachment.ticket_id)
-    if not rbac.can_download_attachment(principal, ticket, attachment.visibility):
+    if not rbac.can_download_attachment(principal, ticket, attachment.comment.visibility):
         raise PermissionDeniedError("not allowed to access attachment")
     return attachment, ticket
 
@@ -184,6 +182,6 @@ def delete(db: Session, principal: Principal, attachment_id: str) -> TicketAttac
         entity_type="attachment",
         entity_id=attachment.id,
         ticket_id=ticket.id,
-        old_value={"file_name": attachment.file_name, "visibility": attachment.visibility},
+        old_value={"file_name": attachment.file_name, "visibility": attachment.comment.visibility},
     )
     return attachment

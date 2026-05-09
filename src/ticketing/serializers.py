@@ -107,7 +107,7 @@ def serialize_attachment(a: TicketAttachment) -> dict[str, Any]:
         "file_name": a.file_name,
         "content_type": a.content_type,
         "size_bytes": a.size_bytes,
-        "visibility": a.visibility,
+        "visibility": a.comment.visibility if a.comment else "private",
         "checksum_sha256": a.checksum_sha256,
         "is_scanned": a.is_scanned,
         "scan_result": a.scan_result,

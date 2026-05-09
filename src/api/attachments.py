@@ -27,7 +27,6 @@ class _UploadUrlIn(BaseModel):
     file_name: str = Field(min_length=1, max_length=500)
     content_type: str | None = Field(default=None, max_length=255)
     size_bytes: int = Field(gt=0)
-    visibility: str = "private"
 
 
 class _RegisterIn(BaseModel):
@@ -37,8 +36,7 @@ class _RegisterIn(BaseModel):
     size_bytes: int = Field(gt=0)
     content_type: str | None = Field(default=None, max_length=255)
     checksum_sha256: str | None = Field(default=None, max_length=128)
-    visibility: str = "private"
-    comment_id: str | None = None
+    comment_id: str = Field(min_length=1)
 
 
 def _parse(model_cls, raw: dict):
@@ -59,7 +57,6 @@ def request_upload_url(app, operation, request, *, principal: Principal, **kwarg
             file_name=body.file_name,
             content_type=body.content_type,
             size_bytes=body.size_bytes,
-            visibility=body.visibility,
         )
         return (out, 200)
 
@@ -77,7 +74,6 @@ def register_attachment(app, operation, request, *, principal: Principal, **kwar
             size_bytes=body.size_bytes,
             content_type=body.content_type,
             checksum_sha256=body.checksum_sha256,
-            visibility=body.visibility,
             comment_id=body.comment_id,
         )
         return (serialize_attachment(attachment), 201)
