@@ -14,7 +14,7 @@ from src.iam.models import User as IAMUser
 
 @register_task("notify_distributors")
 def notify_distributors(payload: Dict[str, Any]):
-    """Notify all distributors about a new ticket."""
+    """Notify all distributors and admins about a new ticket."""
     ticket_id = payload.get("ticket_id")
     with get_db() as db:
         ticket = db.get(Ticket, ticket_id)
@@ -22,31 +22,30 @@ def notify_distributors(payload: Dict[str, Any]):
             logger.warning("ticket not found for notification", extra={"ticket_id": ticket_id})
             return
 
-        # Find all users with distributor role
-        # Note: In a real scenario, we might want to query Keycloak or a local role cache
-        # For now, we'll assume we have a way to identify them. 
-        # According to RBAC docs, they have 'tickora_distributor' role.
-        # We'll look for users who have this role.
-        # Since roles are in JWT, we might need a local mirror or query IAM service.
+        kc = KeycloakAdminClient.get()
+        recipients_subjects = set()
         
-        # Simple implementation: notify all users who are marked as distributors in our system
-        # Actually, let's query users who have the role.
-        # For now, let's just notify all admins and known distributors if we had a role table.
-        # Since we don't have a roles table locally (only Keycloak), 
-        # we might need to sync roles or just notify based on some other criteria.
-        
-        # Let's assume we want to notify a specific group of users.
-        # In this project, we might just have a few seed users.
-        
-        distributors = db.scalars(
-            select(IAMUser).where(IAMUser.is_active.is_(True)) # Simplification: all active users for now, or filter by role if we had it
+        from src.iam.principal import ROLE_ADMIN, ROLE_DISTRIBUTOR
+        for role in (ROLE_ADMIN, ROLE_DISTRIBUTOR):
+            try:
+                users = kc.get_users_by_role(role)
+                for u in users:
+                    # Keycloak returns 'id' for the subject/sub
+                    if u.get("id"):
+                        recipients_subjects.add(u["id"])
+            except Exception as e:
+                logger.warning("failed to fetch users for role", extra={"role": role, "error": str(e)})
+
+        if not recipients_subjects:
+            logger.info("no distributors or admins found to notify")
+            return
+
+        # Map Keycloak subjects to local user IDs
+        users = db.scalars(
+            select(IAMUser).where(IAMUser.keycloak_subject.in_(list(recipients_subjects)), IAMUser.is_active.is_(True))
         ).all()
-        
-        # In a real system, we'd filter by role. 
-        # Let's just create notifications for all active users for demo purposes if no role table.
-        # Wait, I should check if there is a role table. I didn't see one in models.
-        
-        for user in distributors:
+
+        for user in users:
             _create_in_app_notification(
                 db, 
                 user_id=user.id,

@@ -1,6 +1,6 @@
-import { useEffect, useState, useCallback } from 'react'
-import { Badge, Button, Dropdown, Empty, Space, Tag, Tooltip, Typography, theme as antTheme } from 'antd'
-import { BellOutlined, CheckOutlined } from '@ant-design/icons'
+import { useEffect, useState, useCallback, useMemo } from 'react'
+import { Badge, Button, Dropdown, Empty, Space, Tag, Tooltip, Typography, theme as antTheme, notification } from 'antd'
+import { BellOutlined, CheckOutlined, ThunderboltOutlined } from '@ant-design/icons'
 import { useNavigate } from 'react-router-dom'
 import { useSessionStore } from '@/stores/sessionStore'
 import { API_BASE, getToken } from '@/api/client'
@@ -44,6 +44,9 @@ export function NotificationDropdown() {
   const user = useSessionStore((s) => s.user)
   const navigate = useNavigate()
   const { token } = antTheme.useToken()
+  const [api, contextHolder] = notification.useNotification()
+
+  const alertSound = useMemo(() => new Audio('/alert.mp3'), [])
 
   // Initial load: fetch persisted notifications via REST
   useEffect(() => {
@@ -86,8 +89,25 @@ export function NotificationDropdown() {
           try {
             const data = JSON.parse(event.data) as NotificationItem & { type: string }
             if (data.type === 'connection') return
+            
             setNotifications((prev) => [{ ...data, read: false }, ...prev].slice(0, 25))
             setUnreadCount((prev) => prev + 1)
+
+            // Alert for new tickets (Distributors/Admins)
+            if (data.type === 'ticket_created') {
+              alertSound.play().catch(() => { /* user interaction required for some browsers */ })
+              api.info({
+                message: data.title || 'New Ticket',
+                description: data.body,
+                icon: <ThunderboltOutlined style={{ color: '#722ed1' }} />,
+                placement: 'topRight',
+                duration: 8,
+                onClick: () => {
+                   const dest = destinationFor(data, user?.roles || [])
+                   if (dest) navigate(dest)
+                }
+              })
+            }
           } catch (e) {
             // ignore malformed SSE frames
           }
@@ -109,7 +129,7 @@ export function NotificationDropdown() {
       cancelled = true
       if (es) es.close()
     }
-  }, [user?.id])
+  }, [user?.id, alertSound, api, navigate])
 
   const markAllRead = useCallback(async () => {
     setNotifications((prev) => prev.map((n) => ({ ...n, read: true })))
@@ -223,10 +243,13 @@ export function NotificationDropdown() {
   )
 
   return (
-    <Dropdown popupRender={() => menu} trigger={['click']} placement="bottomRight">
-      <Badge count={unreadCount} offset={[-2, 10]} size="small">
-        <Button type="text" icon={<BellOutlined />} onClick={() => { /* badge cleared via mark-read */ }} />
-      </Badge>
-    </Dropdown>
+    <>
+      {contextHolder}
+      <Dropdown popupRender={() => menu} trigger={['click']} placement="bottomRight">
+        <Badge count={unreadCount} offset={[-2, 10]} size="small">
+          <Button type="text" icon={<BellOutlined />} onClick={() => { /* badge cleared via mark-read */ }} />
+        </Badge>
+      </Dropdown>
+    </>
   )
 }

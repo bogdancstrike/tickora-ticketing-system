@@ -82,3 +82,6 @@ class KeycloakAdminClient:
     def remove_realm_role(self, user_id: str, role_name: str) -> None:
         role = self._kc.get_realm_role(role_name)
         self._kc.delete_realm_roles_of_user(user_id=user_id, roles=[role])
+
+    def get_users_by_role(self, role_name: str) -> list[dict]:
+        return self._kc.get_realm_role_members(role_name)
