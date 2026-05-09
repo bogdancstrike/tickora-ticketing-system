@@ -306,13 +306,17 @@ def group_hierarchy(db: Session, principal: Principal) -> dict[str, Any]:
             "membership_id": m.id,
         })
 
-    children = [{"key": "tickora:sectors", "title": "sectors", "children": list(by_sector.values())}]
+    children = [{"key": "tickora:sectors", "title": "local sectors", "children": list(by_sector.values())}]
     keycloak_tree = _keycloak_group_tree()
     if keycloak_tree:
+        # Since _keycloak_group_tree now returns the 'tickora' branch directly,
+        # we can just use it.
+        keycloak_tree["title"] = "Keycloak hierarchy (/tickora)"
         children.append(keycloak_tree)
+    
     return {
-        "key": "tickora",
-        "title": "tickora",
+        "key": "root",
+        "title": "Groups",
         "children": children,
     }
 
@@ -698,7 +702,13 @@ def _keycloak_group_tree() -> dict[str, Any] | None:
     _try_keycloak(lambda kc: groups.extend(kc.list_groups()), "list_groups")
     if not groups:
         return None
-    return {"key": "keycloak", "title": "Keycloak", "children": [_normalize_group(g) for g in groups]}
+    
+    # Filter: only show the 'tickora' group branch
+    tickora_branch = next((g for g in groups if g.get("name") == "tickora"), None)
+    if not tickora_branch:
+        return None
+
+    return _normalize_group(tickora_branch)
 
 
 def _normalize_group(group: dict[str, Any]) -> dict[str, Any]:

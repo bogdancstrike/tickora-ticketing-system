@@ -5,7 +5,7 @@ import {
   Spin, Statistic, Table, Tag, Typography, message, theme as antTheme,
 } from 'antd'
 import {
-  AppstoreAddOutlined, DeleteOutlined, EditOutlined, PlusOutlined,
+  AppstoreAddOutlined, AppstoreOutlined, DeleteOutlined, EditOutlined, PlusOutlined,
   ReloadOutlined, SaveOutlined, SettingOutlined,
 } from '@ant-design/icons'
 import { Responsive, WidthProvider } from 'react-grid-layout'

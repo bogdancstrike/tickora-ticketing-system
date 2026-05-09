@@ -95,13 +95,13 @@ function AppSidebar() {
       style={{ background: token.colorBgContainer, borderRight: `1px solid ${token.colorBorder}` }}
     >
       <div style={{
-        height: 80, display: 'flex', alignItems: 'center', justifyContent: 'center',
-        padding: '0 16px', borderBottom: `1px solid ${token.colorBorder}`,
+        height: 100, display: 'flex', alignItems: 'center', justifyContent: 'center',
+        padding: '10px', borderBottom: `1px solid ${token.colorBorder}`,
       }}>
         {collapsed ? (
-          <img src="/logo.png" alt="Tickora" style={{ height: 44, cursor: 'pointer' }} onClick={() => navigate('/monitor')} />
+          <img src="/logo.png" alt="Tickora" style={{ width: 80, height: 80, cursor: 'pointer', objectFit: 'contain' }} onClick={() => navigate('/monitor')} />
         ) : (
-          <img src="/logo_text.png" alt="Tickora" style={{ height: 44, cursor: 'pointer' }} onClick={() => navigate('/monitor')} />
+          <img src="/logo_text.png" alt="Tickora" style={{ height: 80, maxWidth: '100%', cursor: 'pointer', objectFit: 'contain' }} onClick={() => navigate('/monitor')} />
         )}
       </div>
       <div style={{ padding: '4px 8px', textAlign: 'right' }}>
@@ -153,18 +153,19 @@ function AppHeader() {
     <Header style={{
       display: 'flex', alignItems: 'center', justifyContent: 'space-between',
       padding: '0 16px', background: token.colorBgContainer,
+      height: isMobile ? 100 : 64,
       borderBottom: `1px solid ${token.colorBorder}`,
     }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
         {isMobile && (
           <>
             <Button type="text" icon={<MenuOutlined />} onClick={() => setDrawerDrawerVisible(true)} />
-            <img src="/logo_text.png" alt="Tickora" style={{ height: 32, cursor: 'pointer' }} onClick={() => navigate('/monitor')} />
+            <img src="/logo_text.png" alt="Tickora" style={{ height: 60, cursor: 'pointer' }} onClick={() => navigate('/monitor')} />
           </>
         )}
         {!isMobile && (
           <>
-            <img src="/logo.png" alt="Tickora" style={{ height: 36, marginRight: 12 }} />
+            <img src="/logo.png" alt="Tickora" style={{ height: 48, marginRight: 12 }} />
             <Text type="secondary">Ticketing · Tasking · Distribution</Text>
           </>
         )}
@@ -176,7 +177,7 @@ function AppHeader() {
         onClose={() => setDrawerDrawerVisible(false)}
         open={drawerVisible}
         styles={{ body: { padding: 0 } }}
-        width={280}
+        width="280px"
       >
         <Menu
           mode="inline"
