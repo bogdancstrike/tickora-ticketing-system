@@ -371,6 +371,74 @@ function WidgetCataloguePanel() {
   )
 }
 
+function SystemSettingsPanel() {
+  const qc = useQueryClient()
+  const settings = useQuery({ queryKey: ['adminSystemSettings'], queryFn: listSystemSettings, staleTime: 60_000 })
+  const [editing, setEditing] = useState<SystemSetting | null>(null)
+
+  const save = useMutation({
+    mutationFn: (values: any) => {
+        const payload = { 
+            ...editing, 
+            ...values, 
+            value: typeof values.value === 'string' ? JSON.parse(values.value) : values.value 
+        }
+        return upsertSystemSetting(payload)
+    },
+    onSuccess: () => {
+      message.success('Setting saved')
+      setEditing(null)
+      qc.invalidateQueries({ queryKey: ['adminSystemSettings'] })
+    },
+    onError: (err: any) => message.error(err.message || 'Save failed')
+  })
+
+  const columns: ColumnsType<SystemSetting> = [
+    { title: 'Setting Key', dataIndex: 'key', width: 250 },
+    { title: 'Value', dataIndex: 'value', render: (v) => <Typography.Text code>{JSON.stringify(v)}</Typography.Text> },
+    { title: 'Description', dataIndex: 'description' },
+    { title: 'Last Updated', dataIndex: 'updated_at', render: (v) => v ? fmtDateTime(v) : '-' },
+    {
+      title: 'Action',
+      width: 100,
+      render: (_, row) => <Button size="small" onClick={() => setEditing(row)}>Edit</Button>,
+    },
+  ]
+
+  return (
+    <Panel title="Auto-Pilot & System Settings" icon={<SettingOutlined />}>
+      <Table
+        rowKey="key"
+        size="small"
+        loading={settings.isLoading}
+        dataSource={settings.data?.items || []}
+        pagination={false}
+        columns={columns}
+      />
+      <Modal
+        title="Edit System Setting"
+        open={!!editing}
+        onCancel={() => setEditing(null)}
+        footer={null}
+        destroyOnHide
+      >
+        <Form
+          layout="vertical"
+          initialValues={editing ? { ...editing, value: JSON.stringify(editing.value, null, 2) } : {}}
+          onFinish={(values) => save.mutate(values)}
+        >
+          <Form.Item name="key" label="Key"><Input disabled /></Form.Item>
+          <Form.Item name="value" label="Value (JSON)" rules={[{ required: true }]}>
+            <Input.TextArea rows={6} placeholder='{"max": 5}' />
+          </Form.Item>
+          <Form.Item name="description" label="Description"><Input.TextArea rows={2} /></Form.Item>
+          <Button type="primary" htmlType="submit" loading={save.isPending}>Save</Button>
+        </Form>
+      </Modal>
+    </Panel>
+  )
+}
+
 function ConfigTab() {
   const qc = useQueryClient()
   const [editing, setEditing] = useState<AdminMetadataKey | null>(null)
@@ -381,6 +449,7 @@ function ConfigTab() {
   })
   return (
     <div style={{ display: 'grid', gap: 16 }}>
+      <SystemSettingsPanel />
       <Panel title="Metadata catalogue" icon={<DatabaseOutlined />}>
         <Flex justify="end" style={{ marginBottom: 12 }}><Button type="primary" icon={<PlusOutlined />} onClick={() => setEditing({ key: '', label: '', value_type: 'string', options: [], is_active: true })}>New metadata key</Button></Flex>
         <Table

@@ -213,6 +213,23 @@ export const updateAdminSlaPolicy = async (policyId: string, payload: AdminSlaPo
   return data
 }
 
+export interface SystemSetting {
+  key: string
+  value: any
+  description?: string | null
+  updated_at?: string | null
+}
+
+export const listSystemSettings = async (): Promise<{ items: SystemSetting[] }> => {
+  const { data } = await apiClient.get('/api/admin/system-settings')
+  return data
+}
+
+export const upsertSystemSetting = async (payload: Partial<SystemSetting> & { key: string; value: any }): Promise<SystemSetting> => {
+  const { data } = await apiClient.post('/api/admin/system-settings', payload)
+  return data
+}
+
 export interface AdminWidgetDefinition {
   type: string
   display_name: string

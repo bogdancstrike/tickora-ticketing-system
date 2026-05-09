@@ -17,8 +17,9 @@ def _user_id(kwargs) -> str:
 
 @require_authenticated
 def monitor_overview(app, operation, request, *, principal: Principal, **kwargs):
+    days = int(flask_request.args.get("days", 30))
     with get_db() as db:
-        return (monitor_service.monitor_overview(db, principal), 200)
+        return (monitor_service.monitor_overview(db, principal, days=days), 200)
 
 
 @require_authenticated
@@ -62,5 +63,6 @@ def sla_monitor(app, operation, request, *, principal: Principal, **kwargs):
 
 @require_authenticated
 def timeseries_monitor(app, operation, request, *, principal: Principal, **kwargs):
+    days = int(flask_request.args.get("days", 30))
     with get_db() as db:
-        return ({"items": monitor_service.monitor_timeseries(db, principal)}, 200)
+        return ({"items": monitor_service.monitor_timeseries(db, principal, days=days)}, 200)

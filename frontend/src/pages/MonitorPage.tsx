@@ -7,6 +7,7 @@ import {
 } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
 import { ReloadOutlined } from '@ant-design/icons'
+import { useNavigate } from 'react-router-dom'
 import {
   getMonitorOverview, getMonitorSector, getTicketOptions, getMonitorUser,
   listAssignableUsers, type MonitorOldTicket,
@@ -46,12 +47,17 @@ function ChartPanel({ title, description, children }: { title: string; descripti
 }
 
 function OldestTickets({ tickets }: { tickets: MonitorOldTicket[] }) {
+  const navigate = useNavigate()
   return (
     <List
       dataSource={tickets}
       locale={{ emptyText: <Empty description="No active tickets" image={Empty.PRESENTED_IMAGE_SIMPLE} /> }}
       renderItem={(ticket) => (
-        <List.Item>
+        <List.Item 
+          style={{ cursor: 'pointer' }} 
+          onClick={() => navigate(`/tickets/${ticket.id}`)}
+          className="tickora-row-clickable"
+        >
           <List.Item.Meta
             title={<Space><Typography.Text strong>{ticket.ticket_code}</Typography.Text><Tag>{ticket.status}</Tag><Tag color={ticket.priority === 'critical' ? 'red' : undefined}>{ticket.priority}</Tag></Space>}
             description={ticket.title || 'Untitled ticket'}
@@ -125,9 +131,12 @@ export function MonitorPage() {
   const user = useSessionStore((s) => s.user)
   const [sectorCode, setSectorCode] = useState<string | undefined>()
   const [userId, setUserId] = useState<string | undefined>()
+  const [days, setDays] = useState<number>(30)
+
   const overview = useQuery({
-    queryKey: ['monitorOverview'],
-    queryFn: getMonitorOverview,
+    queryKey: ['monitorOverview', days],
+    queryFn: () => getMonitorOverview(days),
+    placeholderData: (prev) => prev,
     staleTime: 60_000,
   })
   const options = useQuery({
@@ -362,17 +371,32 @@ export function MonitorPage() {
       {selectedSector.error && <Alert type="error" message={selectedSector.error.message} showIcon />}
       {selectedUser.error && <Alert type="error" message={selectedUser.error.message} showIcon />}
 
+      <Tabs items={tabs as any} />
+
       {timeseriesOption && (
-        <div style={{ background: token.colorBgContainer, border: `1px solid ${token.colorBorderSecondary}`, borderRadius: 8, padding: 16, minHeight: 280, boxShadow: token.boxShadowTertiary }}>
-          <Typography.Title level={5} style={{ marginTop: 0 }}>Created vs Closed · last 30 days</Typography.Title>
-          <Typography.Text type="secondary" style={{ display: 'block', marginTop: -4, marginBottom: 8, fontSize: 12 }}>
-            Daily ticket creation and closure counts visible to your role.
-          </Typography.Text>
+        <div style={{ background: token.colorBgContainer, border: `1px solid ${token.colorBorderSecondary}`, borderRadius: 8, padding: 16, minHeight: 280, boxShadow: token.boxShadowTertiary, marginTop: 16 }}>
+          <Flex justify="space-between" align="center" style={{ marginBottom: 8 }}>
+            <div>
+              <Typography.Title level={5} style={{ margin: 0 }}>Created vs Closed · last {days} days</Typography.Title>
+              <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                Daily ticket creation and closure counts visible to your role.
+              </Typography.Text>
+            </div>
+            <Select
+              value={days}
+              onChange={setDays}
+              size="small"
+              style={{ width: 120 }}
+              options={[
+                { value: 1, label: 'Last 24h' },
+                { value: 7, label: 'Last 7 days' },
+                { value: 30, label: 'Last 30 days' },
+              ]}
+            />
+          </Flex>
           <ReactECharts option={timeseriesOption} style={{ height: 260 }} />
         </div>
       )}
-
-      <Tabs items={tabs as any} />
     </div>
   )
 }

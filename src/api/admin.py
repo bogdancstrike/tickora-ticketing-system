@@ -159,6 +159,18 @@ def update_sla_policy(app, operation, request, *, principal: Principal, **kwargs
 
 
 @require_authenticated
+def system_settings(app, operation, request, *, principal: Principal, **kwargs):
+    with get_db() as db:
+        return ({"items": admin_service.list_system_settings(db, principal)}, 200)
+
+
+@require_authenticated
+def upsert_system_setting(app, operation, request, *, principal: Principal, **kwargs):
+    with get_db() as db:
+        return (admin_service.upsert_system_setting(db, principal, _payload()), 200)
+
+
+@require_authenticated
 def list_widget_definitions(app, operation, request, *, principal: Principal, **kwargs):
     with get_db() as db:
         stmt = select(WidgetDefinition).order_by(WidgetDefinition.type)

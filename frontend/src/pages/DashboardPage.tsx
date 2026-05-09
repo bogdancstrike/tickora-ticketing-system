@@ -186,6 +186,7 @@ function KpiWidget({ config }: { config: any }) {
 }
 
 function AuditWidget({ config }: { config: any }) {
+  const navigate = useNavigate()
   const { data, isLoading } = useQuery({
     queryKey: ['auditWidget', config],
     queryFn: () => {
@@ -207,7 +208,11 @@ function AuditWidget({ config }: { config: any }) {
       dataSource={(data?.items || []).slice(0, config.limit || 15)}
       locale={{ emptyText: <Empty description="No events found" image={Empty.PRESENTED_IMAGE_SIMPLE} /> }}
       renderItem={(a: any) => (
-        <List.Item style={{ padding: '8px 12px', fontSize: 12 }}>
+        <List.Item 
+          style={{ padding: '8px 12px', fontSize: 12, cursor: a.ticket_id ? 'pointer' : 'default' }}
+          onClick={() => a.ticket_id && navigate(`/tickets/${a.ticket_id}`)}
+          className={a.ticket_id ? 'tickora-row-clickable' : ''}
+        >
           <List.Item.Meta
             avatar={<Avatar size="small" icon={<UserOutlined />} />}
             title={<Typography.Text style={{ fontSize: 12 }}><b>{a.actor_username}</b> {a.action.replace(/_/g, ' ')}</Typography.Text>}
@@ -225,6 +230,7 @@ function AuditWidget({ config }: { config: any }) {
 }
 
 function RecentCommentsWidget({ config }: { config: any }) {
+  const navigate = useNavigate()
   const { data, isLoading } = useQuery({
     queryKey: ['widgetComments', config.ticketId],
     queryFn: () => config.ticketId ? listComments(config.ticketId) : Promise.resolve({ items: [] }),
@@ -239,7 +245,11 @@ function RecentCommentsWidget({ config }: { config: any }) {
       size="small"
       dataSource={(data?.items || []).slice(0, 10)}
       renderItem={(c: any) => (
-        <List.Item style={{ padding: '8px 12px' }}>
+        <List.Item 
+          style={{ padding: '8px 12px', cursor: 'pointer' }}
+          onClick={() => navigate(`/tickets/${config.ticketId}`)}
+          className="tickora-row-clickable"
+        >
           <List.Item.Meta
             title={<Typography.Text strong style={{ fontSize: 12 }}>{c.author_display || c.author_username}</Typography.Text>}
             description={<div style={{ fontSize: 11, maxHeight: 40, overflow: 'hidden' }}>{c.body}</div>}
@@ -478,6 +488,76 @@ function StaleTicketsWidget({ config }: { config: any }) {
     )
 }
 
+function NotReviewedWidget({ config }: { config: any }) {
+    const navigate = useNavigate()
+    const { data, isLoading } = useQuery({
+        queryKey: ['monitorOverview'],
+        queryFn: () => getMonitorOverview(),
+        staleTime: 60_000,
+    })
+
+    if (isLoading) return <div style={{ textAlign: 'center', padding: 20 }}><Spin /></div>
+    const tickets = data?.distributor?.not_reviewed || []
+
+    return (
+        <List
+            size="small"
+            dataSource={tickets.slice(0, config.limit || 20)}
+            locale={{ emptyText: <Empty description="No pending tickets" image={Empty.PRESENTED_IMAGE_SIMPLE} /> }}
+            renderItem={(t: any) => (
+                <List.Item
+                    style={{ padding: '8px 12px', cursor: 'pointer' }}
+                    onClick={() => navigate(`/tickets/${t.id}`)}
+                    className="tickora-row-clickable"
+                >
+                    <div style={{ display: 'grid', gap: 2, width: '100%' }}>
+                        <Flex justify="space-between" align="center">
+                            <Typography.Text strong ellipsis style={{ fontSize: 13 }}>{t.title || t.ticket_code}</Typography.Text>
+                            <PriorityTag priority={t.priority} />
+                        </Flex>
+                        <Typography.Text type="secondary" style={{ fontSize: 11 }}>{t.ticket_code} · {fmtDateTime(t.created_at)}</Typography.Text>
+                    </div>
+                </List.Item>
+            )}
+        />
+    )
+}
+
+function ReviewedTodayWidget({ config }: { config: any }) {
+    const navigate = useNavigate()
+    const { data, isLoading } = useQuery({
+        queryKey: ['monitorOverview'],
+        queryFn: () => getMonitorOverview(),
+        staleTime: 60_000,
+    })
+
+    if (isLoading) return <div style={{ textAlign: 'center', padding: 20 }}><Spin /></div>
+    const tickets = data?.distributor?.reviewed_today || []
+
+    return (
+        <List
+            size="small"
+            dataSource={tickets.slice(0, config.limit || 20)}
+            locale={{ emptyText: <Empty description="No tickets reviewed today" image={Empty.PRESENTED_IMAGE_SIMPLE} /> }}
+            renderItem={(t: any) => (
+                <List.Item
+                    style={{ padding: '8px 12px', cursor: 'pointer' }}
+                    onClick={() => navigate(`/tickets/${t.id}`)}
+                    className="tickora-row-clickable"
+                >
+                    <div style={{ display: 'grid', gap: 2, width: '100%' }}>
+                        <Flex justify="space-between" align="center">
+                            <Typography.Text strong ellipsis style={{ fontSize: 13 }}>{t.title || t.ticket_code}</Typography.Text>
+                            <StatusTag status={t.status} />
+                        </Flex>
+                        <Typography.Text type="secondary" style={{ fontSize: 11 }}>{t.ticket_code} · Reviewed recently</Typography.Text>
+                    </div>
+                </List.Item>
+            )}
+        />
+    )
+}
+
 function WorkloadBalancerWidget({ config }: { config: any }) {
     const { data, isLoading } = useQuery({
         queryKey: ['monitorSector', config.sectorCode],
@@ -546,6 +626,8 @@ const WIDGET_TYPES = [
     { type: 'stale_tickets', label: 'Stale Tickets', icon: <HistoryOutlined />, configurable: true },
     { type: 'workload_balancer', label: 'Workload Balancer', icon: <BarChartOutlined />, configurable: true },
     { type: 'bottleneck_analysis', label: 'Bottleneck Analysis', icon: <LineChartOutlined />, configurable: true },
+    { type: 'not_reviewed', label: 'Not Yet Reviewed', icon: <HourglassOutlined />, configurable: true },
+    { type: 'reviewed_today', label: 'Reviewed Today', icon: <CheckCircleOutlined />, configurable: true },
     { type: 'shortcuts', label: 'Quick Links', icon: <SendOutlined />, configurable: true },
     { type: 'clock', label: 'Clock', icon: <FieldTimeOutlined />, configurable: false },
     { type: 'system_health', label: 'System Health', icon: <DatabaseOutlined />, configurable: false },
@@ -569,6 +651,8 @@ function WidgetRenderer({ widget }: { widget: DashboardWidgetDto }) {
   if (widget.type === 'stale_tickets') return <StaleTicketsWidget config={widget.config} />
   if (widget.type === 'workload_balancer') return <WorkloadBalancerWidget config={widget.config} />
   if (widget.type === 'bottleneck_analysis') return <BottleneckWidget config={widget.config} />
+  if (widget.type === 'not_reviewed') return <NotReviewedWidget config={widget.config} />
+  if (widget.type === 'reviewed_today') return <ReviewedTodayWidget config={widget.config} />
 
   return <Empty description={`Widget type ${widget.type} coming soon`} image={Empty.PRESENTED_IMAGE_SIMPLE} />
 }
@@ -578,7 +662,7 @@ function WidgetRenderer({ widget }: { widget: DashboardWidgetDto }) {
 const CONFIGURABLE_TYPES = [
     'ticket_list', 'monitor_kpi', 'audit_stream', 'profile_card', 'shortcuts', 
     'sector_stats', 'user_workload', 'workload_balancer', 'bottleneck_analysis', 
-    'stale_tickets', 'recent_comments'
+    'stale_tickets', 'recent_comments', 'not_reviewed', 'reviewed_today'
 ]
 
 function DashboardDetail({ dashboardId, onBack }: { dashboardId: string, onBack: () => void }) {
@@ -1029,11 +1113,26 @@ export function DashboardPage() {
               actions={[
                 <DeleteOutlined key="del" onMouseDown={e => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); del.mutate(d.id) }} />
               ]}
+              bodyStyle={{ padding: 16 }}
             >
               <Card.Meta 
                 avatar={<AppstoreOutlined style={{ fontSize: 24, color: token.colorPrimary }} />}
                 title={d.title} 
-                description={`Created ${new Date(d.created_at).toLocaleDateString()}`}
+                description={
+                  <div style={{ display: 'grid', gap: 4 }}>
+                    <Typography.Text type="secondary" ellipsis={{ tooltip: d.description }} style={{ fontSize: 12 }}>
+                      {d.description || 'No description'}
+                    </Typography.Text>
+                    <Flex justify="space-between" align="center" style={{ marginTop: 8 }}>
+                       <Tag icon={<AppstoreOutlined />} color="blue" style={{ margin: 0 }}>
+                         {d.widget_count} widgets
+                       </Tag>
+                       <Typography.Text type="secondary" style={{ fontSize: 11 }}>
+                         Updated {fmtDateTime(d.updated_at)}
+                       </Typography.Text>
+                    </Flex>
+                  </div>
+                }
               />
             </Card>
           </Col>
@@ -1049,6 +1148,9 @@ export function DashboardPage() {
         <Form form={form} layout="vertical" onFinish={(v) => create.mutate(v)}>
           <Form.Item name="title" label="Title" rules={[{ required: true, min: 2 }]}>
             <Input placeholder="E.g., Morning Review" />
+          </Form.Item>
+          <Form.Item name="description" label="Description (optional)">
+            <Input.TextArea placeholder="A brief summary of what this dashboard tracks" rows={3} />
           </Form.Item>
         </Form>
       </Modal>

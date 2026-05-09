@@ -27,6 +27,7 @@ from src.ticketing.models import (
     Sector,
     SectorMembership,
     SlaPolicy,
+    SystemSetting,
     Ticket,
     TicketMetadata,
 )
@@ -498,6 +499,46 @@ def upsert_sla_policy(
     return new
 
 
+def list_system_settings(db: Session, principal: Principal) -> list[dict[str, Any]]:
+    require_admin(principal)
+    rows = list(db.scalars(select(SystemSetting).order_by(SystemSetting.key.asc())))
+    return [_serialize_system_setting(r) for r in rows]
+
+
+def upsert_system_setting(db: Session, principal: Principal, payload: dict[str, Any]) -> dict[str, Any]:
+    require_admin(principal)
+    key = str(payload.get("key") or "").strip().lower()
+    if not key:
+        raise ValidationError("key is required")
+    value = payload.get("value")
+    if value is None:
+        raise ValidationError("value is required")
+
+    row = db.get(SystemSetting, key)
+    old = _serialize_system_setting(row) if row else None
+    if row is None:
+        row = SystemSetting(key=key, value=value, description=payload.get("description"))
+        db.add(row)
+    else:
+        row.value = value
+        if "description" in payload:
+            row.description = payload.get("description")
+
+    db.flush()
+    new = _serialize_system_setting(row)
+    audit_service.record(
+        db,
+        actor=principal,
+        action=events.CONFIG_CHANGED,
+        entity_type="system_setting",
+        entity_id=None,
+        old_value=old,
+        new_value=new,
+        metadata={"operation": "admin_upsert_system_setting", "key": key},
+    )
+    return new
+
+
 def _admin_queues(db: Session) -> dict[str, int]:
     return {
         "pending_review": _count(db, select(Ticket).where(Ticket.is_deleted.is_(False), Ticket.status == "pending")),
@@ -608,6 +649,17 @@ def _serialize_sla_policy(row: SlaPolicy | None) -> dict[str, Any] | None:
         "resolution_minutes": row.resolution_minutes,
         "is_active": row.is_active,
         "created_at": _dt(row.created_at),
+        "updated_at": _dt(row.updated_at),
+    }
+
+
+def _serialize_system_setting(row: SystemSetting | None) -> dict[str, Any] | None:
+    if row is None:
+        return None
+    return {
+        "key": row.key,
+        "value": row.value,
+        "description": row.description,
         "updated_at": _dt(row.updated_at),
     }
 

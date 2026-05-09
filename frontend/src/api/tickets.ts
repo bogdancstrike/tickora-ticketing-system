@@ -231,6 +231,8 @@ export interface DashboardWidgetDto {
 export interface CustomDashboardDto {
   id: string
   title: string
+  description?: string | null
+  widget_count: number
   is_default: boolean
   created_at: string
   updated_at: string
@@ -279,8 +281,8 @@ export const changeTicketStatus = async (ticketId: string, status: string, reaso
   return data
 }
 
-export const getMonitorOverview = async (): Promise<MonitorOverview> => {
-  const { data } = await apiClient.get('/api/monitor/overview')
+export const getMonitorOverview = async (days?: number): Promise<MonitorOverview> => {
+  const { data } = await apiClient.get('/api/monitor/overview', { params: { days } })
   return data
 }
 
@@ -304,7 +306,7 @@ export const getDashboard = async (id: string): Promise<CustomDashboardDto> => {
   return data
 }
 
-export const createDashboard = async (payload: { title: string; is_default?: boolean }): Promise<CustomDashboardDto> => {
+export const createDashboard = async (payload: { title: string; description?: string; is_default?: boolean }): Promise<CustomDashboardDto> => {
   const { data } = await apiClient.post('/api/dashboards', payload)
   return data
 }

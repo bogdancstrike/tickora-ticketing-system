@@ -659,6 +659,22 @@
     },
     {
       "namespace": "tickora",
+      "operation_name": "admin_system_settings",
+      "model_name": "Empty",
+      "request_method": ["GET"],
+      "api_url": "/api/admin/system-settings",
+      "exec_method": { "module_name": "api.admin", "method_name": "system_settings" }
+    },
+    {
+      "namespace": "tickora",
+      "operation_name": "admin_system_settings_upsert",
+      "model_name": "Empty",
+      "request_method": ["POST"],
+      "api_url": "/api/admin/system-settings",
+      "exec_method": { "module_name": "api.admin", "method_name": "upsert_system_setting" }
+    },
+    {
+      "namespace": "tickora",
       "operation_name": "admin_list_widgets",
       "model_name": "Empty",
       "request_method": ["GET"],

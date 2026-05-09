@@ -51,6 +51,7 @@ def create_dashboard(db: Session, p: Principal, payload: dict[str, Any]) -> dict
     d = CustomDashboard(
         owner_user_id=p.user_id,
         title=title,
+        description=payload.get("description"),
         is_public=bool(payload.get("is_public", False))
     )
     db.add(d)
@@ -66,6 +67,8 @@ def update_dashboard(db: Session, p: Principal, dashboard_id: str, payload: dict
     
     if "title" in payload:
         d.title = str(payload["title"]).strip()
+    if "description" in payload:
+        d.description = payload["description"]
     if "is_public" in payload:
         d.is_public = bool(payload["is_public"])
     
@@ -144,6 +147,8 @@ def sync_widget_catalogue(db: Session) -> None:
         ("system_health", "System Health", "Backend services status monitor", "DatabaseOutlined"),
         ("sla_overview", "SLA Overview", "Service level agreement compliance tracking", "CarryOutOutlined"),
         ("welcome_banner", "Welcome Banner", "Personalized greeting and tips", "SmileOutlined"),
+        ("not_reviewed", "Not Yet Reviewed", "Pending tickets waiting for distribution", "HourglassOutlined"),
+        ("reviewed_today", "Reviewed Today", "Tickets reviewed by distributors in the last 24h", "CheckCircleOutlined"),
     ]
 
     for w_type, name, desc, icon in catalogue:
@@ -170,6 +175,9 @@ def auto_configure_dashboard(db: Session, p: Principal, dashboard_id: str, mode:
         db.flush()
         db.refresh(d)
     
+    # Load limits
+    max_watchers = int(get_setting(db, "autopilot_max_ticket_watchers", 5))
+
     # Heuristics
     widgets_to_add = []
     
@@ -206,21 +214,21 @@ def auto_configure_dashboard(db: Session, p: Principal, dashboard_id: str, mode:
             {"type": "recent_comments", "x": 8, "y": 3, "w": 4, "h": 4, "config": {"visibility": "public", "scope": "my_requests"}},
         ])
 
-    # Add 5 most recent active tickets as specific comment watchers
+    # Add dynamic watchers for most recent active tickets
     recent_tickets = db.scalars(
         _visible_stmt(p)
         .where(Ticket.status.in_(ACTIVE_STATUSES))
         .order_by(Ticket.created_at.desc())
-        .limit(5)
+        .limit(max_watchers)
     ).all()
 
+    current_y = 11
     for idx, t in enumerate(recent_tickets):
-        # Place them at the end or in a dedicated row
         widgets_to_add.append({
             "type": "recent_comments",
             "title": f"Comments: {t.ticket_code}",
             "x": (idx % 3) * 4,
-            "y": 11 + (idx // 3) * 4,
+            "y": current_y + (idx // 3) * 4,
             "w": 4, "h": 4,
             "config": {"ticketId": t.id, "limit": 5}
         })
@@ -245,6 +253,8 @@ def _serialize_dashboard(d: CustomDashboard, full: bool = False) -> dict[str, An
     res = {
         "id": d.id,
         "title": d.title,
+        "description": d.description,
+        "widget_count": len(d.widgets),
         "is_public": d.is_public,
         "created_at": d.created_at.isoformat(),
         "updated_at": d.updated_at.isoformat(),
@@ -260,6 +270,12 @@ def _serialize_widget(w: DashboardWidget) -> dict[str, Any]:
         "type": w.type,
         "title": w.title,
         "config": w.config,
+        "x": w.x,
+        "y": w.y,
+        "w": w.w,
+        "h": w.h,
+    }
+ w.config,
         "x": w.x,
         "y": w.y,
         "w": w.w,

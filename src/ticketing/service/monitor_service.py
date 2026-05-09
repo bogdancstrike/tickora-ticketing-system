@@ -12,7 +12,7 @@ from framework.commons.logger import logger
 from sqlalchemy import case, func, or_, select, cast as sa_cast, Text as sa_Text
 from sqlalchemy.orm import Session
 
-from src.core.errors import NotFoundError, PermissionDeniedError
+from src.core.errors import NotFoundError, PermissionDeniedError, ValidationError
 from src.core.spans import set_attr, span
 from src.iam import rbac
 from src.iam.principal import Principal
@@ -24,7 +24,7 @@ ACTIVE_STATUSES = ("pending", "assigned_to_sector", "in_progress", "reopened")
 DONE_STATUSES = ("done", "closed")
 
 
-def monitor_overview(db: Session, principal: Principal) -> dict[str, Any]:
+def monitor_overview(db: Session, principal: Principal, *, days: int = 30) -> dict[str, Any]:
     with span("monitor.overview", username=principal.username, user_id=principal.user_id) as current:
         payload: dict[str, Any] = {
             "generated_at": datetime.now(timezone.utc).isoformat(),
@@ -32,7 +32,7 @@ def monitor_overview(db: Session, principal: Principal) -> dict[str, Any]:
             "distributor": None,
             "sectors": [],
             "personal": monitor_personal(db, principal, principal.user_id),
-            "timeseries": monitor_timeseries(db, principal),
+            "timeseries": monitor_timeseries(db, principal, days=days),
             "stale_tickets": _stale_tickets(db, principal),
         }
         if rbac.can_view_global_dashboard(principal):
@@ -70,6 +70,22 @@ def monitor_global(db: Session, principal: Principal) -> dict[str, Any]:
 def monitor_distributor(db: Session, principal: Principal) -> dict[str, Any]:
     if not (principal.is_admin or principal.is_distributor):
         raise PermissionDeniedError("not allowed to view distributor monitor")
+
+    threshold_24h = datetime.now(timezone.utc) - timedelta(hours=24)
+
+    # Tickets transitioned out of pending today
+    reviewed_today_sub = (
+        select(TicketStatusHistory.ticket_id)
+        .where(
+            TicketStatusHistory.old_status == "pending",
+            TicketStatusHistory.created_at >= threshold_24h
+        )
+        .distinct()
+        .subquery()
+    )
+
+    reviewed_today_stmt = _ticket_stmt().where(Ticket.id.in_(reviewed_today_sub))
+
     return {
         "kpis": {
             "pending_review": _count(db, _ticket_stmt().where(Ticket.status == "pending")),
@@ -80,6 +96,18 @@ def monitor_distributor(db: Session, principal: Principal) -> dict[str, Any]:
         "by_priority": _breakdown(db, Ticket.priority, status=("pending", "assigned_to_sector")),
         "by_category": _breakdown(db, Ticket.category, status=("pending", "assigned_to_sector")),
         "oldest": _oldest_tickets(db, status=("pending", "assigned_to_sector"), limit=8),
+        "not_reviewed": _oldest_tickets(db, status=("pending",), limit=20),
+        "reviewed_today": [
+            {
+                "id": t.id,
+                "ticket_code": t.ticket_code,
+                "title": t.title,
+                "status": t.status,
+                "priority": t.priority,
+                "created_at": t.created_at.isoformat() if t.created_at else None,
+            }
+            for t in db.scalars(reviewed_today_stmt.order_by(Ticket.updated_at.desc()).limit(20))
+        ]
     }
 
 
@@ -165,7 +193,7 @@ def monitor_sla(db: Session, principal: Principal) -> dict[str, Any]:
     }
 
 
-def monitor_timeseries(db: Session, principal: Principal, *, days: int = 14) -> list[dict[str, Any]]:
+def monitor_timeseries(db: Session, principal: Principal, *, days: int = 30) -> list[dict[str, Any]]:
     start = _today_start() - timedelta(days=days - 1)
     created_rows = _daily_counts(db, _visible_stmt(principal), Ticket.created_at, start)
     closed_rows = _daily_counts(db, _daily_stmt(principal, _closed_timestamp(), start), _closed_timestamp(), start)
@@ -203,6 +231,7 @@ def _today_start() -> datetime:
 
 def _closed_timestamp():
     return func.coalesce(
+        Ticket.done_at,
         Ticket.closed_at,
         case((Ticket.status == "closed", Ticket.updated_at), else_=None),
     ).label("closed_timestamp")
