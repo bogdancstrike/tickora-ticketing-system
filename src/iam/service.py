@@ -234,7 +234,22 @@ def _principal_from_cache(raw: str) -> Principal:
 
 
 def get_or_create_user_from_claims(claims: dict[str, Any]) -> User:
-    """Upsert a `users` row keyed on `keycloak_subject`."""
+    """
+    Upsert a `users` row keyed on `keycloak_subject`.
+
+    This function synchronizes the local database with the Identity Provider (Keycloak).
+    It either creates a new user record or updates an existing one with the latest
+    claims from the verified token, including username, email, and name fields.
+
+    Args:
+        claims: A dictionary containing verified JWT claims. Must contain 'sub'.
+
+    Returns:
+        A detached User model instance with the updated data.
+
+    Raises:
+        ValueError: If the 'sub' claim is missing.
+    """
     sub = claims.get("sub")
     if not sub:
         raise ValueError("claims missing sub")
@@ -275,7 +290,22 @@ def get_or_create_user_from_claims(claims: dict[str, Any]) -> User:
 
 
 def principal_from_claims(claims: dict[str, Any]) -> Principal:
-    """Build a Principal from verified token claims, provisioning the user if needed."""
+    """
+    Build a Principal from verified token claims, provisioning the user if needed.
+
+    This function is the primary entry point for hydrating a user's security context.
+    It performs the following steps:
+    1. Attempts to retrieve a cached Principal from Redis using a key derived from the token.
+    2. If not cached, it ensures the user exists in the local database.
+    3. Resolves the user's effective roles and sector memberships from token claims and Keycloak.
+    4. Constructs a new Principal object and caches it in Redis for the duration of the token's validity.
+
+    Args:
+        claims: A dictionary containing verified JWT claims.
+
+    Returns:
+        A hydrated Principal object representing the authenticated user.
+    """
     rds = get_redis()
     cache_key = _principal_cache_key(claims)
     try:

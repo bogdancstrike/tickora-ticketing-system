@@ -14,7 +14,16 @@ from src.iam.models import User as IAMUser
 
 @register_task("notify_distributors")
 def notify_distributors(payload: Dict[str, Any]):
-    """Notify all distributors and admins about a new ticket."""
+    """
+    Notify all distributors and admins about a new ticket.
+
+    This task is typically triggered when a new ticket is created. It fetches all
+    users with the 'tickora_admin' or 'tickora_distributor' roles from Keycloak,
+    maps them to local users, and creates in-app notifications for each.
+
+    Args:
+        payload: Dictionary containing 'ticket_id'.
+    """
     ticket_id = payload.get("ticket_id")
     with get_db() as db:
         ticket = db.get(Ticket, ticket_id)
@@ -384,7 +393,17 @@ def _assignee_user_ids(db: Session, ticket: Ticket) -> set[str]:
     return user_ids
 
 def _publish_to_sse(user_id: str, notification: Notification):
-    """Publish notification to Redis for SSE delivery."""
+    """
+    Publish notification to Redis for SSE delivery.
+
+    Serializes the notification data and publishes it to a Redis channel specific
+    to the user (notifications:{user_id}). This enables real-time delivery to
+    connected frontend clients via Server-Sent Events.
+
+    Args:
+        user_id: The ID of the user to receive the notification.
+        notification: The Notification model instance to publish.
+    """
     try:
         from src.core.redis_client import get_redis
         redis = get_redis()

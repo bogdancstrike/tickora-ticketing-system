@@ -129,7 +129,13 @@ def delete_widget(db: Session, p: Principal, dashboard_id: str, widget_id: str) 
 
 
 def sync_widget_catalogue(db: Session) -> None:
-    """Seed the database with the standard widget catalogue."""
+    """Ensures the `widget_definitions` table is populated with the standard system widgets.
+
+    This acts as a seed/sync function to keep the frontend catalogue in sync with backend capabilities.
+
+    Args:
+        db: Database session.
+    """
     catalogue = [
         ("ticket_list", "Ticket List", "Versatile ticket list with customizable filters", "UnorderedListOutlined"),
         ("monitor_kpi", "KPI Statistic", "Key performance indicators and metrics", "BarChartOutlined"),
@@ -266,6 +272,26 @@ def _serialize_dashboard(d: CustomDashboard, full: bool = False) -> dict[str, An
     if full:
         res["widgets"] = [_serialize_widget(w) for w in d.widgets]
     return res
+
+
+def _serialize_widget(w: DashboardWidget) -> dict[str, Any]:
+    return {
+        "id": w.id,
+        "type": w.type,
+        "title": w.title,
+        "config": w.config,
+        "x": w.x,
+        "y": w.y,
+        "w": w.w,
+        "h": w.h,
+    }
+ w.config,
+        "x": w.x,
+        "y": w.y,
+        "w": w.w,
+        "h": w.h,
+    }
+n res
 
 
 def _serialize_widget(w: DashboardWidget) -> dict[str, Any]:

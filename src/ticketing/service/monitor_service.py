@@ -464,6 +464,18 @@ def _stale_tickets(db: Session, principal: Principal, *, sector_id: str | None =
 
 
 def _bottleneck_analysis(db: Session, sector_id: str | None = None, days: int = 30) -> list[dict[str, Any]]:
+    """Analyzes status transition history to identify stages where tickets linger longest.
+
+    Calculates average time spent in each status for recently closed tickets.
+
+    Args:
+        db: Database session.
+        sector_id: Optional filter for a specific sector.
+        days: Historical lookback period.
+
+    Returns:
+        List of dictionaries with status keys and average duration in minutes.
+    """
     threshold = datetime.now(timezone.utc) - timedelta(days=days)
 
     # We want to find durations of each status.
