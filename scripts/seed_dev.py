@@ -6,19 +6,24 @@ Idempotent: safe to run repeatedly after `make keycloak-bootstrap` and
 """
 from __future__ import annotations
 
+import random
 import sys
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from sqlalchemy import select
-
+from faker import Faker
+from sqlalchemy import select, text
 from scripts.keycloak_bootstrap import DEPRECATED_REALM_ROLES, REALM, REALM_ROLES, admin, ensure_realm, main as bootstrap_keycloak
 from src.core.db import get_db
 from src.iam.models import User
-from src.ticketing.models import Beneficiary, Sector, SectorMembership, Ticket, TicketComment, TicketMetadata
+from src.ticketing.models import Beneficiary, Sector, SectorMembership, Ticket, TicketComment, TicketMetadata, TicketStatusHistory
+from src.ticketing.service import dashboard_service
+from src.ticketing.state_machine import ALL_STATUSES, ACTIVE_STATUSES
 
+fake = Faker()
 PASSWORD = "Tickora123!"
 
 SECTORS = [
@@ -115,7 +120,6 @@ USERS = [
     },
 ]
 
-
 def _kc_user(kc, spec: dict) -> str:
     username = spec["username"]
     matches = kc.get_users({"username": username, "exact": True})
@@ -127,9 +131,7 @@ def _kc_user(kc, spec: dict) -> str:
         "enabled": True,
         "emailVerified": True,
     }
-    
     fixed_id = spec.get("keycloak_subject")
-    
     if matches:
         user_id = matches[0]["id"]
         kc.update_user(user_id, payload)
@@ -137,19 +139,13 @@ def _kc_user(kc, spec: dict) -> str:
         if fixed_id:
             payload["id"] = fixed_id
         user_id = kc.create_user(payload, exist_ok=True)
-    
     kc.set_user_password(user_id, PASSWORD, temporary=False)
     return user_id
-
 
 def _sync_roles(kc, user_id: str, roles: list[str]) -> None:
     managed = set(REALM_ROLES + DEPRECATED_REALM_ROLES)
     desired = set(roles)
-    current = {
-        role["name"]: role
-        for role in kc.get_realm_roles_of_user(user_id)
-        if role.get("name") in managed
-    }
+    current = {role["name"]: role for role in kc.get_realm_roles_of_user(user_id) if role.get("name") in managed}
     to_remove = [payload for name, payload in current.items() if name not in desired]
     if to_remove:
         kc.delete_realm_roles_of_user(user_id, to_remove)
@@ -157,25 +153,15 @@ def _sync_roles(kc, user_id: str, roles: list[str]) -> None:
     if to_add:
         kc.assign_realm_roles(user_id, to_add)
 
-
-def _assign_groups(kc, user_id: str, paths: list[str]) -> None:
-    for path in paths:
-        group = kc.get_group_by_path(path)
-        kc.group_user_add(user_id, group["id"])
-
-
 def _sync_groups(kc, user_id: str, paths: list[str]) -> None:
     desired = set(paths)
-    current = {
-        group.get("path"): group
-        for group in kc.get_user_groups(user_id)
-        if (group.get("path") or "").startswith("/tickora")
-    }
+    current = {group.get("path"): group for group in kc.get_user_groups(user_id) if (group.get("path") or "").startswith("/tickora")}
     for path, group in current.items():
         if path not in desired:
             kc.group_user_remove(user_id, group["id"])
-    _assign_groups(kc, user_id, paths)
-
+    for path in paths:
+        group = kc.get_group_by_path(path)
+        kc.group_user_add(user_id, group["id"])
 
 def seed_keycloak() -> dict[str, str]:
     bootstrap_keycloak()
@@ -187,9 +173,7 @@ def seed_keycloak() -> dict[str, str]:
         _sync_roles(kc, user_id, spec["roles"])
         _sync_groups(kc, user_id, spec["groups"])
         out[spec["username"]] = user_id
-        print(f"[keycloak:user] {spec['username']} / {PASSWORD}")
     return out
-
 
 def _sector(db, code: str, name: str) -> Sector:
     sector = db.scalar(select(Sector).where(Sector.code == code))
@@ -197,193 +181,121 @@ def _sector(db, code: str, name: str) -> Sector:
         sector = Sector(code=code, name=name, description=f"Seeded {name}", is_active=True)
         db.add(sector)
         db.flush()
-    else:
-        sector.name = name
-        sector.is_active = True
     return sector
-
 
 def _user(db, spec: dict, keycloak_subject: str) -> User:
     user = db.scalar(select(User).where(User.keycloak_subject == keycloak_subject))
     if user is None:
         user = User(keycloak_subject=keycloak_subject)
         db.add(user)
-    user.username = spec["username"]
-    user.email = spec["email"]
-    user.first_name = spec["first_name"]
-    user.last_name = spec["last_name"]
-    user.user_type = spec["type"]
-    user.is_active = True
+    user.username, user.email, user.first_name, user.last_name = spec["username"], spec["email"], spec["first_name"], spec["last_name"]
+    user.user_type, user.is_active = spec["type"], True
     db.flush()
     return user
 
-
 def _beneficiary(db, user: User) -> Beneficiary:
-    beneficiary = db.scalar(select(Beneficiary).where(Beneficiary.user_id == user.id))
-    if beneficiary is None:
-        beneficiary = Beneficiary(user_id=user.id, beneficiary_type=user.user_type)
-        db.add(beneficiary)
-    beneficiary.first_name = user.first_name
-    beneficiary.last_name = user.last_name
-    beneficiary.email = user.email
+    ben = db.scalar(select(Beneficiary).where(Beneficiary.user_id == user.id))
+    if ben is None:
+        ben = Beneficiary(user_id=user.id, beneficiary_type=user.user_type)
+        db.add(ben)
+    ben.first_name, ben.last_name, ben.email = user.first_name, user.last_name, user.email
     db.flush()
-    return beneficiary
-
+    return ben
 
 def _membership(db, user: User, sector: Sector, role: str) -> None:
-    membership = db.scalar(
-        select(SectorMembership).where(
-            SectorMembership.user_id == user.id,
-            SectorMembership.sector_id == sector.id,
-            SectorMembership.membership_role == role,
-        )
-    )
-    if membership is None:
-        membership = SectorMembership(
-            user_id=user.id,
-            sector_id=sector.id,
-            membership_role=role,
-            is_active=True,
-        )
-        db.add(membership)
-    membership.is_active = True
-
-
-def _ticket(
-    db,
-    *,
-    code: str,
-    beneficiary: Beneficiary,
-    created_by: User,
-    sector: Sector | None,
-    assignee: User | None,
-    title: str,
-    body: str,
-    status: str,
-    priority: str,
-) -> Ticket:
-    ticket = db.scalar(select(Ticket).where(Ticket.ticket_code == code))
-    if ticket is None:
-        ticket = Ticket(ticket_code=code, txt=body)
-        db.add(ticket)
-    ticket.beneficiary_id = beneficiary.id
-    ticket.beneficiary_type = beneficiary.beneficiary_type
-    ticket.created_by_user_id = created_by.id
-    ticket.requester_first_name = beneficiary.first_name
-    ticket.requester_last_name = beneficiary.last_name
-    ticket.requester_email = beneficiary.email
-    ticket.current_sector_id = sector.id if sector else None
-    ticket.assignee_user_id = assignee.id if assignee else None
-    ticket.last_active_assignee_user_id = assignee.id if assignee else None
-    ticket.title = title
-    ticket.txt = body
-    ticket.category = "network_issue" if sector and sector.code == "s2" else "operations"
-    ticket.type = "incident"
-    ticket.status = status
-    ticket.priority = priority
-    ticket.is_deleted = False
-    db.flush()
-    return ticket
-
-
-def _comment(db, ticket: Ticket, author: User, body: str, visibility: str) -> None:
-    exists = db.scalar(
-        select(TicketComment).where(
-            TicketComment.ticket_id == ticket.id,
-            TicketComment.author_user_id == author.id,
-            TicketComment.body == body,
-        )
-    )
-    if exists is None:
-        db.add(TicketComment(
-            ticket_id=ticket.id,
-            author_user_id=author.id,
-            body=body,
-            visibility=visibility,
-            comment_type="user_comment",
-        ))
-
-
-def _metadata(db, ticket: Ticket, key: str, value: str, label: str | None = None) -> None:
-    meta = db.scalar(
-        select(TicketMetadata).where(
-            TicketMetadata.ticket_id == ticket.id,
-            TicketMetadata.key == key,
-        )
-    )
-    if meta is None:
-        meta = TicketMetadata(ticket_id=ticket.id, key=key)
-        db.add(meta)
-    meta.value = value
-    meta.label = label
-    db.flush()
-
+    m = db.scalar(select(SectorMembership).where(SectorMembership.user_id == user.id, SectorMembership.sector_id == sector.id, SectorMembership.membership_role == role))
+    if m is None:
+        db.add(SectorMembership(user_id=user.id, sector_id=sector.id, membership_role=role, is_active=True))
+    else:
+        m.is_active = True
 
 def seed_database(subjects: dict[str, str]) -> None:
     with get_db() as db:
-        sectors = {code: _sector(db, code, name) for code, name in SECTORS}
-        users = {spec["username"]: _user(db, spec, subjects[spec["username"]]) for spec in USERS}
-        beneficiaries = {name: _beneficiary(db, user) for name, user in users.items()}
-
-        _membership(db, users["chief.s10"], sectors["s10"], "chief")
-        _membership(db, users["chief.s10"], sectors["s10"], "member")
-        _membership(db, users["member.s10"], sectors["s10"], "member")
-        _membership(db, users["member.s2"], sectors["s2"], "member")
-
-        t1 = _ticket(
-            db,
-            code="TK-SEED-000001",
-            beneficiary=beneficiaries["beneficiary"],
-            created_by=users["beneficiary"],
-            sector=None,
-            assignee=None,
-            title="Cannot access internal portal",
-            body="The internal portal returns a timeout from the office network.",
-            status="pending",
-            priority="high",
-        )
-        t2 = _ticket(
-            db,
-            code="TK-SEED-000002",
-            beneficiary=beneficiaries["beneficiary"],
-            created_by=users["beneficiary"],
-            sector=sectors["s10"],
-            assignee=users["member.s10"],
-            title="Field terminal replacement",
-            body="A field terminal is damaged and needs replacement.",
-            status="in_progress",
-            priority="medium",
-        )
-        t3 = _ticket(
-            db,
-            code="TK-SEED-000003",
-            beneficiary=beneficiaries["external.user"],
-            created_by=users["external.user"],
-            sector=sectors["s2"],
-            assignee=users["member.s2"],
-            title="External VPN intermittent drops",
-            body="External beneficiary reports VPN drops every 10 minutes.",
-            status="assigned_to_sector",
-            priority="critical",
-        )
-        _comment(db, t2, users["member.s10"], "We started replacement logistics.", "public")
-        _comment(db, t2, users["chief.s10"], "Check stock before committing ETA.", "private")
-        _comment(db, t3, users["member.s2"], "Initial packet-loss checks are underway.", "public")
-
-        _metadata(db, t1, "importance", "vip", "Importance Level")
-        _metadata(db, t1, "platform", "mobile", "Target Platform")
-        _metadata(db, t2, "importance", "standard", "Importance Level")
-        _metadata(db, t3, "importance", "vip", "Importance Level")
+        dashboard_service.sync_widget_catalogue(db)
+        sectors = [ _sector(db, code, name) for code, name in SECTORS ]
+        users = [ _user(db, spec, subjects[spec["username"]]) for spec in USERS ]
+        beneficiaries = [ _beneficiary(db, u) for u in users ]
         
-        print("[db] sectors, users, memberships, beneficiaries, tickets, comments, metadata seeded")
+        for u in users:
+            if u.username == "chief.s10": _membership(db, u, sectors[5], "chief")
+            if u.username in ["member.s10", "chief.s10"]: _membership(db, u, sectors[5], "member")
+            if u.username == "member.s2": _membership(db, u, sectors[1], "member")
+        
+        db.execute(text("TRUNCATE tickets, ticket_comments, ticket_status_history, ticket_metadata CASCADE"))
+        db.commit()
 
+    with get_db() as db:
+        print(f"[db] seeding 500 tickets...")
+        now = datetime.now(timezone.utc)
+        all_st = list(ALL_STATUSES)
+        priorities = ["low", "medium", "high", "critical"]
+        categories = ["network", "hardware", "software", "access", "other"]
+        
+        # Pre-fetch some data
+        sec_ids = [s.id for s in sectors]
+        ben_objs = beneficiaries
+        internal_users = [u for u in users if u.user_type == "internal"]
+        
+        for i in range(1, 501):
+            created_at = now - timedelta(days=random.randint(0, 30), hours=random.randint(0, 23))
+            status = random.choice(all_st)
+            priority = random.choice(priorities)
+            ben = random.choice(ben_objs)
+            creator = random.choice(internal_users) if ben.beneficiary_type == "internal" else None
+            
+            sector_id = random.choice(sec_ids) if status != "pending" else None
+            assignee = random.choice(internal_users) if status in ["in_progress", "done", "closed"] else None
+            
+            finished_at = None
+            if status in ["done", "closed"]:
+                finished_at = created_at + timedelta(hours=random.randint(1, 48))
+
+            t = Ticket(
+                ticket_code=f"TK-MOCK-{i:06d}",
+                title=fake.sentence(nb_words=6),
+                txt=fake.paragraph(nb_sentences=3),
+                status=status,
+                priority=priority,
+                category=random.choice(categories),
+                beneficiary_id=ben.id,
+                beneficiary_type=ben.beneficiary_type,
+                created_by_user_id=creator.id if creator else None,
+                current_sector_id=sector_id,
+                assignee_user_id=assignee.id if assignee else None,
+                created_at=created_at,
+                updated_at=finished_at or created_at,
+                done_at=finished_at if status == "done" else None,
+                closed_at=finished_at if status == "closed" else None,
+                requester_email=ben.email,
+                requester_first_name=ben.first_name,
+                requester_last_name=ben.last_name,
+            )
+            db.add(t)
+            db.flush()
+            
+            # History
+            db.add(TicketStatusHistory(ticket_id=t.id, old_status=None, new_status="pending", created_at=created_at))
+            if status != "pending":
+                db.add(TicketStatusHistory(ticket_id=t.id, old_status="pending", new_status=status, created_at=created_at + timedelta(minutes=random.randint(5, 60))))
+            
+            # Comments
+            if random.random() > 0.5:
+                for _ in range(random.randint(1, 3)):
+                    author = random.choice(users)
+                    db.add(TicketComment(ticket_id=t.id, author_user_id=author.id, body=fake.sentence(), visibility=random.choice(["public", "private"]), comment_type="user_comment", created_at=created_at + timedelta(hours=random.randint(1, 5))))
+            
+            # Metadata
+            if random.random() > 0.7:
+                db.add(TicketMetadata(ticket_id=t.id, key="environment", value=random.choice(["prod", "dev", "stage"])))
+
+        db.commit()
+        print("[db] 500 mock tickets seeded successfully")
 
 def main() -> int:
     subjects = seed_keycloak()
     seed_database(subjects)
     print("done.")
     return 0
-
 
 if __name__ == "__main__":
     raise SystemExit(main())
