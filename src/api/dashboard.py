@@ -60,3 +60,15 @@ def delete_widget(app, operation, request, *, principal: Principal, **kwargs):
     with get_db() as db:
         dashboard_service.delete_widget(db, principal, dashboard_id, widget_id)
         return ({"status": "deleted"}, 200)
+
+
+@require_authenticated
+def auto_configure(app, operation, request, *, principal: Principal, **kwargs):
+    dashboard_id = kwargs.get("dashboard_id")
+    payload = _payload()
+    mode = payload.get("mode", "append")
+    primary_sector = payload.get("primary_sector")
+
+    with get_db() as db:
+        dashboard_service.auto_configure_dashboard(db, principal, dashboard_id, mode=mode, primary_sector=primary_sector)
+        return (dashboard_service.get_dashboard(db, principal, dashboard_id), 200)

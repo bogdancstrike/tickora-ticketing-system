@@ -496,6 +496,14 @@
       "api_url": "/api/dashboards/<dashboard_id>/widgets/<widget_id>",
       "exec_method": { "module_name": "api.dashboard", "method_name": "delete_widget" }
     },
+    {
+      "namespace": "tickora",
+      "operation_name": "dashboards_auto_configure",
+      "model_name": "Empty",
+      "request_method": ["POST"],
+      "api_url": "/api/dashboards/<dashboard_id>/auto-configure",
+      "exec_method": { "module_name": "api.dashboard", "method_name": "auto_configure" }
+    },
 
     {
       "namespace": "tickora",
@@ -648,6 +656,30 @@
       "request_method": ["PATCH"],
       "api_url": "/api/admin/sla-policies/<policy_id>",
       "exec_method": { "module_name": "api.admin", "method_name": "update_sla_policy" }
+    },
+    {
+      "namespace": "tickora",
+      "operation_name": "admin_list_widgets",
+      "model_name": "Empty",
+      "request_method": ["GET"],
+      "api_url": "/api/admin/widget-definitions",
+      "exec_method": { "module_name": "api.admin", "method_name": "list_widget_definitions" }
+    },
+    {
+      "namespace": "tickora",
+      "operation_name": "admin_upsert_widget",
+      "model_name": "Empty",
+      "request_method": ["POST"],
+      "api_url": "/api/admin/widget-definitions/upsert",
+      "exec_method": { "module_name": "api.admin", "method_name": "upsert_widget_definition" }
+    },
+    {
+      "namespace": "tickora",
+      "operation_name": "admin_sync_widgets",
+      "model_name": "Empty",
+      "request_method": ["POST"],
+      "api_url": "/api/admin/widget-definitions/sync",
+      "exec_method": { "module_name": "api.admin", "method_name": "sync_widget_catalogue" }
     },
     {
       "namespace": "tickora",

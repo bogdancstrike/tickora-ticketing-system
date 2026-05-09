@@ -7,16 +7,46 @@ import {
 } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
 import {
-  ApartmentOutlined, BarChartOutlined, DatabaseOutlined, PlusOutlined, ReloadOutlined,
-  SafetyCertificateOutlined, TeamOutlined,
+  ApartmentOutlined, AppstoreOutlined, AuditOutlined, BarChartOutlined,
+  CarryOutOutlined, DatabaseOutlined, FieldTimeOutlined, HistoryOutlined,
+  LineChartOutlined, MessageOutlined, PieChartOutlined, PlusOutlined,
+  ReloadOutlined, SafetyCertificateOutlined, SendOutlined, SmileOutlined, TeamOutlined,
+  UnorderedListOutlined, UserOutlined, ClockCircleOutlined,
+  DashboardOutlined, InfoCircleOutlined,
 } from '@ant-design/icons'
+
+const ICON_MAP: Record<string, React.ReactNode> = {
+  UnorderedListOutlined: <UnorderedListOutlined />,
+  BarChartOutlined: <BarChartOutlined />,
+  AuditOutlined: <AuditOutlined />,
+  UserOutlined: <UserOutlined />,
+  MessageOutlined: <MessageOutlined />,
+  PieChartOutlined: <PieChartOutlined />,
+  TeamOutlined: <TeamOutlined />,
+  HistoryOutlined: <HistoryOutlined />,
+  LineChartOutlined: <LineChartOutlined />,
+  SendOutlined: <SendOutlined />,
+  FieldTimeOutlined: <FieldTimeOutlined />,
+  DatabaseOutlined: <DatabaseOutlined />,
+  CarryOutOutlined: <CarryOutOutlined />,
+  SmileOutlined: <SmileOutlined />,
+  ClockCircleOutlined: <ClockCircleOutlined />,
+  DashboardOutlined: <DashboardOutlined />,
+  InfoCircleOutlined: <InfoCircleOutlined />,
+}
+
+function getIconComponent(name: string | null | undefined) {
+  if (!name) return <AppstoreOutlined />
+  return ICON_MAP[name] || <AppstoreOutlined />
+}
 import {
   ADMIN_ROLES, createAdminSector, getAdminOverview,
   getGroupHierarchy, grantMembership, listAdminMemberships, listAdminMetadataKeys,
   listAdminSectors, listAdminUsers, revokeMembership, updateAdminSector,
   updateAdminUser, upsertAdminMetadataKey,
+  listAdminWidgets, upsertAdminWidget, syncAdminWidgets,
   type AdminMembership, type AdminMetadataKey, type AdminSector,
-  type AdminUser,
+  type AdminUser, type AdminWidgetDefinition,
 } from '@/api/admin'
 import type { MonitorBreakdown } from '@/api/tickets'
 
@@ -237,6 +267,109 @@ function GroupsTab() {
   )
 }
 
+function WidgetCataloguePanel() {
+  const qc = useQueryClient()
+  const [editing, setEditing] = useState<AdminWidgetDefinition | null>(null)
+  const widgets = useQuery({ queryKey: ['adminWidgets'], queryFn: listAdminWidgets, staleTime: 60_000 })
+
+  const sync = useMutation({
+    mutationFn: syncAdminWidgets,
+    onSuccess: () => {
+      message.success('Catalogue synced with defaults')
+      qc.invalidateQueries({ queryKey: ['adminWidgets'] })
+    },
+  })
+
+  const save = useMutation({
+    mutationFn: (values: Partial<AdminWidgetDefinition>) => upsertAdminWidget({ ...editing, ...values } as AdminWidgetDefinition),
+    onSuccess: () => {
+      message.success('Widget updated')
+      setEditing(null)
+      qc.invalidateQueries({ queryKey: ['adminWidgets'] })
+    },
+  })
+
+  const columns: ColumnsType<AdminWidgetDefinition> = [
+    {
+      title: 'Icon',
+      dataIndex: 'icon',
+      width: 80,
+      align: 'center',
+      render: (icon) => (
+        <div style={{
+          fontSize: 18,
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          height: 32,
+          width: 32,
+          margin: '0 auto',
+          background: antTheme.useToken().token.colorFillAlter,
+          borderRadius: 4,
+          border: `1px solid ${antTheme.useToken().token.colorBorderSecondary}`
+        }}>
+          {getIconComponent(icon)}
+        </div>
+      ),
+    },
+    { title: 'Type', dataIndex: 'type', width: 160 },
+    { title: 'Display Name', dataIndex: 'display_name', width: 220 },
+    { title: 'Description', dataIndex: 'description', ellipsis: true },
+    {
+      title: 'Active',
+      dataIndex: 'is_active',
+      width: 100,
+      render: (active) => <Tag color={active ? 'green' : 'default'}>{active ? 'active' : 'inactive'}</Tag>,
+    },
+    {
+      title: 'Action',
+      width: 100,
+      render: (_, row) => <Button size="small" onClick={() => setEditing(row)}>Edit</Button>,
+    },
+  ]
+
+  return (
+    <Panel title="Widget catalogue" icon={<DatabaseOutlined />}>
+      <Flex justify="end" style={{ marginBottom: 12 }}>
+        <Button
+          icon={<ReloadOutlined />}
+          loading={sync.isPending}
+          onClick={() => sync.mutate()}
+        >
+          Sync with defaults
+        </Button>
+      </Flex>
+      <Table
+        rowKey="type"
+        loading={widgets.isLoading}
+        dataSource={widgets.data?.items || []}
+        pagination={{ pageSize: 10 }}
+        columns={columns}
+      />
+      <Modal
+        title="Edit widget definition"
+        open={!!editing}
+        onCancel={() => setEditing(null)}
+        footer={null}
+        destroyOnClose
+      >
+        <Form
+          layout="vertical"
+          initialValues={editing || {}}
+          onFinish={(values) => save.mutate(values)}
+        >
+          <Form.Item name="type" label="Type"><Input disabled /></Form.Item>
+          <Form.Item name="display_name" label="Display Name" rules={[{ required: true }]}><Input /></Form.Item>
+          <Form.Item name="description" label="Description"><Input.TextArea rows={2} /></Form.Item>
+          <Form.Item name="icon" label="Icon (AntD Name)"><Input placeholder="e.g. BarChartOutlined" /></Form.Item>
+          <Form.Item name="is_active" label="Active" valuePropName="checked"><Switch /></Form.Item>
+          <Button type="primary" htmlType="submit" loading={save.isPending}>Save</Button>
+        </Form>
+      </Modal>
+    </Panel>
+  )
+}
+
 function ConfigTab() {
   const qc = useQueryClient()
   const [editing, setEditing] = useState<AdminMetadataKey | null>(null)
@@ -264,6 +397,7 @@ function ConfigTab() {
           ]}
         />
       </Panel>
+      <WidgetCataloguePanel />
       <Modal title="Metadata key" open={!!editing} onCancel={() => setEditing(null)} footer={null}>
         <Form layout="vertical" initialValues={editing ? { ...editing, options: editing.options?.join(', ') } : undefined} onFinish={(values) => save.mutate(values)}>
           <Form.Item name="key" label="Key" rules={[{ required: true }]}><Input disabled={!!editing?.key} /></Form.Item>

@@ -327,6 +327,17 @@ export const deleteWidget = async (dashboardId: string, widgetId: string): Promi
   await apiClient.delete(`/api/dashboards/${dashboardId}/widgets/${widgetId}`)
 }
 
+export const autoConfigureDashboard = async (
+  dashboardId: string,
+  mode: 'append' | 'replace',
+  primarySector?: string,
+): Promise<void> => {
+  await apiClient.post(`/api/dashboards/${dashboardId}/auto-configure`, {
+    mode,
+    primary_sector: primarySector || undefined,
+  })
+}
+
 export const assignSector = async (ticketId: string, sectorCode: string, reason?: string): Promise<TicketDto> => {
   const { data } = await apiClient.post(`/api/tickets/${ticketId}/assign-sector`, {
     sector_code: sectorCode,

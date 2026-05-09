@@ -9,25 +9,23 @@ from sqlalchemy.orm import Session
 
 from src.core.errors import NotFoundError, PermissionDeniedError, ValidationError
 from src.iam.principal import Principal
-from src.ticketing.models import CustomDashboard, DashboardWidget
+from src.ticketing.models import CustomDashboard, DashboardWidget, WidgetDefinition
 
 
-def _check_not_beneficiary(p: Principal) -> None:
-    if p.user_type == "external" or "tickora_beneficiary" in p.global_roles:
-         # Check if they have ANY operational role. If only beneficiary, deny.
-         if not any(r in p.global_roles for r in ("tickora_admin", "tickora_auditor", "tickora_distributor", "tickora_internal_user")):
-            raise PermissionDeniedError("custom dashboards are not available for beneficiaries")
+def _check_dashboard_access(p: Principal) -> None:
+    # Everyone is allowed to have dashboards now.
+    pass
 
 
 def list_dashboards(db: Session, p: Principal) -> list[dict[str, Any]]:
-    _check_not_beneficiary(p)
+    _check_dashboard_access(p)
     stmt = select(CustomDashboard).where(CustomDashboard.owner_user_id == p.user_id).order_by(CustomDashboard.created_at.desc())
     rows = list(db.scalars(stmt))
     return [_serialize_dashboard(r) for r in rows]
 
 
 def get_dashboard(db: Session, p: Principal, dashboard_id: str) -> dict[str, Any]:
-    _check_not_beneficiary(p)
+    _check_dashboard_access(p)
     d = db.get(CustomDashboard, dashboard_id)
     if d is None or d.owner_user_id != p.user_id:
         raise NotFoundError("dashboard not found")
@@ -35,7 +33,7 @@ def get_dashboard(db: Session, p: Principal, dashboard_id: str) -> dict[str, Any
 
 
 def create_dashboard(db: Session, p: Principal, payload: dict[str, Any]) -> dict[str, Any]:
-    _check_not_beneficiary(p)
+    _check_dashboard_access(p)
     title = str(payload.get("title") or "New Dashboard").strip()
     
     d = CustomDashboard(
@@ -49,7 +47,7 @@ def create_dashboard(db: Session, p: Principal, payload: dict[str, Any]) -> dict
 
 
 def update_dashboard(db: Session, p: Principal, dashboard_id: str, payload: dict[str, Any]) -> dict[str, Any]:
-    _check_not_beneficiary(p)
+    _check_dashboard_access(p)
     d = db.get(CustomDashboard, dashboard_id)
     if d is None or d.owner_user_id != p.user_id:
         raise NotFoundError("dashboard not found")
@@ -64,7 +62,7 @@ def update_dashboard(db: Session, p: Principal, dashboard_id: str, payload: dict
 
 
 def delete_dashboard(db: Session, p: Principal, dashboard_id: str) -> None:
-    _check_not_beneficiary(p)
+    _check_dashboard_access(p)
     d = db.get(CustomDashboard, dashboard_id)
     if d is None or d.owner_user_id != p.user_id:
         raise NotFoundError("dashboard not found")
@@ -73,7 +71,7 @@ def delete_dashboard(db: Session, p: Principal, dashboard_id: str) -> None:
 
 
 def upsert_widget(db: Session, p: Principal, dashboard_id: str, payload: dict[str, Any]) -> dict[str, Any]:
-    _check_not_beneficiary(p)
+    _check_dashboard_access(p)
     d = db.get(CustomDashboard, dashboard_id)
     if d is None or d.owner_user_id != p.user_id:
         raise NotFoundError("dashboard not found")
@@ -103,7 +101,7 @@ def upsert_widget(db: Session, p: Principal, dashboard_id: str, payload: dict[st
 
 
 def delete_widget(db: Session, p: Principal, dashboard_id: str, widget_id: str) -> None:
-    _check_not_beneficiary(p)
+    _check_dashboard_access(p)
     w = db.get(DashboardWidget, widget_id)
     if w is None or w.dashboard_id != dashboard_id:
         raise NotFoundError("widget not found")
@@ -113,6 +111,102 @@ def delete_widget(db: Session, p: Principal, dashboard_id: str, widget_id: str) 
         raise PermissionDeniedError("not allowed")
     
     db.delete(w)
+    db.flush()
+
+
+def sync_widget_catalogue(db: Session) -> None:
+    """Seed the database with the standard widget catalogue."""
+    catalogue = [
+        ("ticket_list", "Ticket List", "Versatile ticket list with customizable filters", "UnorderedListOutlined"),
+        ("monitor_kpi", "KPI Statistic", "Key performance indicators and metrics", "BarChartOutlined"),
+        ("audit_stream", "Audit Log", "Real-time stream of system events", "AuditOutlined"),
+        ("profile_card", "My Profile", "Quick access to your user profile and settings", "UserOutlined"),
+        ("recent_comments", "Recent Comments", "Latest updates on tickets you follow", "MessageOutlined"),
+        ("sector_stats", "Sector Chart", "Distribution of tickets across sectors", "PieChartOutlined"),
+        ("user_workload", "User Workload", "Capacity and workload across team members", "TeamOutlined"),
+        ("stale_tickets", "Stale Tickets", "Tickets requiring immediate attention", "HistoryOutlined"),
+        ("workload_balancer", "Workload Balancer", "Optimize ticket distribution", "BarChartOutlined"),
+        ("bottleneck_analysis", "Bottleneck Analysis", "Identify delays in the workflow", "LineChartOutlined"),
+        ("shortcuts", "Quick Links", "Customizable action shortcuts", "SendOutlined"),
+        ("clock", "Clock", "Local and UTC time display", "FieldTimeOutlined"),
+        ("system_health", "System Health", "Backend services status monitor", "DatabaseOutlined"),
+        ("sla_overview", "SLA Overview", "Service level agreement compliance tracking", "CarryOutOutlined"),
+        ("welcome_banner", "Welcome Banner", "Personalized greeting and tips", "SmileOutlined"),
+    ]
+
+    for w_type, name, desc, icon in catalogue:
+        wd = db.get(WidgetDefinition, w_type)
+        if not wd:
+            wd = WidgetDefinition(type=w_type)
+            db.add(wd)
+        wd.display_name = name
+        wd.description = desc
+        wd.icon = icon
+        wd.is_active = True
+    
+    db.flush()
+
+
+def auto_configure_dashboard(db: Session, p: Principal, dashboard_id: str, mode: str = "append", primary_sector: str | None = None) -> None:
+    """Heuristic logic to build a role-appropriate dashboard."""
+    d = db.get(CustomDashboard, dashboard_id)
+    if d is None or d.owner_user_id != p.user_id:
+        raise NotFoundError("dashboard not found")
+    
+    if mode == "replace":
+        db.execute(delete(DashboardWidget).where(DashboardWidget.dashboard_id == d.id))
+        db.flush()
+        db.refresh(d)
+    
+    # Heuristics
+    widgets_to_add = []
+    
+    # Base widget
+    widgets_to_add.append({"type": "welcome_banner", "title": "Welcome!", "x": 0, "y": 0, "w": 4, "h": 3})
+
+    if p.is_admin:
+        widgets_to_add.extend([
+            {"type": "system_health", "x": 4, "y": 0, "w": 4, "h": 3},
+            {"type": "sla_overview", "x": 8, "y": 0, "w": 4, "h": 3},
+            {"type": "stale_tickets", "x": 0, "y": 3, "w": 4, "h": 4},
+            {"type": "bottleneck_analysis", "x": 4, "y": 3, "w": 8, "h": 4},
+            {"type": "audit_stream", "x": 0, "y": 7, "w": 12, "h": 4},
+        ])
+    elif p.chief_sectors:
+        sector_code = primary_sector or list(p.chief_sectors)[0]
+        widgets_to_add.extend([
+            {"type": "workload_balancer", "x": 4, "y": 0, "w": 8, "h": 3},
+            {"type": "bottleneck_analysis", "x": 0, "y": 3, "w": 12, "h": 4, "config": {"scope": "sector", "sector_code": sector_code}},
+            {"type": "ticket_list", "x": 0, "y": 7, "w": 6, "h": 4, "title": f"Sector: {sector_code}", "config": {"scope": "sector", "sector_code": sector_code}},
+            {"type": "stale_tickets", "x": 6, "y": 7, "w": 6, "h": 4, "config": {"scope": "sector", "sector_code": sector_code}},
+        ])
+    elif p.is_internal:
+        widgets_to_add.extend([
+            {"type": "monitor_kpi", "x": 4, "y": 0, "w": 8, "h": 3, "config": {"scope": "personal"}},
+            {"type": "ticket_list", "x": 0, "y": 3, "w": 8, "h": 4, "title": "My Active Tickets", "config": {"scope": "personal"}},
+            {"type": "recent_comments", "x": 8, "y": 3, "w": 4, "h": 4},
+        ])
+    else:  # Beneficiary
+        widgets_to_add.extend([
+            {"type": "profile_card", "x": 4, "y": 0, "w": 4, "h": 3},
+            {"type": "shortcuts", "x": 8, "y": 0, "w": 4, "h": 3},
+            {"type": "ticket_list", "x": 0, "y": 3, "w": 8, "h": 4, "title": "My Requests", "config": {"scope": "my_requests"}},
+            {"type": "recent_comments", "x": 8, "y": 3, "w": 4, "h": 4, "config": {"visibility": "public"}},
+        ])
+
+    for w_data in widgets_to_add:
+        w = DashboardWidget(
+            dashboard_id=d.id,
+            type=w_data["type"],
+            title=w_data.get("title"),
+            x=w_data["x"],
+            y=w_data["y"],
+            w=w_data["w"],
+            h=w_data["h"],
+            config=w_data.get("config", {})
+        )
+        db.add(w)
+    
     db.flush()
 
 

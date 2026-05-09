@@ -4,7 +4,7 @@ import ReactECharts from 'echarts-for-react'
 import {
   Alert, Button, Card, Col, Empty, Flex, Form, Input, List, Modal, Row, Select, Space,
   Spin, Statistic, Table, Tag, Typography, message, theme as antTheme, Avatar, Checkbox,
-  Switch, Divider, Tooltip,
+  Switch, Divider, Tooltip, Radio,
 } from 'antd'
 import {
   AppstoreAddOutlined, AppstoreOutlined, DeleteOutlined, EditOutlined, PlusOutlined,
@@ -21,11 +21,12 @@ import 'react-resizable/css/styles.css'
 
 import {
   createDashboard, deleteDashboard, deleteWidget, getDashboard,
-  listDashboards, updateDashboard, upsertWidget,
+  listDashboards, updateDashboard, upsertWidget, autoConfigureDashboard,
   listTickets, getMonitorOverview, listAudit, listTicketAudit,
   getMonitorSector, listComments, getTicketOptions, listAssignableUsers,
   type CustomDashboardDto, type DashboardWidgetDto, type TicketDto,
 } from '@/api/tickets'
+import { listAdminWidgets } from '@/api/admin'
 import { useSessionStore } from '@/stores/sessionStore'
 import { StatusTag, STATUS_OPTIONS } from '@/components/common/StatusTag'
 import { PriorityTag, PRIORITY_OPTIONS } from '@/components/common/PriorityTag'
@@ -509,6 +510,31 @@ function BottleneckWidget({ config }: { config: any }) {
     return <BreakdownChart data={chartData} title="Avg. Minutes per Status" height={200} />
 }
 
+const ICON_MAP: Record<string, React.ReactNode> = {
+    UnorderedListOutlined: <UnorderedListOutlined />,
+    BarChartOutlined: <BarChartOutlined />,
+    AuditOutlined: <AuditOutlined />,
+    UserOutlined: <UserOutlined />,
+    MessageOutlined: <MessageOutlined />,
+    PieChartOutlined: <PieChartOutlined />,
+    TeamOutlined: <TeamOutlined />,
+    HistoryOutlined: <HistoryOutlined />,
+    LineChartOutlined: <LineChartOutlined />,
+    SendOutlined: <SendOutlined />,
+    FieldTimeOutlined: <FieldTimeOutlined />,
+    DatabaseOutlined: <DatabaseOutlined />,
+    CarryOutOutlined: <CarryOutOutlined />,
+    SmileOutlined: <SmileOutlined />,
+    ClockCircleOutlined: <ClockCircleOutlined />,
+    DashboardOutlined: <DashboardOutlined />,
+    InfoCircleOutlined: <InfoCircleOutlined />,
+}
+
+function getIconComponent(name: string | null | undefined) {
+    if (!name) return <AppstoreOutlined />
+    return ICON_MAP[name] || <AppstoreOutlined />
+}
+
 const WIDGET_TYPES = [
     { type: 'ticket_list', label: 'Ticket List', icon: <UnorderedListOutlined />, configurable: true },
     { type: 'monitor_kpi', label: 'KPI Statistic', icon: <BarChartOutlined />, configurable: true },
@@ -549,18 +575,42 @@ function WidgetRenderer({ widget }: { widget: DashboardWidgetDto }) {
 
 // ── Dashboard Detail ────────────────────────────────────────────────────────
 
+const CONFIGURABLE_TYPES = [
+    'ticket_list', 'monitor_kpi', 'audit_stream', 'profile_card', 'shortcuts', 
+    'sector_stats', 'user_workload', 'workload_balancer', 'bottleneck_analysis', 
+    'stale_tickets', 'recent_comments'
+]
+
 function DashboardDetail({ dashboardId, onBack }: { dashboardId: string, onBack: () => void }) {
   const { token } = antTheme.useToken()
   const qc = useQueryClient()
   const [editingTitle, setEditingTitle] = useState(false)
   const [editingWidget, setEditingWidget] = useState<DashboardWidgetDto | null>(null)
   const [isAddingWidget, setIsAddingWidget] = useState(false)
+  const [isAutoConfigVisible, setIsAutoConfigVisible] = useState(false)
+  const [autoConfigMode, setAutoConfigMode] = useState<'append' | 'replace'>('append')
   const [form] = Form.useForm()
   
   const { data: dashboard, isLoading } = useQuery({
     queryKey: ['customDashboard', dashboardId],
     queryFn: () => getDashboard(dashboardId),
   })
+
+  const { data: adminWidgets } = useQuery({
+    queryKey: ['adminWidgets'],
+    queryFn: listAdminWidgets,
+    staleTime: 300_000,
+  })
+
+  const widgetDefs = useMemo(() => {
+    if (!adminWidgets?.items) return WIDGET_TYPES
+    return adminWidgets.items.filter(w => w.is_active).map(w => ({
+        type: w.type,
+        label: w.display_name,
+        icon: getIconComponent(w.icon),
+        configurable: CONFIGURABLE_TYPES.includes(w.type)
+    }))
+  }, [adminWidgets])
 
   const saveLayout = useMutation({
     mutationFn: async (layout: any[]) => {
@@ -576,7 +626,7 @@ function DashboardDetail({ dashboardId, onBack }: { dashboardId: string, onBack:
 
   const addWidget = useMutation({
     mutationFn: (type: string) => {
-        const typeInfo = WIDGET_TYPES.find(t => t.type === type)
+        const typeInfo = widgetDefs.find(t => t.type === type)
         const payload = {
             type,
             title: typeInfo?.label,
@@ -590,7 +640,7 @@ function DashboardDetail({ dashboardId, onBack }: { dashboardId: string, onBack:
       qc.invalidateQueries({ queryKey: ['customDashboard', dashboardId] })
       message.success('Widget added')
       // Auto-open config if configurable
-      const typeInfo = WIDGET_TYPES.find(t => t.type === w.type)
+      const typeInfo = widgetDefs.find(t => t.type === w.type)
       if (typeInfo?.configurable) {
           setEditingWidget(w)
       }
@@ -638,6 +688,23 @@ function DashboardDetail({ dashboardId, onBack }: { dashboardId: string, onBack:
     }
   })
 
+  const user = useSessionStore(s => s.user)
+
+  const autoConfig = useMutation({
+    mutationFn: () => {
+        const primarySector = user?.sectors?.[0]?.sectorCode
+        return autoConfigureDashboard(dashboardId, autoConfigMode, primarySector)
+    },
+    onSuccess: () => {
+        setIsAutoConfigVisible(false)
+        qc.invalidateQueries({ queryKey: ['customDashboard', dashboardId] })
+        message.success(`Dashboard auto-configured (${autoConfigMode})`)
+    },
+    onError: (err: any) => {
+        message.error(err.response?.data?.detail || 'Failed to auto-configure')
+    }
+  })
+
   useEffect(() => {
     if (editingWidget) {
         form.setFieldsValue({
@@ -668,7 +735,15 @@ function DashboardDetail({ dashboardId, onBack }: { dashboardId: string, onBack:
           )}
         </Space>
         <Space>
-           <Button icon={<ThunderboltOutlined />} loading={autoArrange.isPending} onClick={() => autoArrange.mutate()}>Auto-arrange</Button>
+           <Tooltip title="Magic Wand: Auto-configure widgets based on your role">
+             <Button 
+                icon={<ThunderboltOutlined style={{ color: '#722ed1' }} />} 
+                onClick={() => setIsAutoConfigVisible(true)}
+             >
+                Auto-configure
+             </Button>
+           </Tooltip>
+           <Button icon={<SettingOutlined />} loading={autoArrange.isPending} onClick={() => autoArrange.mutate()}>Auto-arrange</Button>
            <Button icon={<AppstoreAddOutlined />} type="primary" onClick={() => { setEditingWidget(null); setIsAddingWidget(true) }}>Add Widget</Button>
            <Button icon={<ReloadOutlined />} onClick={() => qc.invalidateQueries({ queryKey: ['customDashboard', dashboardId] })} />
         </Space>
@@ -700,7 +775,7 @@ function DashboardDetail({ dashboardId, onBack }: { dashboardId: string, onBack:
                     )}
                 </div>
                 <Space size={2} style={{ flexShrink: 0 }}>
-                  {WIDGET_TYPES.find(t => t.type === w.type)?.configurable && (
+                  {CONFIGURABLE_TYPES.includes(w.type) && (
                     <Button 
                         size="small" type="text" icon={<SettingOutlined />} 
                         onMouseDown={e => e.stopPropagation()}
@@ -727,7 +802,7 @@ function DashboardDetail({ dashboardId, onBack }: { dashboardId: string, onBack:
 
       <Modal title="Choose Widget Type" open={isAddingWidget} onCancel={() => setIsAddingWidget(false)} footer={null} width={600}>
          <Row gutter={[16, 16]}>
-            {WIDGET_TYPES.map(w => (
+            {widgetDefs.map(w => (
                 <Col key={w.type} xs={12} sm={8}>
                     <Card size="small" hoverable onClick={() => addWidget.mutate(w.type)} style={{ textAlign: 'center' }}>
                         <div style={{ fontSize: 24, marginBottom: 8, color: token.colorPrimary }}>{w.icon}</div>
@@ -736,6 +811,34 @@ function DashboardDetail({ dashboardId, onBack }: { dashboardId: string, onBack:
                 </Col>
             ))}
          </Row>
+      </Modal>
+
+      <Modal 
+        title="Auto-Pilot Configuration" 
+        open={isAutoConfigVisible} 
+        onCancel={() => setIsAutoConfigVisible(false)}
+        onOk={() => autoConfig.mutate()}
+        confirmLoading={autoConfig.isPending}
+      >
+        <Typography.Paragraph>
+            Choose how you want to auto-configure your dashboard based on your roles and sectors.
+        </Typography.Paragraph>
+        <Radio.Group value={autoConfigMode} onChange={e => setAutoConfigMode(e.target.value)}>
+            <Space direction="vertical">
+                <Radio value="append">
+                    <b>Append Recommended</b>
+                    <div style={{ fontSize: 12, color: token.colorTextDescription }}>
+                        Add suggested widgets for your roles without removing existing ones.
+                    </div>
+                </Radio>
+                <Radio value="replace">
+                    <b>Replace Existing</b>
+                    <div style={{ fontSize: 12, color: token.colorTextDescription }}>
+                        Clear all current widgets and apply the standard recommended layout.
+                    </div>
+                </Radio>
+            </Space>
+        </Radio.Group>
       </Modal>
 
       <Modal 

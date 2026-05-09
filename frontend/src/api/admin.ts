@@ -212,3 +212,28 @@ export const updateAdminSlaPolicy = async (policyId: string, payload: AdminSlaPo
   const { data } = await apiClient.patch(`/api/admin/sla-policies/${policyId}`, payload)
   return data
 }
+
+export interface AdminWidgetDefinition {
+  type: string
+  display_name: string
+  description?: string | null
+  is_active: boolean
+  icon?: string | null
+  required_roles?: string[] | null
+  created_at?: string | null
+  updated_at?: string | null
+}
+
+export const listAdminWidgets = async (): Promise<{ items: AdminWidgetDefinition[] }> => {
+  const { data } = await apiClient.get('/api/admin/widget-definitions')
+  return data
+}
+
+export const upsertAdminWidget = async (payload: Partial<AdminWidgetDefinition> & { type: string }): Promise<AdminWidgetDefinition> => {
+  const { data } = await apiClient.post('/api/admin/widget-definitions/upsert', payload)
+  return data
+}
+
+export const syncAdminWidgets = async (): Promise<void> => {
+  await apiClient.post('/api/admin/widget-definitions/sync')
+}

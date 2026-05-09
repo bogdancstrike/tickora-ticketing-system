@@ -1,11 +1,13 @@
 """Admin HTTP endpoints."""
 from flask import request as flask_request
+from sqlalchemy import select
 
 from src.core.db import get_db
 from src.core.errors import ValidationError
 from src.iam.decorators import require_authenticated
 from src.iam.principal import Principal
-from src.ticketing.service import admin_service
+from src.ticketing.models import WidgetDefinition
+from src.ticketing.service import admin_service, dashboard_service
 
 
 def _payload() -> dict:
@@ -154,3 +156,63 @@ def update_sla_policy(app, operation, request, *, principal: Principal, **kwargs
     policy_id = kwargs.get("policy_id") or flask_request.view_args.get("policy_id")
     with get_db() as db:
         return (admin_service.upsert_sla_policy(db, principal, _payload(), policy_id=policy_id), 200)
+
+
+@require_authenticated
+def list_widget_definitions(app, operation, request, *, principal: Principal, **kwargs):
+    with get_db() as db:
+        stmt = select(WidgetDefinition).order_by(WidgetDefinition.type)
+        items = list(db.scalars(stmt))
+        return ({"items": [_serialize_widget_definition(i) for i in items]}, 200)
+
+
+@require_authenticated
+def upsert_widget_definition(app, operation, request, *, principal: Principal, **kwargs):
+    if not principal.is_admin:
+        raise PermissionDeniedError("admin only")
+    payload = _payload()
+    w_type = payload.get("type")
+    if not w_type:
+        raise ValidationError("type is required")
+
+    with get_db() as db:
+        wd = db.get(WidgetDefinition, w_type)
+        if not wd:
+            wd = WidgetDefinition(type=w_type)
+            db.add(wd)
+
+        if "display_name" in payload:
+            wd.display_name = payload["display_name"]
+        if "description" in payload:
+            wd.description = payload["description"]
+        if "is_active" in payload:
+            wd.is_active = bool(payload["is_active"])
+        if "icon" in payload:
+            wd.icon = payload["icon"]
+        if "required_roles" in payload:
+            wd.required_roles = payload["required_roles"]
+
+        db.flush()
+        return (_serialize_widget_definition(wd), 200)
+
+
+@require_authenticated
+def sync_widget_catalogue(app, operation, request, *, principal: Principal, **kwargs):
+    if not principal.is_admin:
+        raise PermissionDeniedError("admin only")
+    with get_db() as db:
+        dashboard_service.sync_widget_catalogue(db)
+        return ({"status": "synchronized"}, 200)
+
+
+def _serialize_widget_definition(wd: WidgetDefinition) -> dict:
+    return {
+        "type": wd.type,
+        "display_name": wd.display_name,
+        "description": wd.description,
+        "is_active": wd.is_active,
+        "icon": wd.icon,
+        "required_roles": wd.required_roles,
+        "created_at": wd.created_at.isoformat(),
+        "updated_at": wd.updated_at.isoformat(),
+    }
