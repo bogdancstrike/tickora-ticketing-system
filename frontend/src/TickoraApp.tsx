@@ -5,9 +5,9 @@ import {
   ConfigProvider, Layout, Menu, theme as antTheme, Typography, Space, Button, Tooltip, Dropdown, Grid, Drawer,
 } from 'antd'
 import {
-  DashboardOutlined, UnorderedListOutlined, CheckSquareOutlined, AuditOutlined, SettingOutlined,
+  LineChartOutlined, UnorderedListOutlined, CheckSquareOutlined, AuditOutlined, SettingOutlined,
   BgColorsOutlined, MenuFoldOutlined, MenuUnfoldOutlined, UserOutlined, LogoutOutlined,
-  IdcardOutlined,
+  IdcardOutlined, AppstoreOutlined, MenuOutlined,
 } from '@ant-design/icons'
 import { useQuery, QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { useKeycloak } from '@react-keycloak/web'
@@ -18,6 +18,7 @@ import { AuditExplorerPage } from '@/pages/AuditExplorerPage'
 import { CreateTicketPage } from '@/pages/CreateTicketPage'
 import { ReviewTicketsPage } from '@/pages/ReviewTicketsPage'
 import { ReviewTicketPage } from '@/pages/ReviewTicketPage'
+import { MonitorPage } from '@/pages/MonitorPage'
 import { DashboardPage } from '@/pages/DashboardPage'
 import { ProfilePage } from '@/pages/ProfilePage'
 import { AdminPage } from '@/pages/AdminPage'
@@ -37,7 +38,8 @@ const ROLE_AUDITOR = 'tickora_auditor'
 const ROLE_DISTRIBUTOR = 'tickora_distributor'
 
 const NAV_ITEMS = [
-  { key: '/dashboard', label: 'Dashboard', icon: <DashboardOutlined /> },
+  { key: '/monitor', label: 'Monitor', icon: <LineChartOutlined /> },
+  { key: '/dashboard', label: 'Dashboard', icon: <AppstoreOutlined /> },
   { key: '/tickets', label: 'Tickets', icon: <UnorderedListOutlined /> },
   {
     key: '/review',
@@ -66,12 +68,22 @@ function AppSidebar() {
   const [collapsed, setCollapsed] = useState(false)
   const hasAny = useSessionStore((s) => s.hasAny)
   const user = useSessionStore((s) => s.user)
+  const screens = Grid.useBreakpoint()
+  
+  const isMobile = !screens.md
+
   const visibleItems = NAV_ITEMS.filter((item) => {
     if ('rootOnly' in item && item.rootOnly) return !!user?.hasRootGroup
+    if (item.key === '/dashboard' && user?.roles.includes('tickora_beneficiary') && !user?.roles.some(r => [ROLE_ADMIN, ROLE_DISTRIBUTOR, ROLE_AUDITOR].includes(r))) {
+        // Hide customizable dashboard for pure beneficiaries
+        return false
+    }
     return !item.roles || hasAny(item.roles)
   })
 
-  const selectedKey = visibleItems.find((n) => location.pathname.startsWith(n.key))?.key || '/dashboard'
+  const selectedKey = visibleItems.find((n) => location.pathname.startsWith(n.key))?.key || '/monitor'
+
+  if (isMobile) return null
 
   return (
     <Sider
@@ -83,10 +95,16 @@ function AppSidebar() {
       style={{ background: token.colorBgContainer, borderRight: `1px solid ${token.colorBorder}` }}
     >
       <div style={{
-        height: 56, display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        height: 80, display: 'flex', alignItems: 'center', justifyContent: 'center',
         padding: '0 16px', borderBottom: `1px solid ${token.colorBorder}`,
       }}>
-        {!collapsed && <Text strong style={{ fontSize: 18 }}>Tickora</Text>}
+        {collapsed ? (
+          <img src="/logo.png" alt="Tickora" style={{ height: 44, cursor: 'pointer' }} onClick={() => navigate('/monitor')} />
+        ) : (
+          <img src="/logo_text.png" alt="Tickora" style={{ height: 44, cursor: 'pointer' }} onClick={() => navigate('/monitor')} />
+        )}
+      </div>
+      <div style={{ padding: '4px 8px', textAlign: 'right' }}>
         <Button type="text" icon={collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
                 onClick={() => setCollapsed(!collapsed)} />
       </div>
@@ -114,7 +132,22 @@ function AppHeader() {
   const { mode, toggle } = useThemeStore()
   const { keycloak } = useKeycloak()
   const user = useSessionStore((s) => s.user)
+  const hasAny = useSessionStore((s) => s.hasAny)
   const navigate = useNavigate()
+  const location = useLocation()
+  const screens = Grid.useBreakpoint()
+  const [drawerVisible, setDrawerDrawerVisible] = useState(false)
+
+  const isMobile = !screens.md
+
+  const visibleItems = NAV_ITEMS.filter((item) => {
+    if ('rootOnly' in item && item.rootOnly) return !!user?.hasRootGroup
+    if (item.key === '/dashboard' && user?.roles.includes('tickora_beneficiary') && !user?.roles.some(r => [ROLE_ADMIN, ROLE_DISTRIBUTOR, ROLE_AUDITOR].includes(r))) {
+        return false
+    }
+    return !item.roles || hasAny(item.roles)
+  })
+  const selectedKey = visibleItems.find((n) => location.pathname.startsWith(n.key))?.key || '/monitor'
 
   return (
     <Header style={{
@@ -122,7 +155,41 @@ function AppHeader() {
       padding: '0 16px', background: token.colorBgContainer,
       borderBottom: `1px solid ${token.colorBorder}`,
     }}>
-      <Text type="secondary">Ticketing · Tasking · Distribution</Text>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+        {isMobile && (
+          <>
+            <Button type="text" icon={<MenuOutlined />} onClick={() => setDrawerDrawerVisible(true)} />
+            <img src="/logo_text.png" alt="Tickora" style={{ height: 32, cursor: 'pointer' }} onClick={() => navigate('/monitor')} />
+          </>
+        )}
+        {!isMobile && (
+          <>
+            <img src="/logo.png" alt="Tickora" style={{ height: 36, marginRight: 12 }} />
+            <Text type="secondary">Ticketing · Tasking · Distribution</Text>
+          </>
+        )}
+      </div>
+
+      <Drawer
+        title={<img src="/logo_text.png" alt="Tickora" style={{ height: 32 }} />}
+        placement="left"
+        onClose={() => setDrawerDrawerVisible(false)}
+        open={drawerVisible}
+        styles={{ body: { padding: 0 } }}
+        width={280}
+      >
+        <Menu
+          mode="inline"
+          selectedKeys={[selectedKey]}
+          items={visibleItems.map(({ roles: _, rootOnly: __, ...rest }) => rest)}
+          onClick={({ key }) => {
+            navigate(key)
+            setDrawerDrawerVisible(false)
+          }}
+          style={{ borderRight: 0 }}
+        />
+      </Drawer>
+
       <Space>
         <NotificationDropdown />
         <Tooltip title={`Switch to ${mode === 'dark' ? 'light' : 'dark'} mode`}>
@@ -144,7 +211,7 @@ function AppHeader() {
           }}
         >
           <Button type="text" icon={<UserOutlined />}>
-            {user?.username || user?.email || 'user'}
+            {!isMobile && (user?.username || user?.email || 'user')}
           </Button>
         </Dropdown>
       </Space>
@@ -169,7 +236,6 @@ function useBackendSessionBootstrap() {
       email: query.data.email,
       firstName: query.data.first_name,
       lastName: query.data.last_name,
-      createdAt: query.data.created_at,
       roles: query.data.roles,
       sectors: query.data.sectors.map((s) => ({ sectorCode: s.sector_code, role: s.role })),
       hasRootGroup: query.data.has_root_group,
@@ -186,7 +252,8 @@ function Shell() {
         <AppHeader />
         <Content style={{ overflow: 'auto' }}>
           <Routes>
-            <Route path="/"          element={<Navigate to="/dashboard" replace />} />
+            <Route path="/"          element={<Navigate to="/monitor" replace />} />
+            <Route path="/monitor"   element={<MonitorPage />} />
             <Route path="/dashboard" element={<DashboardPage />} />
             <Route path="/tickets"   element={<TicketsPage />} />
             <Route path="/tickets/:ticketId" element={<TicketDetailPage />} />
@@ -208,7 +275,7 @@ function Shell() {
               path="/admin"
               element={<RequireRootGroup><AdminPage /></RequireRootGroup>}
             />
-            <Route path="*"          element={<Navigate to="/dashboard" replace />} />
+            <Route path="*"          element={<Navigate to="/monitor" replace />} />
           </Routes>
         </Content>
       </Layout>

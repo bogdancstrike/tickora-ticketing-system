@@ -200,9 +200,9 @@ export function ReviewTicketPage() {
       await queryClient.invalidateQueries({ queryKey: ['ticket', ticketId] })
       await queryClient.invalidateQueries({ queryKey: ['ticketAudit', ticketId] })
       await queryClient.invalidateQueries({ queryKey: ['reviewTickets'] })
-      await queryClient.invalidateQueries({ queryKey: ['dashboardOverview'] })
-      await queryClient.invalidateQueries({ queryKey: ['dashboardSector'] })
-      await queryClient.invalidateQueries({ queryKey: ['dashboardUser'] })
+      await queryClient.invalidateQueries({ queryKey: ['monitorOverview'] })
+      await queryClient.invalidateQueries({ queryKey: ['monitorSector'] })
+      await queryClient.invalidateQueries({ queryKey: ['monitorUser'] })
     },
     onError: (err) => msg.error(err.message),
   })

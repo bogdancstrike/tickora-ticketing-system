@@ -360,14 +360,7 @@ class TicketMetadata(Base):
 
 
 class TicketSectorAssignment(Base):
-    """Many-to-many sector routing.
-
-    `current_sector_id` on `tickets` stays as the *primary* sector — the one
-    drawn in the UI badge, used by SLA/dashboard rollups, and by the existing
-    visibility filter — while this table tracks every sector the ticket is
-    visible to. Service code keeps the primary in sync with the row marked
-    `is_primary = true`.
-    """
+    """Many-to-many sector routing."""
     __tablename__ = "ticket_sectors"
     __table_args__ = (
         Index("idx_ticket_sectors_ticket", "ticket_id"),
@@ -384,9 +377,7 @@ class TicketSectorAssignment(Base):
 
 
 class TicketAssignee(Base):
-    """Many-to-many user assignment. Same primary/secondary contract as
-    `TicketSectorAssignment` — `assignee_user_id` on the ticket is the
-    primary assignee; this table is the full set."""
+    """Many-to-many user assignment."""
     __tablename__ = "ticket_assignees"
     __table_args__ = (
         Index("idx_ticket_assignees_ticket", "ticket_id"),
@@ -414,3 +405,42 @@ class MetadataKeyDefinition(Base):
     is_active:   Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))
     created_at:  Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at:  Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
+
+
+# ── Customizable Dashboards ────────────────────────────────────────────────
+
+class CustomDashboard(Base):
+    __tablename__ = "custom_dashboards"
+    __table_args__ = (
+        Index("idx_custom_dashboards_user", "user_id"),
+    )
+
+    id:        Mapped[str] = mapped_column(UUID(as_uuid=False), primary_key=True, default=_uuid)
+    user_id:   Mapped[str] = mapped_column(UUID(as_uuid=False), ForeignKey("users.id"), nullable=False)
+    title:     Mapped[str] = mapped_column(String(255), nullable=False)
+    is_default: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
+
+    widgets: Mapped[list["DashboardWidget"]] = relationship("DashboardWidget", backref="dashboard", cascade="all, delete-orphan", order_by="DashboardWidget.created_at")
+
+
+class DashboardWidget(Base):
+    __tablename__ = "dashboard_widgets"
+
+    id:           Mapped[str] = mapped_column(UUID(as_uuid=False), primary_key=True, default=_uuid)
+    dashboard_id: Mapped[str] = mapped_column(UUID(as_uuid=False), ForeignKey("custom_dashboards.id", ondelete="CASCADE"), nullable=False)
+    
+    type:         Mapped[str] = mapped_column(String(50), nullable=False)  # e.g., 'ticket_list', 'monitor_kpi', 'audit_log'
+    title:        Mapped[str | None] = mapped_column(String(255))
+    config:       Mapped[dict] = mapped_column(JSONB, nullable=False, server_default=text("'{}'::jsonb"))
+    
+    # Grid layout (compatible with react-grid-layout)
+    x: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    y: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    w: Mapped[int] = mapped_column(Integer, nullable=False, default=4)
+    h: Mapped[int] = mapped_column(Integer, nullable=False, default=4)
+
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=lambda: datetime.now(timezone.utc), nullable=False)

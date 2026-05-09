@@ -80,7 +80,7 @@ export function NotificationDropdown() {
         const { ticket } = await response.json()
         if (!ticket || cancelled) return
 
-        es = new EventSource(`${API_BASE}/api/notifications/stream?access_token=${ticket}`)
+        es = new EventSource(`${API_BASE}/api/notifications/stream?sse_ticket=${ticket}`)
 
         es.onmessage = (event) => {
           try {

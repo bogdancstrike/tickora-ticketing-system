@@ -30,7 +30,7 @@ from src.ticketing.models import (
     Ticket,
     TicketMetadata,
 )
-from src.ticketing.service import audit_service, dashboard_service
+from src.ticketing.service import audit_service, monitor_service
 
 ADMIN_ROLES = {
     "tickora_admin",
@@ -96,8 +96,8 @@ def overview(db: Session, principal: Principal) -> dict[str, Any]:
         "by_status": status_counts,
         "by_priority": priority_counts,
         "by_sector": sector_counts,
-        "global_dashboard": dashboard_service.global_(db, principal),
-        "sla": dashboard_service.sla(db, principal),
+        "global_monitor": monitor_service.monitor_global(db, principal),
+        "sla": monitor_service.monitor_sla(db, principal),
         "recent_audit": [_serialize_audit(a) for a in db.scalars(
             select(AuditEvent).order_by(desc(AuditEvent.created_at), desc(AuditEvent.id)).limit(12)
         )],

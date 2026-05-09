@@ -18,7 +18,7 @@ import {
   type AdminMembership, type AdminMetadataKey, type AdminSector,
   type AdminUser,
 } from '@/api/admin'
-import type { DashboardBreakdown } from '@/api/tickets'
+import type { MonitorBreakdown } from '@/api/tickets'
 
 function labelize(value: string) {
   return value.split('_').join(' ')
@@ -52,7 +52,7 @@ function Panel({ title, icon, children }: { title: string; icon?: React.ReactNod
   )
 }
 
-function BarChart({ data, title, color = '#1677ff' }: { data: DashboardBreakdown[]; title: string; color?: string }) {
+function BarChart({ data, title, color = '#1677ff' }: { data: MonitorBreakdown[]; title: string; color?: string }) {
   if (!data?.length) return <Empty description="No data" image={Empty.PRESENTED_IMAGE_SIMPLE} />
   const option = {
     tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
@@ -96,7 +96,7 @@ function OverviewTab() {
           <Panel title="Backlog sectors" icon={<ApartmentOutlined />}>
             <List
               size="small"
-              dataSource={overview.data?.global_dashboard.top_backlog_sectors || []}
+              dataSource={overview.data?.global_monitor?.top_backlog_sectors || []}
               locale={{ emptyText: <Empty description="No backlog sectors" image={Empty.PRESENTED_IMAGE_SIMPLE} /> }}
               renderItem={(item) => (
                 <List.Item>

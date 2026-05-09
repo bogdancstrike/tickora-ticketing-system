@@ -383,63 +383,120 @@
     },
     {
       "namespace": "tickora",
-      "operation_name": "dashboard_overview",
+      "operation_name": "monitor_overview",
       "model_name": "Empty",
       "request_method": ["GET"],
-      "api_url": "/api/dashboard/overview",
-      "exec_method": { "module_name": "api.dashboard", "method_name": "overview" }
+      "api_url": "/api/monitor/overview",
+      "exec_method": { "module_name": "api.monitor", "method_name": "monitor_overview" }
     },
     {
       "namespace": "tickora",
-      "operation_name": "dashboard_global",
+      "operation_name": "monitor_global",
       "model_name": "Empty",
       "request_method": ["GET"],
-      "api_url": "/api/dashboard/global",
-      "exec_method": { "module_name": "api.dashboard", "method_name": "global_dashboard" }
+      "api_url": "/api/monitor/global",
+      "exec_method": { "module_name": "api.monitor", "method_name": "global_monitor" }
     },
     {
       "namespace": "tickora",
-      "operation_name": "dashboard_sectors",
+      "operation_name": "monitor_sectors",
       "model_name": "Empty",
       "request_method": ["GET"],
-      "api_url": "/api/dashboard/sectors",
-      "exec_method": { "module_name": "api.dashboard", "method_name": "sectors_dashboard" }
+      "api_url": "/api/monitor/sectors",
+      "exec_method": { "module_name": "api.monitor", "method_name": "sectors_monitor" }
     },
     {
       "namespace": "tickora",
-      "operation_name": "dashboard_sector",
+      "operation_name": "monitor_sector",
       "model_name": "Empty",
       "request_method": ["GET"],
-      "api_url": "/api/dashboard/sectors/<sector_id>",
-      "exec_method": { "module_name": "api.dashboard", "method_name": "sector_dashboard" }
+      "api_url": "/api/monitor/sectors/<sector_code>",
+      "exec_method": { "module_name": "api.monitor", "method_name": "sector_monitor" }
     },
     {
       "namespace": "tickora",
-      "operation_name": "dashboard_user",
+      "operation_name": "monitor_user",
       "model_name": "Empty",
       "request_method": ["GET"],
-      "api_url": "/api/dashboard/users/<user_id>",
+      "api_url": "/api/monitor/users/<user_id>",
       "exec_method": {
-        "module_name": "api.dashboard",
-        "method_name": "user_dashboard"
+        "module_name": "api.monitor",
+        "method_name": "user_monitor"
       }
       },
       {
       "namespace": "tickora",
-      "operation_name": "dashboard_sla",
+      "operation_name": "monitor_sla",
       "model_name": "Empty",
       "request_method": ["GET"],
-      "api_url": "/api/dashboard/sla",
-      "exec_method": { "module_name": "api.dashboard", "method_name": "sla_dashboard" }
+      "api_url": "/api/monitor/sla",
+      "exec_method": { "module_name": "api.monitor", "method_name": "sla_monitor" }
     },
     {
       "namespace": "tickora",
-      "operation_name": "dashboard_timeseries",
+      "operation_name": "monitor_timeseries",
       "model_name": "Empty",
       "request_method": ["GET"],
-      "api_url": "/api/dashboard/timeseries",
-      "exec_method": { "module_name": "api.dashboard", "method_name": "timeseries_dashboard" }
+      "api_url": "/api/monitor/timeseries",
+      "exec_method": { "module_name": "api.monitor", "method_name": "timeseries_monitor" }
     },
+    {
+      "namespace": "tickora",
+      "operation_name": "dashboards_list",
+      "model_name": "Empty",
+      "request_method": ["GET"],
+      "api_url": "/api/dashboards",
+      "exec_method": { "module_name": "api.dashboard", "method_name": "list_dashboards" }
+    },
+    {
+      "namespace": "tickora",
+      "operation_name": "dashboards_get",
+      "model_name": "Empty",
+      "request_method": ["GET"],
+      "api_url": "/api/dashboards/<dashboard_id>",
+      "exec_method": { "module_name": "api.dashboard", "method_name": "get_dashboard" }
+    },
+    {
+      "namespace": "tickora",
+      "operation_name": "dashboards_create",
+      "model_name": "Empty",
+      "request_method": ["POST"],
+      "api_url": "/api/dashboards",
+      "exec_method": { "module_name": "api.dashboard", "method_name": "create_dashboard" }
+    },
+    {
+      "namespace": "tickora",
+      "operation_name": "dashboards_update",
+      "model_name": "Empty",
+      "request_method": ["PATCH"],
+      "api_url": "/api/dashboards/<dashboard_id>",
+      "exec_method": { "module_name": "api.dashboard", "method_name": "update_dashboard" }
+    },
+    {
+      "namespace": "tickora",
+      "operation_name": "dashboards_delete",
+      "model_name": "Empty",
+      "request_method": ["DELETE"],
+      "api_url": "/api/dashboards/<dashboard_id>",
+      "exec_method": { "module_name": "api.dashboard", "method_name": "delete_dashboard" }
+    },
+    {
+      "namespace": "tickora",
+      "operation_name": "dashboards_widget_upsert",
+      "model_name": "Empty",
+      "request_method": ["POST"],
+      "api_url": "/api/dashboards/<dashboard_id>/widgets",
+      "exec_method": { "module_name": "api.dashboard", "method_name": "upsert_widget" }
+    },
+    {
+      "namespace": "tickora",
+      "operation_name": "dashboards_widget_delete",
+      "model_name": "Empty",
+      "request_method": ["DELETE"],
+      "api_url": "/api/dashboards/<dashboard_id>/widgets/<widget_id>",
+      "exec_method": { "module_name": "api.dashboard", "method_name": "delete_widget" }
+    },
+
     {
       "namespace": "tickora",
       "operation_name": "admin_overview",

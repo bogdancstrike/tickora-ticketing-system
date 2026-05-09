@@ -158,9 +158,9 @@ function WorkflowActions({ ticket }: { ticket: TicketDto }) {
     form.resetFields()
     await queryClient.invalidateQueries({ queryKey: ['tickets'] })
     await queryClient.invalidateQueries({ queryKey: ['ticket', ticket.id] })
-    await queryClient.invalidateQueries({ queryKey: ['dashboardOverview'] })
-    await queryClient.invalidateQueries({ queryKey: ['dashboardSector'] })
-    await queryClient.invalidateQueries({ queryKey: ['dashboardUser'] })
+    await queryClient.invalidateQueries({ queryKey: ['monitorOverview'] })
+    await queryClient.invalidateQueries({ queryKey: ['monitorSector'] })
+    await queryClient.invalidateQueries({ queryKey: ['monitorUser'] })
   }
 
   const run = useMutation({

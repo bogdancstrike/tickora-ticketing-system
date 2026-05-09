@@ -88,6 +88,7 @@ export function StatusChanger({
     const isAssignee = ticket.assignee_user_id === user.id
     const isRequester = (
       ticket.created_by_user_id === user.id
+      || (!!user.id && ticket.beneficiary_user_id === user.id)
       || (ticket.beneficiary_type === 'external' && !!user.email && ticket.requester_email === user.email)
     )
 
@@ -119,9 +120,9 @@ export function StatusChanger({
       await queryClient.invalidateQueries({ queryKey: ['tickets'] })
       await queryClient.invalidateQueries({ queryKey: ['ticket', ticket.id] })
       await queryClient.invalidateQueries({ queryKey: ['ticketAudit', ticket.id] })
-      await queryClient.invalidateQueries({ queryKey: ['dashboardOverview'] })
-      await queryClient.invalidateQueries({ queryKey: ['dashboardSector'] })
-      await queryClient.invalidateQueries({ queryKey: ['dashboardUser'] })
+      await queryClient.invalidateQueries({ queryKey: ['monitorOverview'] })
+      await queryClient.invalidateQueries({ queryKey: ['monitorSector'] })
+      await queryClient.invalidateQueries({ queryKey: ['monitorUser'] })
     },
     onError: (err) => msg.error(err.message),
   })

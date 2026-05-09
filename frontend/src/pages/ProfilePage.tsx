@@ -11,7 +11,7 @@ import {
 import ReactECharts from 'echarts-for-react'
 import { useSessionStore } from '@/stores/sessionStore'
 import {
-  getDashboardOverview, getMe, listAssignableUsers, listTickets, type AssignableUserDto,
+  getMonitorOverview, getMe, listAssignableUsers, listTickets, type AssignableUserDto,
 } from '@/api/tickets'
 import { StatusTag } from '@/components/common/StatusTag'
 import { fmtDate, fmtRelative } from '@/components/common/format'
@@ -250,8 +250,8 @@ export function ProfilePage() {
   })
 
   const overview = useQuery({
-    queryKey: ['dashboardOverview'],
-    queryFn: getDashboardOverview,
+    queryKey: ['monitorOverview'],
+    queryFn: getMonitorOverview,
     staleTime: 60_000,
     enabled: !!user?.id,
   })

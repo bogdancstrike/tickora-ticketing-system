@@ -2,27 +2,27 @@ import { apiClient } from './client'
 
 export interface SectorMembershipDto {
   sector_code: string
+  sector_name: string
   role: 'member' | 'chief'
 }
 
 export interface MeDto {
   user_id: string
-  keycloak_subject: string
-  username?: string
-  email?: string
-  first_name?: string
-  last_name?: string
-  created_at?: string | null
+  username: string
+  email: string
+  first_name?: string | null
+  last_name?: string | null
   roles: string[]
   sectors: SectorMembershipDto[]
-  has_root_group?: boolean
+  has_root_group: boolean
+  created_at: string
 }
 
 export interface TicketDto {
   id: string
   ticket_code: string
   status: string
-  priority: 'low' | 'medium' | 'high' | 'critical'
+  priority: string
   category?: string | null
   type?: string | null
   beneficiary_type: 'internal' | 'external'
@@ -42,18 +42,33 @@ export interface TicketDto {
   done_at?: string | null
   closed_at?: string | null
   reopened_at?: string | null
-  reopened_count: number
-  sla_due_at?: string | null
+  assigned_at?: string | null
+  first_response_at?: string | null
   sla_status?: string | null
+  sla_due_at?: string | null
   assignee_user_id?: string | null
+  created_by_user_id?: string | null
   requester_first_name?: string | null
   requester_last_name?: string | null
   requester_email?: string | null
-  created_by_user_id?: string | null
-  last_active_assignee_user_id?: string | null
-  assigned_at?: string | null
-  sector_assigned_at?: string | null
-  first_response_at?: string | null
+  requester_phone?: string | null
+  requester_organization?: string | null
+  metadata?: Record<string, { value: string; label: string }> | null
+  request_ip?: string | null
+  user_agent?: string | null
+  correlation_id?: string | null
+}
+
+export interface ListTicketParams {
+  status?: string
+  priority?: string
+  current_sector_code?: string
+  assignee_user_id?: string
+  search?: string
+  sort_by?: string
+  sort_dir?: 'asc' | 'desc'
+  limit?: number
+  cursor?: string
 }
 
 export interface TicketListResponse {
@@ -61,83 +76,33 @@ export interface TicketListResponse {
   next_cursor?: string | null
 }
 
-export interface CommentDto {
-  id: string
-  ticket_id: string
-  author_user_id?: string | null
-  author_display?: string | null
-  author_username?: string | null
-  author_email?: string | null
-  visibility: 'public' | 'private'
-  comment_type: string
-  body: string
-  created_at?: string | null
-  updated_at?: string | null
-}
-
-export interface AttachmentDto {
-  id: string
-  ticket_id: string
-  comment_id?: string | null
-  uploaded_by_user_id?: string | null
-  file_name: string
-  content_type?: string | null
-  size_bytes: number
-  visibility: 'public' | 'private'
-  checksum_sha256?: string | null
-  is_scanned: boolean
-  scan_result?: string | null
-  created_at?: string | null
-}
-
-export interface AuditEventDto {
-  id: string
-  actor_user_id?: string | null
-  actor_username?: string | null
-  action: string
-  entity_type: string
-  entity_id?: string | null
-  ticket_id?: string | null
-  old_value?: Record<string, unknown> | null
-  new_value?: Record<string, unknown> | null
-  metadata?: Record<string, unknown> | null
-  request_ip?: string | null
-  user_agent?: string | null
-  correlation_id?: string | null
-  created_at?: string | null
-}
-
-export interface ListTicketParams {
-  status?: string
-  priority?: string
-  current_sector_code?: string
-  category?: string
-  assignee_user_id?: string
-  search?: string
-  sort_by?: 'created_at' | 'updated_at' | 'ticket_code' | 'priority' | 'status' | 'title'
-  sort_dir?: 'asc' | 'desc'
-  created_after?: string
-  created_before?: string
-  cursor?: string
-  limit?: number
-}
-
 export interface CreateTicketPayload {
-  beneficiary_type: 'internal' | 'external'
+  title: string
+  txt: string
+  priority?: string
+  category?: string
+  type?: string
   requester_first_name?: string
   requester_last_name?: string
   requester_email?: string
   requester_phone?: string
-  organization_name?: string
-  external_identifier?: string
-  requester_ip?: string
-  title?: string
-  txt: string
+  requester_organization?: string
+}
+
+export interface ReviewTicketPayload {
+  sector_code: string
+  priority: string
+  category?: string
+  type?: string
+  assignee_user_id?: string
+  private_comment?: string
+  reason?: string
+  close?: boolean
 }
 
 export interface TicketOptionsDto {
-  sectors: Array<{ id: string; code: string; name: string }>
-  priorities: Array<TicketDto['priority']>
+  sectors: Array<{ code: string; name: string }>
+  priorities: string[]
   categories: string[]
   types: string[]
   metadata_keys: Array<{
@@ -153,91 +118,112 @@ export interface TicketMetadataDto {
   key: string
   value: string
   label?: string | null
-  created_at?: string | null
-  updated_at?: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface AuditEventDto {
+  id: string
+  action: string
+  entity_type: string
+  entity_id: string
+  ticket_id?: string | null
+  actor_user_id: string
+  actor_username: string
+  created_at: string
+  old_value?: any
+  new_value?: any
+  metadata?: any
 }
 
 export interface AssignableUserDto {
   id: string
-  username?: string | null
-  email?: string | null
-  first_name?: string | null
-  last_name?: string | null
+  username: string
+  email: string
   sector_code: string
-  membership_role: 'member' | 'chief'
+  membership_role: string
 }
 
-export interface ReviewTicketPayload {
-  sector_code?: string
-  assignee_user_id?: string
-  priority?: TicketDto['priority']
-  category?: string
-  type?: string
-  private_comment?: string
-  reason?: string
-  close?: boolean
-}
-
-export interface DashboardBreakdown {
+export interface MonitorBreakdown {
   key: string
   count: number
 }
 
-export interface DashboardOldTicket {
+export interface MonitorOldTicket {
   id: string
   ticket_code: string
-  title?: string | null
+  title: string | null
   status: string
-  priority: TicketDto['priority']
-  created_at?: string | null
+  priority: string
+  created_at: string | null
 }
 
-export interface DashboardTimeseriesPoint {
+export interface MonitorSector {
+  sector_code: string
+  sector_name: string
+  kpis: Record<string, number | null>
+  by_status: MonitorBreakdown[]
+  by_priority: MonitorBreakdown[]
+  by_category: MonitorBreakdown[]
+  workload: Array<{ assignee_user_id: string; active: number; done: number }>
+  oldest: MonitorOldTicket[]
+}
+
+export interface MonitorTimeseriesPoint {
   date: string
   created: number
   closed: number
 }
 
-export interface DashboardSector {
-  sector_code: string
-  sector_name: string
-  kpis: Record<string, number | null>
-  by_status: DashboardBreakdown[]
-  by_priority: DashboardBreakdown[]
-  by_category: DashboardBreakdown[]
-  workload: Array<{ assignee_user_id: string; active: number; done: number }>
-  oldest: DashboardOldTicket[]
-}
-
-export interface DashboardOverview {
+export interface MonitorOverview {
   generated_at: string
   global?: {
     kpis: Record<string, number | null>
-    by_status: DashboardBreakdown[]
-    by_priority: DashboardBreakdown[]
-    by_beneficiary_type: DashboardBreakdown[]
-    by_category: DashboardBreakdown[]
+    by_status: MonitorBreakdown[]
+    by_priority: MonitorBreakdown[]
+    by_beneficiary_type: MonitorBreakdown[]
+    by_category: MonitorBreakdown[]
     by_sector: Array<{ sector_code: string; sector_name: string; count: number }>
     top_backlog_sectors: Array<{ sector_code: string; sector_name: string; count: number }>
   } | null
   distributor?: {
     kpis: Record<string, number | null>
-    by_priority: DashboardBreakdown[]
-    by_category: DashboardBreakdown[]
-    oldest: DashboardOldTicket[]
+    by_priority: MonitorBreakdown[]
+    by_category: MonitorBreakdown[]
+    oldest: MonitorOldTicket[]
   } | null
-  sectors: DashboardSector[]
+  sectors: MonitorSector[]
   personal: {
     user_id: string
     username?: string | null
     email?: string | null
     kpis: Record<string, number | null>
     beneficiary_kpis: Record<string, number | null>
-    by_status: DashboardBreakdown[]
-    beneficiary_by_status: DashboardBreakdown[]
-    oldest: DashboardOldTicket[]
+    by_status: MonitorBreakdown[]
+    beneficiary_by_status: MonitorBreakdown[]
+    oldest: MonitorOldTicket[]
   }
-  timeseries: DashboardTimeseriesPoint[]
+  timeseries: MonitorTimeseriesPoint[]
+}
+
+export interface DashboardWidgetDto {
+  id: string
+  type: string
+  title?: string | null
+  config: Record<string, any>
+  x: number
+  y: number
+  w: number
+  h: number
+}
+
+export interface CustomDashboardDto {
+  id: string
+  title: string
+  is_default: boolean
+  created_at: string
+  updated_at: string
+  widgets?: DashboardWidgetDto[]
 }
 
 export const getMe = async (): Promise<MeDto> => {
@@ -277,19 +263,57 @@ export const reviewTicket = async (ticketId: string, payload: ReviewTicketPayloa
   return data
 }
 
-export const getDashboardOverview = async (): Promise<DashboardOverview> => {
-  const { data } = await apiClient.get('/api/dashboard/overview')
+export const changeTicketStatus = async (ticketId: string, status: string, reason?: string): Promise<TicketDto> => {
+  const { data } = await apiClient.post(`/api/tickets/${ticketId}/status`, { status, reason })
   return data
 }
 
-export const getSectorDashboard = async (sectorCode: string): Promise<DashboardSector> => {
-  const { data } = await apiClient.get(`/api/dashboard/sectors/${sectorCode}`)
+export const getMonitorOverview = async (): Promise<MonitorOverview> => {
+  const { data } = await apiClient.get('/api/monitor/overview')
   return data
 }
 
-export const getUserDashboard = async (userId: string): Promise<DashboardOverview['personal']> => {
-  const { data } = await apiClient.get(`/api/dashboard/users/${userId}`)
+export const getMonitorSector = async (sectorCode: string): Promise<MonitorSector> => {
+  const { data } = await apiClient.get(`/api/monitor/sectors/${sectorCode}`)
   return data
+}
+
+export const getMonitorUser = async (userId: string): Promise<MonitorOverview['personal']> => {
+  const { data } = await apiClient.get(`/api/monitor/users/${userId}`)
+  return data
+}
+
+export const listDashboards = async (): Promise<{ items: CustomDashboardDto[] }> => {
+  const { data } = await apiClient.get('/api/dashboards')
+  return data
+}
+
+export const getDashboard = async (id: string): Promise<CustomDashboardDto> => {
+  const { data } = await apiClient.get(`/api/dashboards/${id}`)
+  return data
+}
+
+export const createDashboard = async (payload: { title: string; is_default?: boolean }): Promise<CustomDashboardDto> => {
+  const { data } = await apiClient.post('/api/dashboards', payload)
+  return data
+}
+
+export const updateDashboard = async (id: string, payload: Partial<CustomDashboardDto>): Promise<CustomDashboardDto> => {
+  const { data } = await apiClient.patch(`/api/dashboards/${id}`, payload)
+  return data
+}
+
+export const deleteDashboard = async (id: string): Promise<void> => {
+  await apiClient.delete(`/api/dashboards/${id}`)
+}
+
+export const upsertWidget = async (dashboardId: string, payload: Partial<DashboardWidgetDto>): Promise<DashboardWidgetDto> => {
+  const { data } = await apiClient.post(`/api/dashboards/${dashboardId}/widgets`, payload)
+  return data
+}
+
+export const deleteWidget = async (dashboardId: string, widgetId: string): Promise<void> => {
+  await apiClient.delete(`/api/dashboards/${dashboardId}/widgets/${widgetId}`)
 }
 
 export const assignSector = async (ticketId: string, sectorCode: string, reason?: string): Promise<TicketDto> => {
@@ -341,27 +365,11 @@ export const removeAssignee = async (ticketId: string, userId: string): Promise<
   return data
 }
 
-export const unassignTicket = async (ticketId: string, reason?: string): Promise<TicketDto> => {
-  const { data } = await apiClient.post(`/api/tickets/${ticketId}/unassign`, {
+export const changePriority = async (ticketId: string, priority: string, reason?: string): Promise<TicketDto> => {
+  const { data } = await apiClient.post(`/api/tickets/${ticketId}/change-priority`, {
+    priority,
     reason: reason || undefined,
   })
-  return data
-}
-
-export const changeTicketStatus = async (
-  ticketId: string,
-  status: string,
-  reason?: string,
-): Promise<TicketDto> => {
-  const { data } = await apiClient.post(`/api/tickets/${ticketId}/change-status`, {
-    status,
-    reason: reason || undefined,
-  })
-  return data
-}
-
-export const markDone = async (ticketId: string, resolution: string): Promise<TicketDto> => {
-  const { data } = await apiClient.post(`/api/tickets/${ticketId}/mark-done`, { resolution })
   return data
 }
 
@@ -380,39 +388,10 @@ export const cancelTicket = async (ticketId: string, reason: string): Promise<Ti
   return data
 }
 
-export const changePriority = async (ticketId: string, priority: TicketDto['priority'], reason?: string): Promise<TicketDto> => {
-  const { data } = await apiClient.post(`/api/tickets/${ticketId}/change-priority`, {
-    priority,
-    reason: reason || undefined,
+export const markDone = async (ticketId: string, resolution?: string): Promise<TicketDto> => {
+  const { data } = await apiClient.post(`/api/tickets/${ticketId}/mark-done`, {
+    resolution: resolution || undefined,
   })
-  return data
-}
-
-export const listComments = async (ticketId: string): Promise<{ items: CommentDto[] }> => {
-  const { data } = await apiClient.get(`/api/tickets/${ticketId}/comments`)
-  return data
-}
-
-export const createComment = async (
-  ticketId: string,
-  body: string,
-  visibility: CommentDto['visibility'],
-): Promise<CommentDto> => {
-  const { data } = await apiClient.post(`/api/tickets/${ticketId}/comments`, { body, visibility })
-  return data
-}
-
-export const editComment = async (commentId: string, body: string): Promise<CommentDto> => {
-  const { data } = await apiClient.patch(`/api/comments/${commentId}`, { body })
-  return data
-}
-
-export const deleteComment = async (commentId: string): Promise<void> => {
-  await apiClient.delete(`/api/comments/${commentId}`)
-}
-
-export const listAttachments = async (ticketId: string): Promise<{ items: AttachmentDto[] }> => {
-  const { data } = await apiClient.get(`/api/tickets/${ticketId}/attachments`)
   return data
 }
 
@@ -486,14 +465,76 @@ export const setTicketMetadata = async (
 }
 
 export const deleteTicketMetadata = async (ticketId: string, key: string): Promise<void> => {
-  await apiClient.delete(`/api/tickets/${ticketId}/metadata`, { params: { key } })
+  await apiClient.delete(`/api/tickets/${ticketId}/metadata/${key}`)
 }
 
-export const updateTicket = async (ticketId: string, payload: { title?: string; txt?: string }): Promise<TicketDto> => {
+export interface AttachmentDto {
+  id: string
+  ticket_id: string
+  comment_id: string
+  uploaded_by_user_id: string | null
+  file_name: string
+  content_type: string | null
+  size_bytes: number
+  visibility: 'public' | 'private'
+  checksum_sha256: string | null
+  is_scanned: boolean
+  scan_result: string | null
+  created_at: string
+}
+
+export const listAttachments = async (ticketId: string): Promise<{ items: AttachmentDto[] }> => {
+  const { data } = await apiClient.get(`/api/tickets/${ticketId}/attachments`)
+  return data
+}
+
+export const listComments = async (ticketId: string): Promise<{ items: CommentDto[] }> => {
+  const { data } = await apiClient.get(`/api/tickets/${ticketId}/comments`)
+  return data
+}
+
+export interface CommentDto {
+  id: string
+  ticket_id: string
+  author_user_id?: string | null
+  author_display?: string | null
+  author_username?: string | null
+  author_email?: string | null
+  visibility: 'public' | 'private'
+  comment_type: string
+  body: string
+  created_at: string
+  updated_at: string
+}
+
+export const createComment = async (ticketId: string, body: string, visibility: string): Promise<CommentDto> => {
+  const { data } = await apiClient.post(`/api/tickets/${ticketId}/comments`, { body, visibility })
+  return data
+}
+
+export const editComment = async (commentId: string, body: string): Promise<CommentDto> => {
+  const { data } = await apiClient.patch(`/api/comments/${commentId}`, { body })
+  return data
+}
+
+export const deleteComment = async (commentId: string): Promise<void> => {
+  await apiClient.delete(`/api/comments/${commentId}`)
+}
+
+export const patchTicket = async (ticketId: string, payload: Partial<TicketDto>): Promise<TicketDto> => {
   const { data } = await apiClient.patch(`/api/tickets/${ticketId}`, payload)
   return data
 }
 
 export const deleteTicket = async (ticketId: string): Promise<void> => {
   await apiClient.delete(`/api/tickets/${ticketId}`)
+}
+
+export const markNotificationRead = async (notificationId: string): Promise<void> => {
+  await apiClient.post(`/api/notifications/${notificationId}/mark-read`)
+}
+
+export const createStreamTicket = async (): Promise<{ ticket: string }> => {
+  const { data } = await apiClient.post('/api/notifications/stream-ticket')
+  return data
 }
