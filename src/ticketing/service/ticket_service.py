@@ -184,7 +184,7 @@ def get(db: Session, principal: Principal, ticket_id: str) -> Ticket:
         setattr(t, "current_sector_code", _sector_code(db, t.current_sector_id))
         setattr(t, "beneficiary_user_id", _beneficiary_user_id(db, t.beneficiary_id))
         setattr(t, "sector_codes", _sector_codes_for_ticket(db, t.id))
-        setattr(t, "assignee_user_ids", _assignees_for_ticket(db, t.id))
+        setattr(t, "assignee_users", _assignees_for_ticket(db, t.id))
         _hydrate_requester_fallback(db, t)
         set_attr(current, "ticket.found", True)
         set_attr(current, "ticket.code", t.ticket_code)
@@ -382,7 +382,7 @@ def _list(
         setattr(r, "current_sector_code", sector_codes.get(r.current_sector_id))
         setattr(r, "beneficiary_user_id", ben_user_ids.get(r.beneficiary_id))
         setattr(r, "sector_codes", multi_sectors.get(r.id, []))
-        setattr(r, "assignee_user_ids", multi_assignees.get(r.id, []))
+        setattr(r, "assignee_users", multi_assignees.get(r.id, []))
     return rows, next_token
 
 

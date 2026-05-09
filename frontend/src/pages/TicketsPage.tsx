@@ -111,15 +111,17 @@ function canMarkDone(ticket: TicketDto, user: ReturnType<typeof useSessionStore.
 function canClose(ticket: TicketDto, user: ReturnType<typeof useSessionStore.getState>['user']) {
   if (!user) return false
   const isRequesterEmail = ticket.beneficiary_type === 'external' && !!user.email && ticket.requester_email === user.email
+  const isRequester = ticket.created_by_user_id === user.id || (!!user.id && ticket.beneficiary_user_id === user.id) || isRequesterEmail
   return ticket.status === 'done'
-    && (user.roles.includes('tickora_admin') || ticket.created_by_user_id === user.id || isRequesterEmail)
+    && (user.roles.includes('tickora_admin') || isRequester)
 }
 
 function canReopen(ticket: TicketDto, user: ReturnType<typeof useSessionStore.getState>['user']) {
   if (!user) return false
   const isRequesterEmail = ticket.beneficiary_type === 'external' && !!user.email && ticket.requester_email === user.email
+  const isRequester = ticket.created_by_user_id === user.id || (!!user.id && ticket.beneficiary_user_id === user.id) || isRequesterEmail
   return ['done', 'closed'].includes(ticket.status)
-    && (user.roles.includes('tickora_admin') || ticket.created_by_user_id === user.id || isRequesterEmail)
+    && (user.roles.includes('tickora_admin') || isRequester)
 }
 
 function canCancel(ticket: TicketDto, user: ReturnType<typeof useSessionStore.getState>['user']) {
@@ -342,6 +344,7 @@ function CommentBox({
   const isRequester = !!ticket && (
     (ticket.beneficiary_type === 'external' && !!user?.email && ticket.requester_email === user?.email)
     || ticket.created_by_user_id === user?.id
+    || (!!user?.id && ticket.beneficiary_user_id === user.id)
   )
   const canPostAtAll = isAdmin || isChiefOfTicket || isAssignee || isRequester || isDistributor
 
@@ -732,6 +735,7 @@ export function TicketDetailPage() {
 export function TicketsPage() {
   const navigate = useNavigate()
   const { token } = antTheme.useToken()
+  const [msg, holder] = message.useMessage()
   const [status, setStatus] = useState<string | undefined>()
   const [priority, setPriority] = useState<string | undefined>()
   const [sector, setSector] = useState<string | undefined>()

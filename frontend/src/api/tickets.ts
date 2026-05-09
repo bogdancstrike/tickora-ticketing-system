@@ -30,6 +30,7 @@ export interface TicketDto {
   txt?: string
   resolution?: string | null
   current_sector_code?: string | null
+  beneficiary_user_id?: string | null
   /** All sectors this ticket is routed to (primary first). */
   sector_codes?: string[]
   /** All users assigned to this ticket (primary first). */

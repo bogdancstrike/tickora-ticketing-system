@@ -93,7 +93,7 @@ function AppSidebar() {
       <Menu
         mode="inline"
         selectedKeys={[selectedKey]}
-        items={visibleItems}
+        items={visibleItems.map(({ roles: _, rootOnly: __, ...rest }) => rest)}
         onClick={({ key }) => navigate(key)}
         style={{ borderRight: 0 }}
       />
