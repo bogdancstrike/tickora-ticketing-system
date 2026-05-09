@@ -1,0 +1,107 @@
+"""Admin HTTP endpoints."""
+from flask import request as flask_request
+
+from src.core.db import get_db
+from src.core.errors import ValidationError
+from src.iam.decorators import require_authenticated
+from src.iam.principal import Principal
+from src.ticketing.service import admin_service
+
+
+def _payload() -> dict:
+    data = flask_request.get_json(force=True, silent=True)
+    return data or {}
+
+
+def _arg(name: str, default=None):
+    return flask_request.args.get(name, default)
+
+
+@require_authenticated
+def overview(app, operation, request, *, principal: Principal, **kwargs):
+    with get_db() as db:
+        return (admin_service.overview(db, principal), 200)
+
+
+@require_authenticated
+def list_users(app, operation, request, *, principal: Principal, **kwargs):
+    limit = int(_arg("limit", 100) or 100)
+    with get_db() as db:
+        return ({"items": admin_service.list_users(db, principal, search=_arg("search"), limit=limit)}, 200)
+
+
+@require_authenticated
+def get_user(app, operation, request, *, principal: Principal, **kwargs):
+    user_id = kwargs.get("user_id") or flask_request.view_args.get("user_id")
+    with get_db() as db:
+        return (admin_service.get_user(db, principal, user_id), 200)
+
+
+@require_authenticated
+def update_user(app, operation, request, *, principal: Principal, **kwargs):
+    user_id = kwargs.get("user_id") or flask_request.view_args.get("user_id")
+    with get_db() as db:
+        return (admin_service.update_user(db, principal, user_id, _payload()), 200)
+
+
+@require_authenticated
+def list_sectors(app, operation, request, *, principal: Principal, **kwargs):
+    with get_db() as db:
+        return ({"items": admin_service.list_sectors(db, principal)}, 200)
+
+
+@require_authenticated
+def create_sector(app, operation, request, *, principal: Principal, **kwargs):
+    with get_db() as db:
+        return (admin_service.upsert_sector(db, principal, _payload()), 201)
+
+
+@require_authenticated
+def update_sector(app, operation, request, *, principal: Principal, **kwargs):
+    sector_id = kwargs.get("sector_id") or flask_request.view_args.get("sector_id")
+    with get_db() as db:
+        return (admin_service.upsert_sector(db, principal, _payload(), sector_id=sector_id), 200)
+
+
+@require_authenticated
+def list_memberships(app, operation, request, *, principal: Principal, **kwargs):
+    with get_db() as db:
+        return ({"items": admin_service.memberships(db, principal, sector_code=_arg("sector_code"))}, 200)
+
+
+@require_authenticated
+def grant_membership(app, operation, request, *, principal: Principal, **kwargs):
+    payload = _payload()
+    user_id = payload.get("user_id")
+    sector_code = payload.get("sector_code")
+    role = payload.get("role")
+    if not user_id or not sector_code or not role:
+        raise ValidationError("user_id, sector_code and role are required")
+    with get_db() as db:
+        return (admin_service.grant_membership(db, principal, user_id, sector_code, role), 201)
+
+
+@require_authenticated
+def revoke_membership(app, operation, request, *, principal: Principal, **kwargs):
+    membership_id = kwargs.get("membership_id") or flask_request.view_args.get("membership_id")
+    with get_db() as db:
+        admin_service.revoke_membership(db, principal, membership_id)
+        return ("", 204)
+
+
+@require_authenticated
+def group_hierarchy(app, operation, request, *, principal: Principal, **kwargs):
+    with get_db() as db:
+        return (admin_service.group_hierarchy(db, principal), 200)
+
+
+@require_authenticated
+def metadata_keys(app, operation, request, *, principal: Principal, **kwargs):
+    with get_db() as db:
+        return ({"items": admin_service.metadata_keys(db, principal)}, 200)
+
+
+@require_authenticated
+def upsert_metadata_key(app, operation, request, *, principal: Principal, **kwargs):
+    with get_db() as db:
+        return (admin_service.upsert_metadata_key(db, principal, _payload()), 200)

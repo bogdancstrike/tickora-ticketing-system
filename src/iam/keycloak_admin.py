@@ -46,6 +46,9 @@ class KeycloakAdminClient:
     def set_user_enabled(self, user_id: str, enabled: bool) -> None:
         self._kc.update_user(user_id=user_id, payload={"enabled": enabled})
 
+    def get_user_groups(self, user_id: str) -> list[dict]:
+        return self._kc.get_user_groups(user_id=user_id)
+
     # ── Groups ────────────────────────────────────────────────────────────
     def list_groups(self) -> list[dict]:
         return self._kc.get_groups(full_hierarchy=True)
@@ -68,6 +71,9 @@ class KeycloakAdminClient:
     # ── Realm roles ───────────────────────────────────────────────────────
     def list_realm_roles(self) -> list[dict]:
         return self._kc.get_realm_roles()
+
+    def get_user_realm_roles(self, user_id: str) -> list[dict]:
+        return self._kc.get_realm_roles_of_user(user_id=user_id)
 
     def assign_realm_role(self, user_id: str, role_name: str) -> None:
         role = self._kc.get_realm_role(role_name)

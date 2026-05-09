@@ -19,6 +19,7 @@ import { ReviewTicketsPage } from '@/pages/ReviewTicketsPage'
 import { ReviewTicketPage } from '@/pages/ReviewTicketPage'
 import { DashboardPage } from '@/pages/DashboardPage'
 import { ProfilePage } from '@/pages/ProfilePage'
+import { AdminPage } from '@/pages/AdminPage'
 import { RequireRole } from '@/auth/RequireRole'
 import { NotificationDropdown } from '@/components/common/NotificationDropdown'
 
@@ -137,17 +138,6 @@ function AppHeader() {
   )
 }
 
-function PlaceholderPage({ title }: { title: string }) {
-  return (
-    <div style={{ padding: 24 }}>
-      <Typography.Title level={3}>{title}</Typography.Title>
-      <Typography.Paragraph type="secondary">
-        This page is under construction.
-      </Typography.Paragraph>
-    </div>
-  )
-}
-
 function Shell() {
   return (
     <Layout style={{ height: '100vh' }}>
@@ -176,7 +166,7 @@ function Shell() {
             />
             <Route
               path="/admin"
-              element={<RequireRole roles={[ROLE_ADMIN]}><PlaceholderPage title="Admin" /></RequireRole>}
+              element={<RequireRole roles={[ROLE_ADMIN]}><AdminPage /></RequireRole>}
             />
             <Route path="*"          element={<Navigate to="/dashboard" replace />} />
           </Routes>

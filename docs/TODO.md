@@ -140,7 +140,7 @@ Legend: `[x]` done · `[~]` partial · `[ ]` pending
 ## Phase 7 — Modern features (MVP-3)
 
 - [ ] FTS surface, auto-suggest sector, duplicate detection, parent/child links,
-      watchers, mentions, templates, beneficiary feedback, auto-escalation
+      watchers, mentions, attachements (via Minio, keep in mind the RBAC and who can see what), templates, beneficiary feedback, auto-escalation
 
 ## Phase 8 — Hardening
 
@@ -148,10 +148,27 @@ Legend: `[x]` done · `[~]` partial · `[ ]` pending
       audit_events partitioning + retention
 - [x] First-pass security review (`docs/SECURITY_REVIEW.md`) — RBAC strengths,
       defence-in-depth gaps, performance hotspots, hardening backlog
-- [x] Super-admin gate driven by `Config.SUPER_ADMIN_SUBJECTS` (env var) instead
-      of a hardcoded UUID inside `iam/rbac.is_super_admin`
 - [x] `assignable_users` endpoint refuses non-admins without an explicit sector
       and rejects sectors the caller doesn't belong to
+
+## Phase 9 - Testing
+- [ ] Unit tests for all services
+- [ ] Integration tests for all services
+- [ ] Acceptance tests for all services
+- [ ] End2End tests for all services
+- [ ] Performance tests for all services
+- [ ] Load tests for all services
+- [ ] Security tests for all services (use different users for different actions, see docs/RBAC.md and scripts/keycloak_bootstrap.py)
+- [ ] Chaos tests for all services
+
+
+## Phase 10 - Internalization and Wrapping Up
+
+- [ ] add useful indices on often used columns from tables and generate seed.sql in scripts/ to create (with indices) tables and populate the DB
+- [ ] add useful React Joyride info points that explain all functionalities of the module
+- [ ] i18n (en + ro)
+- [ ] write very comprehensive technical documentation in docs/technical_documentation.md with examples, mermaid charts, etc.
+- [ ] write very comprehensive user documentation in docs/user_documentation.md with examples, use-cases, etc.
 
 ---
 
@@ -177,6 +194,4 @@ Legend: `[x]` done · `[~]` partial · `[ ]` pending
 ## Open questions (architecture §18)
 
 1. External beneficiary auth path — Keycloak realm or magic-link?
-2. Closed-ticket retention window?
 3. Email provider — SMTP relay or transactional service?
-4. i18n from day one or RO-only MVP-1?

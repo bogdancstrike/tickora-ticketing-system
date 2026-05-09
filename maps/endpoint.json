@@ -447,6 +447,110 @@
     },
     {
       "namespace": "tickora",
+      "operation_name": "admin_overview",
+      "model_name": "Empty",
+      "request_method": ["GET"],
+      "api_url": "/api/admin/overview",
+      "exec_method": { "module_name": "api.admin", "method_name": "overview" }
+    },
+    {
+      "namespace": "tickora",
+      "operation_name": "admin_users_list",
+      "model_name": "Empty",
+      "request_method": ["GET"],
+      "api_url": "/api/admin/users",
+      "exec_method": { "module_name": "api.admin", "method_name": "list_users" }
+    },
+    {
+      "namespace": "tickora",
+      "operation_name": "admin_users_get",
+      "model_name": "Empty",
+      "request_method": ["GET"],
+      "api_url": "/api/admin/users/<user_id>",
+      "exec_method": { "module_name": "api.admin", "method_name": "get_user" }
+    },
+    {
+      "namespace": "tickora",
+      "operation_name": "admin_users_update",
+      "model_name": "Empty",
+      "request_method": ["PATCH"],
+      "api_url": "/api/admin/users/<user_id>",
+      "exec_method": { "module_name": "api.admin", "method_name": "update_user" }
+    },
+    {
+      "namespace": "tickora",
+      "operation_name": "admin_sectors_list",
+      "model_name": "Empty",
+      "request_method": ["GET"],
+      "api_url": "/api/admin/sectors",
+      "exec_method": { "module_name": "api.admin", "method_name": "list_sectors" }
+    },
+    {
+      "namespace": "tickora",
+      "operation_name": "admin_sectors_create",
+      "model_name": "Empty",
+      "request_method": ["POST"],
+      "api_url": "/api/admin/sectors",
+      "exec_method": { "module_name": "api.admin", "method_name": "create_sector" }
+    },
+    {
+      "namespace": "tickora",
+      "operation_name": "admin_sectors_update",
+      "model_name": "Empty",
+      "request_method": ["PATCH"],
+      "api_url": "/api/admin/sectors/<sector_id>",
+      "exec_method": { "module_name": "api.admin", "method_name": "update_sector" }
+    },
+    {
+      "namespace": "tickora",
+      "operation_name": "admin_memberships_list",
+      "model_name": "Empty",
+      "request_method": ["GET"],
+      "api_url": "/api/admin/memberships",
+      "exec_method": { "module_name": "api.admin", "method_name": "list_memberships" }
+    },
+    {
+      "namespace": "tickora",
+      "operation_name": "admin_memberships_grant",
+      "model_name": "Empty",
+      "request_method": ["POST"],
+      "api_url": "/api/admin/memberships",
+      "exec_method": { "module_name": "api.admin", "method_name": "grant_membership" }
+    },
+    {
+      "namespace": "tickora",
+      "operation_name": "admin_memberships_revoke",
+      "model_name": "Empty",
+      "request_method": ["DELETE"],
+      "api_url": "/api/admin/memberships/<membership_id>",
+      "exec_method": { "module_name": "api.admin", "method_name": "revoke_membership" }
+    },
+    {
+      "namespace": "tickora",
+      "operation_name": "admin_group_hierarchy",
+      "model_name": "Empty",
+      "request_method": ["GET"],
+      "api_url": "/api/admin/group-hierarchy",
+      "exec_method": { "module_name": "api.admin", "method_name": "group_hierarchy" }
+    },
+    {
+      "namespace": "tickora",
+      "operation_name": "admin_metadata_keys",
+      "model_name": "Empty",
+      "request_method": ["GET"],
+      "api_url": "/api/admin/metadata-keys",
+      "exec_method": { "module_name": "api.admin", "method_name": "metadata_keys" }
+    },
+    {
+      "namespace": "tickora",
+      "operation_name": "admin_metadata_keys_upsert",
+      "model_name": "Empty",
+      "request_method": ["POST"],
+      "api_url": "/api/admin/metadata-keys",
+      "exec_method": { "module_name": "api.admin", "method_name": "upsert_metadata_key" }
+    },
+    {
+      "namespace": "tickora",
       "operation_name": "notifications_stream",
       "model_name": "Empty",
       "request_method": ["GET"],
