@@ -58,11 +58,11 @@ def serialize_ticket(t: Ticket, p: Principal, *, full: bool = True) -> dict[str,
 
     if can_see_internal:
         payload.update({
-            "requester_first_name":   t.requester_first_name,
-            "requester_last_name":    t.requester_last_name,
-            "requester_email":        t.requester_email,
-            "requester_phone":        t.requester_phone,
-            "requester_organization": t.requester_organization,
+            "requester_first_name":   t.requester_first_name   or getattr(t, "_requester_first_name_fallback",   None),
+            "requester_last_name":    t.requester_last_name    or getattr(t, "_requester_last_name_fallback",    None),
+            "requester_email":        t.requester_email        or getattr(t, "_requester_email_fallback",        None),
+            "requester_phone":        t.requester_phone        or getattr(t, "_requester_phone_fallback",        None),
+            "requester_organization": t.requester_organization or getattr(t, "_requester_organization_fallback", None),
             "requester_ip":           t.requester_ip,
             "source_ip":              t.source_ip,
             "created_by_user_id":     t.created_by_user_id,

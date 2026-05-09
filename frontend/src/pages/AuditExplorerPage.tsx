@@ -7,6 +7,7 @@ import {
   Descriptions, Card, DatePicker, theme as antTheme,
 } from 'antd'
 import { TicketEvolutionD3 } from '@/components/common/TicketEvolutionD3'
+import { AuditTimeline } from '@/components/common/AuditTimeline'
 import type { ColumnsType, TablePaginationConfig } from 'antd/es/table'
 import type { FilterValue, SorterResult, FilterDropdownProps } from 'antd/es/table/interface'
 import { ReloadOutlined, SearchOutlined } from '@ant-design/icons'
@@ -46,6 +47,8 @@ function TicketEvolutionGraph({ ticketId }: { ticketId: string }) {
           <Typography.Text>{e.actor_username || e.actor_user_id || 'system'}</Typography.Text>
         </div>
       ))}
+      <Typography.Title level={5} style={{ marginTop: 24 }}>Activity</Typography.Title>
+      <AuditTimeline events={events} loading={audit.isLoading} />
     </div>
   )
 }
@@ -144,14 +147,6 @@ export function AuditExplorerPage() {
       filteredValue: params.ticket_id ? [params.ticket_id] : null,
     },
     {
-      title: 'Correlation',
-      dataIndex: 'correlation_id',
-      width: 220,
-      ellipsis: true,
-      filterDropdown: textFilterDropdown('Correlation ID'),
-      filteredValue: params.correlation_id ? [params.correlation_id] : null,
-    },
-    {
       title: '',
       key: 'actions',
       width: 120,
@@ -176,7 +171,6 @@ export function AuditExplorerPage() {
       next.action = pickFirst('action')
       next.actor_username = pickFirst('actor_username')
       next.ticket_id = pickFirst('ticket_id')
-      next.correlation_id = pickFirst('correlation_id')
       if (s?.order && s.field) {
         next.sort_by = String(s.field)
         next.sort_dir = s.order === 'ascend' ? 'asc' : 'desc'

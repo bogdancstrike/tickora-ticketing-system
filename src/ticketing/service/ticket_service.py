@@ -184,6 +184,7 @@ def get(db: Session, principal: Principal, ticket_id: str) -> Ticket:
         setattr(t, "beneficiary_user_id", _beneficiary_user_id(db, t.beneficiary_id))
         setattr(t, "sector_codes", _sector_codes_for_ticket(db, t.id))
         setattr(t, "assignee_user_ids", _assignees_for_ticket(db, t.id))
+        _hydrate_requester_fallback(db, t)
         set_attr(current, "ticket.found", True)
         set_attr(current, "ticket.code", t.ticket_code)
         set_attr(current, "ticket.status", t.status)
@@ -430,6 +431,40 @@ def _beneficiary_user_id(db: Session, beneficiary_id: str | None) -> str | None:
     if not beneficiary_id:
         return None
     return db.scalar(select(Beneficiary.user_id).where(Beneficiary.id == beneficiary_id))
+
+
+def _hydrate_requester_fallback(db: Session, t: Ticket) -> None:
+    """Populate transient `_requester_*_fallback` attrs from the beneficiary
+    (and, for internal types, the linked user) so the serializer can fill
+    blanks left over from older tickets without writing back to the DB."""
+    needs = (
+        not t.requester_first_name
+        or not t.requester_last_name
+        or not t.requester_email
+        or not t.requester_phone
+        or not t.requester_organization
+    )
+    if not needs or not t.beneficiary_id:
+        return
+    ben = db.get(Beneficiary, t.beneficiary_id)
+    if ben is None:
+        return
+    first = ben.first_name
+    last = ben.last_name
+    email = ben.email
+    phone = ben.phone
+    if ben.beneficiary_type == "internal" and ben.user_id and not (first and last and email):
+        from src.iam.models import User
+        user = db.get(User, ben.user_id)
+        if user is not None:
+            first = first or user.first_name
+            last = last or user.last_name
+            email = email or user.email
+    setattr(t, "_requester_first_name_fallback", first)
+    setattr(t, "_requester_last_name_fallback", last)
+    setattr(t, "_requester_email_fallback", email)
+    setattr(t, "_requester_phone_fallback", phone)
+    setattr(t, "_requester_organization_fallback", ben.organization_name)
 
 
 def _beneficiary_user_ids_map(db: Session, ids: Iterable[str]) -> dict[str, str | None]:

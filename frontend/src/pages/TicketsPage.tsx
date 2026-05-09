@@ -541,8 +541,7 @@ function TicketSidebar({ ticket }: { ticket: TicketDto }) {
   return (
     <div style={{ display: 'grid', gap: 16 }}>
       <Card size="small" title="Details">
-        <Typography.Text type="secondary" style={{ fontSize: 12, letterSpacing: '0.05em' }}>DETAILS</Typography.Text>
-        <Descriptions size="small" column={1} colon={false} style={{ marginTop: 8 }}>
+        <Descriptions size="small" column={1} colon={false}>
           <Descriptions.Item label="Sector">{ticket.current_sector_code || '—'}</Descriptions.Item>
           <Descriptions.Item label="Category">{ticket.category || '—'}</Descriptions.Item>
           <Descriptions.Item label="Type">{ticket.type || '—'}</Descriptions.Item>
@@ -555,8 +554,7 @@ function TicketSidebar({ ticket }: { ticket: TicketDto }) {
         </Descriptions>
       </Card>
       <Card size="small" title="Requester">
-        <Typography.Text type="secondary" style={{ fontSize: 12, letterSpacing: '0.05em' }}>REQUESTER</Typography.Text>
-        <Descriptions size="small" column={1} colon={false} style={{ marginTop: 8 }}>
+        <Descriptions size="small" column={1} colon={false}>
           <Descriptions.Item label="Name">
             {[ticket.requester_first_name, ticket.requester_last_name].filter(Boolean).join(' ') || '—'}
           </Descriptions.Item>
@@ -565,8 +563,7 @@ function TicketSidebar({ ticket }: { ticket: TicketDto }) {
         </Descriptions>
       </Card>
       <Card size="small" title="Timeline">
-        <Typography.Text type="secondary" style={{ fontSize: 12, letterSpacing: '0.05em' }}>TIMELINE</Typography.Text>
-        <Descriptions size="small" column={1} colon={false} style={{ marginTop: 8 }}>
+        <Descriptions size="small" column={1} colon={false}>
           <Descriptions.Item label="Created">{fmt(ticket.created_at)}</Descriptions.Item>
           <Descriptions.Item label="Updated">{fmt(ticket.updated_at)}</Descriptions.Item>
           <Descriptions.Item label="Assigned">{fmt(ticket.assigned_at)}</Descriptions.Item>
@@ -578,8 +575,7 @@ function TicketSidebar({ ticket }: { ticket: TicketDto }) {
       </Card>
       {items.length > 0 && (
         <Card size="small" title="Metadata">
-          <Typography.Text type="secondary" style={{ fontSize: 12, letterSpacing: '0.05em' }}>METADATA</Typography.Text>
-          <div style={{ display: 'grid', gap: 4, marginTop: 8 }}>
+          <div style={{ display: 'grid', gap: 4 }}>
             {items.map((m) => (
               <Flex key={m.key} justify="space-between" gap={8}>
                 <Typography.Text type="secondary">{m.label || m.key}</Typography.Text>
