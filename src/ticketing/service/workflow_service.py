@@ -699,6 +699,17 @@ def _close(db: Session, p: Principal, ticket_id: str, *, feedback: dict | None =
 
 
 def reopen(db: Session, p: Principal, ticket_id: str, *, reason: str) -> Ticket:
+    """Reopens a 'done' or 'closed' ticket, returning it to the last active assignee.
+
+    Args:
+        db: Database session.
+        p: Beneficiary or admin.
+        ticket_id: Ticket ID.
+        reason: Required explanation for reopening.
+
+    Returns:
+        The updated Ticket object.
+    """
     with span("workflow.reopen", username=p.username, user_id=p.user_id, ticket_id=ticket_id) as current:
         ticket = _reopen(db, p, ticket_id, reason=reason)
         set_attr(current, "ticket.status", ticket.status)

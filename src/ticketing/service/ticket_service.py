@@ -97,6 +97,16 @@ def _visibility_filter(p: Principal):
 # ── Public API ───────────────────────────────────────────────────────────────
 
 def create(db: Session, principal: Principal, payload: dict[str, Any]) -> Ticket:
+    """Creates a new ticket, generating a code and recording the creation event.
+
+    Args:
+        db: Database session.
+        principal: The authenticated user creating the ticket.
+        payload: Dictionary containing ticket details (title, txt, beneficiary_type, etc.).
+
+    Returns:
+        The newly created Ticket object.
+    """
     with span("ticket.create", username=principal.username, user_id=principal.user_id) as current:
         btype = payload.get("beneficiary_type")
         set_attr(current, "ticket.beneficiary_type", btype)
@@ -176,6 +186,19 @@ def _create(db: Session, principal: Principal, payload: dict[str, Any]) -> Ticke
 
 
 def get(db: Session, principal: Principal, ticket_id: str) -> Ticket:
+    """Retrieves a single ticket by ID, performing RBAC visibility checks.
+
+    Args:
+        db: Database session.
+        principal: The authenticated user requesting the ticket.
+        ticket_id: The UUID string of the ticket.
+
+    Returns:
+        The hydrated Ticket object.
+
+    Raises:
+        NotFoundError: If the ticket doesn't exist or is not visible to the user.
+    """
     with span("ticket.get", username=principal.username, user_id=principal.user_id, ticket_id=ticket_id) as current:
         t = db.get(Ticket, ticket_id)
         if t is None or t.is_deleted:
@@ -199,6 +222,20 @@ def get(db: Session, principal: Principal, ticket_id: str) -> Ticket:
 
 
 def update(db: Session, principal: Principal, ticket_id: str, payload: dict[str, Any]) -> Ticket:
+    """Updates ticket title and description, recording an audit event.
+
+    Args:
+        db: Database session.
+        principal: The authenticated user performing the update.
+        ticket_id: The UUID string of the ticket.
+        payload: Dictionary containing fields to update.
+
+    Returns:
+        The updated Ticket object.
+
+    Raises:
+        PermissionDeniedError: If the user doesn't have update permissions.
+    """
     with span("ticket.update", username=principal.username, user_id=principal.user_id, ticket_id=ticket_id) as current:
         t = get(db, principal, ticket_id)
         if not rbac.can_update_ticket(principal, t):
@@ -258,7 +295,20 @@ def list_(
     cursor_token: str | None = None,
     limit: int | None = None,
 ) -> tuple[list[Ticket], str | None]:
+    """Lists tickets visible to the principal, supporting filtering and pagination.
+
+    Args:
+        db: Database session.
+        principal: The authenticated user listing tickets.
+        filters: Optional filters (status, priority, sector, search, etc.).
+        cursor_token: Optional token for cursor-based pagination (created_at desc).
+        limit: Max number of items to return.
+
+    Returns:
+        A tuple of (list of tickets, next_cursor_token).
+    """
     with span("ticket.list", username=principal.username, user_id=principal.user_id) as current:
+
         rows, next_token = _list(db, principal, filters=filters, cursor_token=cursor_token, limit=limit)
         set_attr(current, "ticket.count", len(rows))
         set_attr(current, "pagination.has_next", bool(next_token))

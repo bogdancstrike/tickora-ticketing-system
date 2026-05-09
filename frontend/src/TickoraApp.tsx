@@ -197,7 +197,8 @@ function AppHeader() {
         {!isMobile && (
           <>
             <img src="/logo.png" alt="Tickora" style={{ height: 48, marginRight: 12 }} />
-            <Text type="secondary">Ticketing · Tasking · Distribution</Text>
+            <Text type="secondary" strong={true}>Tickora</Text>
+            <Text type="secondary">Ticketing · Distribution</Text>
           </>
         )}
       </div>
