@@ -57,6 +57,17 @@ const REASON_LABELS: Record<string, { label: string; placeholder?: string }> = {
   assigned_to_sector: { label: 'Reason (optional)',             placeholder: 'Why are you releasing this ticket?' },
 }
 
+/**
+ * A specialized component for managing ticket status transitions.
+ * It enforces the state machine rules defined in the backend, ensuring only
+ * valid transitions are available based on the user's role and the ticket's current state.
+ * Supports both tag-like dropdowns and button-style interfaces.
+ * 
+ * @param {Object} props - The component props.
+ * @param {TicketDto} props.ticket - The ticket instance whose status is being changed.
+ * @param {'small' | 'middle'} [props.size] - The size of the UI element.
+ * @param {'tag' | 'button'} [props.mode] - The display mode of the component.
+ */
 export function StatusChanger({
   ticket,
   size = 'middle',

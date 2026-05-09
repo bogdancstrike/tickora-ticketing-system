@@ -774,12 +774,21 @@ function TicketDetails({ ticketId }: { ticketId?: string }) {
   )
 }
 
+/**
+ * Wrapper component for the ticket details view.
+ * Extracts the ticket ID from the URL parameters and manages the initial session bootstrap.
+ */
 export function TicketDetailPage() {
   const params = useParams()
   useSessionBootstrap()
   return <TicketDetails ticketId={params.ticketId} />
 }
 
+/**
+ * The main ticket listing page featuring a searchable, sortable, and filterable table.
+ * Allows users to browse the ticket queue, apply operational filters (status, priority, sector),
+ * and navigate to individual ticket details.
+ */
 export function TicketsPage() {
   const navigate = useNavigate()
   const { token } = antTheme.useToken()

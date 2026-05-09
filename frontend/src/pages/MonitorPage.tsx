@@ -73,6 +73,15 @@ function OldestTickets({ tickets }: { tickets: MonitorOldTicket[] }) {
   )
 }
 
+/**
+ * Displays operational metrics and charts for a specific sector.
+ * Includes status and priority breakdowns, oldest tickets list, workload analysis,
+ * and bottleneck insights for the selected sector.
+ * 
+ * @param {Object} props - The component props.
+ * @param {MonitorSector} props.sector - The sector monitoring data.
+ * @param {React.ReactNode} [props.controls] - Optional UI controls (e.g., sector/user selectors).
+ */
 function SectorPanel({ sector, controls }: { sector: MonitorSector; controls?: React.ReactNode }) {
   const columns: ColumnsType<MonitorSector['workload'][number]> = [
     { title: 'Assignee', dataIndex: 'assignee_user_id', ellipsis: true },
@@ -131,6 +140,12 @@ function SectorPanel({ sector, controls }: { sector: MonitorSector; controls?: R
   )
 }
 
+/**
+ * The primary operational monitoring interface for Tickora.
+ * Provides multiple views (Global, Distribution, Sector, User) depending on permissions.
+ * Aggregates live metrics, historical trends, and workload distribution to give
+ * supervisors and operators a high-level view of system health and performance.
+ */
 export function MonitorPage() {
   const { token } = antTheme.useToken()
   const user = useSessionStore((s) => s.user)
@@ -210,6 +225,11 @@ export function MonitorPage() {
     </Space>
   ) : null
 
+  /**
+   * Generates the ECharts configuration for the historical ticket volume chart.
+   * Tracks 'Created' vs 'Closed' tickets over the selected time period.
+   * Recalculates whenever the overview data changes.
+   */
   const timeseriesOption = useMemo(() => {
     if (!overview.data?.timeseries) return null
     return {

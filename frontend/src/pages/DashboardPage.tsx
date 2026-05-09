@@ -665,6 +665,13 @@ const WIDGET_TYPES = [
     { type: 'welcome_banner', label: 'Welcome Banner', icon: <SmileOutlined />, configurable: false },
 ]
 
+/**
+ * A registry component that maps widget types to their respective implementation components.
+ * It acts as a dispatcher for rendering different types of widgets based on the provided configuration.
+ * 
+ * @param {Object} props - The component props.
+ * @param {DashboardWidgetDto} props.widget - The widget data and configuration to render.
+ */
 function WidgetRenderer({ widget }: { widget: DashboardWidgetDto }) {
   if (widget.type === 'ticket_list') return <TicketListWidget config={widget.config} />
   if (widget.type === 'monitor_kpi') return <KpiWidget config={widget.config} />
@@ -695,6 +702,15 @@ const CONFIGURABLE_TYPES = [
     'stale_tickets', 'recent_comments', 'not_reviewed', 'reviewed_today'
 ]
 
+/**
+ * Component for viewing and editing the details of a specific custom dashboard.
+ * Manages the grid layout, widget lifecycle (add, remove, configure), and title editing.
+ * Uses react-grid-layout for a responsive and draggable/resizable dashboard experience.
+ * 
+ * @param {Object} props - The component props.
+ * @param {string} props.dashboardId - The unique identifier of the dashboard to display.
+ * @param {() => void} props.onBack - Callback function to navigate back to the dashboard list.
+ */
 function DashboardDetail({ dashboardId, onBack }: { dashboardId: string, onBack: () => void }) {
   const { token } = antTheme.useToken()
   const qc = useQueryClient()
@@ -803,6 +819,10 @@ function DashboardDetail({ dashboardId, onBack }: { dashboardId: string, onBack:
 
   const user = useSessionStore(s => s.user)
 
+  /**
+   * Mutation to automatically configure the dashboard widgets based on user roles and assignments.
+   * Supports 'append' (add recommended widgets) or 'replace' (start from scratch) modes.
+   */
   const autoConfig = useMutation({
     mutationFn: () => {
         const primarySector = user?.sectors?.[0]?.sectorCode

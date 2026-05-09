@@ -38,6 +38,12 @@ function destinationFor(item: NotificationItem, roles: string[]): string | null 
   return `/tickets/${item.ticket_id}`
 }
 
+/**
+ * A global component for receiving and managing real-time notifications.
+ * It maintains a persistent SSE (Server-Sent Events) connection to the backend to
+ * receive live updates. It also handles notification persistence, read status tracking,
+ * and provides navigation to relevant ticket pages.
+ */
 export function NotificationDropdown() {
   const [notifications, setNotifications] = useState<NotificationItem[]>([])
   const [unreadCount, setUnreadCount] = useState(0)
@@ -73,6 +79,13 @@ export function NotificationDropdown() {
     let es: EventSource | null = null
     let cancelled = false
 
+    /**
+     * Establishes and manages the Server-Sent Events (SSE) connection for real-time notifications.
+     * Uses a two-step handshake:
+     * 1. POST to /stream-ticket to obtain a short-lived SSE token.
+     * 2. Initialize EventSource with the obtained token.
+     * Handles incoming messages, updates local state, and triggers UI alerts (notifications/sound).
+     */
     const connectSSE = async () => {
       try {
         const response = await fetch(`${API_BASE}/api/notifications/stream-ticket`, {
