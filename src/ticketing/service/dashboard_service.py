@@ -203,7 +203,7 @@ def auto_configure_dashboard(db: Session, p: Principal, dashboard_id: str, mode:
     elif p.is_internal:
         widgets_to_add.extend([
             {"type": "monitor_kpi", "x": 4, "y": 0, "w": 8, "h": 3, "config": {"scope": "personal"}},
-            {"type": "ticket_list", "x": 0, "y": 3, "w": 8, "h": 4, "title": "My Active Queue", "config": {"scope": "personal"}},
+            {"type": "ticket_list", "x": 0, "y": 3, "w": 8, "h": 4, "title": "My Ticket Queue", "config": {"scope": "personal"}},
             {"type": "recent_comments", "x": 8, "y": 3, "w": 4, "h": 4, "config": {"scope": "personal"}},
         ])
     else:  # Beneficiary
@@ -224,9 +224,14 @@ def auto_configure_dashboard(db: Session, p: Principal, dashboard_id: str, mode:
 
     current_y = 11
     for idx, t in enumerate(recent_tickets):
+        # Include ticket code AND title in the widget header
+        title = f"Comments: {t.ticket_code}"
+        if t.title:
+            title = f"{t.ticket_code}: {t.title}"
+
         widgets_to_add.append({
             "type": "recent_comments",
-            "title": f"Comments: {t.ticket_code}",
+            "title": title,
             "x": (idx % 3) * 4,
             "y": current_y + (idx // 3) * 4,
             "w": 4, "h": 4,

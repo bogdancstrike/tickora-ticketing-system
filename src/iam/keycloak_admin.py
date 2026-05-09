@@ -22,7 +22,7 @@ class KeycloakAdminClient:
             server_url    = Config.KEYCLOAK_SERVER_URL,
             realm_name    = Config.KEYCLOAK_REALM,
             client_id     = Config.KEYCLOAK_API_CLIENT_ID,
-            client_secret_key = Config.KEYCLOAK_API_CLIENT_SECRET,
+            client_secret = Config.KEYCLOAK_API_CLIENT_SECRET,
             verify        = True,
         )
         self._kc = KeycloakAdmin(connection=conn)

@@ -14,6 +14,7 @@ import {
   MessageOutlined, FieldTimeOutlined, DatabaseOutlined,
   CarryOutOutlined, SmileOutlined, TeamOutlined, HistoryOutlined, LineChartOutlined,
   ClockCircleOutlined, CheckCircleOutlined, SearchOutlined, DashboardOutlined, InfoCircleOutlined,
+  HourglassOutlined,
 } from '@ant-design/icons'
 import { Responsive, WidthProvider } from 'react-grid-layout'
 import 'react-grid-layout/css/styles.css'
@@ -608,6 +609,8 @@ const ICON_MAP: Record<string, React.ReactNode> = {
     ClockCircleOutlined: <ClockCircleOutlined />,
     DashboardOutlined: <DashboardOutlined />,
     InfoCircleOutlined: <InfoCircleOutlined />,
+    HourglassOutlined: <HourglassOutlined />,
+    CheckCircleOutlined: <CheckCircleOutlined />,
 }
 
 function getIconComponent(name: string | null | undefined) {
@@ -671,8 +674,7 @@ function DashboardDetail({ dashboardId, onBack }: { dashboardId: string, onBack:
   const [editingTitle, setEditingTitle] = useState(false)
   const [editingWidget, setEditingWidget] = useState<DashboardWidgetDto | null>(null)
   const [isAddingWidget, setIsAddingWidget] = useState(false)
-  const [isAutoConfigVisible, setIsAutoConfigVisible] = useState(false)
-  const [autoConfigMode, setAutoConfigMode] = useState<'append' | 'replace'>('append')
+  const [autoConfigMode, setAutoConfigMode] = useState<'append' | 'replace'>('replace')
   const [form] = Form.useForm()
   
   const { data: dashboard, isLoading } = useQuery({
@@ -780,10 +782,11 @@ function DashboardDetail({ dashboardId, onBack }: { dashboardId: string, onBack:
         return autoConfigureDashboard(dashboardId, autoConfigMode, primarySector)
     },
     onSuccess: () => {
-        setIsAutoConfigVisible(false)
+        setIsAddingWidget(false)
         qc.invalidateQueries({ queryKey: ['customDashboard', dashboardId] })
         message.success(`Dashboard auto-configured (${autoConfigMode})`)
     },
+
     onError: (err: any) => {
         message.error(err.response?.data?.detail || 'Failed to auto-configure')
     }
@@ -819,14 +822,6 @@ function DashboardDetail({ dashboardId, onBack }: { dashboardId: string, onBack:
           )}
         </Space>
         <Space>
-           <Tooltip title="Magic Wand: Auto-configure widgets based on your role">
-             <Button 
-                icon={<ThunderboltOutlined style={{ color: '#722ed1' }} />} 
-                onClick={() => setIsAutoConfigVisible(true)}
-             >
-                Auto-configure
-             </Button>
-           </Tooltip>
            <Button icon={<SettingOutlined />} loading={autoArrange.isPending} onClick={() => autoArrange.mutate()}>Auto-arrange</Button>
            <Button icon={<AppstoreAddOutlined />} type="primary" onClick={() => { setEditingWidget(null); setIsAddingWidget(true) }}>Add Widget</Button>
            <Button icon={<ReloadOutlined />} onClick={() => qc.invalidateQueries({ queryKey: ['customDashboard', dashboardId] })} />
@@ -884,45 +879,61 @@ function DashboardDetail({ dashboardId, onBack }: { dashboardId: string, onBack:
         )}
       </div>
 
-      <Modal title="Choose Widget Type" open={isAddingWidget} onCancel={() => setIsAddingWidget(false)} footer={null} width={600}>
-         <Row gutter={[16, 16]}>
-            {widgetDefs.map(w => (
-                <Col key={w.type} xs={12} sm={8}>
-                    <Card size="small" hoverable onClick={() => addWidget.mutate(w.type)} style={{ textAlign: 'center' }}>
-                        <div style={{ fontSize: 24, marginBottom: 8, color: token.colorPrimary }}>{w.icon}</div>
-                        <div style={{ fontWeight: 500 }}>{w.label}</div>
-                    </Card>
-                </Col>
-            ))}
-         </Row>
-      </Modal>
-
       <Modal 
-        title="Auto-Pilot Configuration" 
-        open={isAutoConfigVisible} 
-        onCancel={() => setIsAutoConfigVisible(false)}
-        onOk={() => autoConfig.mutate()}
-        confirmLoading={autoConfig.isPending}
+        title="Add Widget" 
+        open={isAddingWidget} 
+        onCancel={() => setIsAddingWidget(false)} 
+        footer={null} 
+        width={700}
       >
-        <Typography.Paragraph>
-            Choose how you want to auto-configure your dashboard based on your roles and sectors.
-        </Typography.Paragraph>
-        <Radio.Group value={autoConfigMode} onChange={e => setAutoConfigMode(e.target.value)}>
-            <Space direction="vertical">
-                <Radio value="append">
-                    <b>Append Recommended</b>
-                    <div style={{ fontSize: 12, color: token.colorTextDescription }}>
-                        Add suggested widgets for your roles without removing existing ones.
-                    </div>
-                </Radio>
-                <Radio value="replace">
-                    <b>Replace Existing</b>
-                    <div style={{ fontSize: 12, color: token.colorTextDescription }}>
-                        Clear all current widgets and apply the standard recommended layout.
-                    </div>
-                </Radio>
-            </Space>
-        </Radio.Group>
+        <Typography.Title level={5} style={{ marginBottom: 16 }}>Auto configuration</Typography.Title>
+        <Flex gap={24} align="start" vertical>
+           <Typography.Paragraph type="secondary" style={{ margin: 0 }}>
+              Let the magic wand setup your workspace based on your current roles and active assignments.
+           </Typography.Paragraph>
+           <Flex gap={16} align="center">
+              <Radio.Group value={autoConfigMode} onChange={e => setAutoConfigMode(e.target.value)}>
+                  <Space>
+                      <Radio value="append">Append Recommended</Radio>
+                      <Radio value="replace">Replace Existing</Radio>
+                  </Space>
+              </Radio.Group>
+              <Button 
+                type="primary" 
+                icon={<ThunderboltOutlined />} 
+                loading={autoConfig.isPending}
+                onClick={() => autoConfig.mutate()}
+                style={{ background: '#722ed1', borderColor: '#722ed1' }}
+              >
+                Auto-configure
+              </Button>
+           </Flex>
+        </Flex>
+
+        <Divider style={{ margin: '24px 0' }} />
+
+        <Typography.Title level={5} style={{ marginBottom: 16 }}>Widgets zone</Typography.Title>
+        <Row gutter={[12, 12]}>
+          {widgetDefs.map(w => (
+            <Col key={w.type} xs={12} sm={8} md={6}>
+              <Card 
+                size="small" 
+                hoverable 
+                onClick={() => addWidget.mutate(w.type)} 
+                style={{ 
+                  textAlign: 'center', 
+                  height: '100%', 
+                  display: 'flex', 
+                  flexDirection: 'column', 
+                  justifyContent: 'center' 
+                }}
+              >
+                <div style={{ fontSize: 24, marginBottom: 4, color: token.colorPrimary }}>{w.icon}</div>
+                <div style={{ fontSize: 13, fontWeight: 500 }}>{w.label}</div>
+              </Card>
+            </Col>
+          ))}
+        </Row>
       </Modal>
 
       <Modal 

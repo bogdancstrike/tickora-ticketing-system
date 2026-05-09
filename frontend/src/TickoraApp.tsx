@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import type { ReactNode } from 'react'
 import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom'
 import {
@@ -38,50 +38,89 @@ const ROLE_AUDITOR = 'tickora_auditor'
 const ROLE_DISTRIBUTOR = 'tickora_distributor'
 
 const NAV_ITEMS = [
-  { key: '/monitor', label: 'Monitor', icon: <LineChartOutlined /> },
-  { key: '/dashboard', label: 'Dashboard', icon: <AppstoreOutlined /> },
-  { key: '/tickets', label: 'Tickets', icon: <UnorderedListOutlined /> },
+  // Ticketing section
+  { key: '/tickets', label: 'Tickets', icon: <UnorderedListOutlined />, section: 'ticketing' },
   {
     key: '/review',
     label: 'Review Tickets',
     icon: <CheckSquareOutlined />,
     roles: [ROLE_ADMIN, ROLE_DISTRIBUTOR],
+    section: 'ticketing',
   },
+  
+  // Monitoring section
+  { key: '/monitor', label: 'Monitor', icon: <LineChartOutlined />, section: 'monitoring' },
+  { key: '/dashboard', label: 'Dashboard', icon: <AppstoreOutlined />, section: 'monitoring' },
+
+  // Administration section
   {
     key: '/audit',
     label: 'Audit',
     icon: <AuditOutlined />,
     roles: [ROLE_ADMIN, ROLE_AUDITOR],
+    section: 'admin',
   },
   {
     key: '/admin',
     label: 'Admin',
     icon: <SettingOutlined />,
     rootOnly: true,
+    section: 'admin',
   },
 ]
+
+function useNavigationItems() {
+  const hasAny = useSessionStore((s) => s.hasAny)
+  const user = useSessionStore((s) => s.user)
+  
+  const visibleItems = useMemo(() => {
+    return NAV_ITEMS.filter((item) => {
+      if ('rootOnly' in item && item.rootOnly) return !!user?.hasRootGroup
+      if (item.key === '/dashboard' && user?.roles.includes('tickora_beneficiary') && !user?.roles.some(r => [ROLE_ADMIN, ROLE_DISTRIBUTOR, ROLE_AUDITOR].includes(r))) {
+          // Hide customizable dashboard for pure beneficiaries
+          return false
+      }
+      return !item.roles || hasAny(item.roles)
+    })
+  }, [user, hasAny])
+
+  const menuItems = useMemo(() => {
+    const ticketing = visibleItems.filter(i => i.section === 'ticketing')
+    const monitoring = visibleItems.filter(i => i.section === 'monitoring')
+    const admin = visibleItems.filter(i => i.section === 'admin')
+    
+    const items: any[] = []
+    if (ticketing.length) {
+      items.push(...ticketing.map(({ section: _, roles: __, rootOnly: ___, ...rest }) => rest))
+    }
+    if (ticketing.length && (monitoring.length || admin.length)) {
+      items.push({ type: 'divider', key: 'div-1' })
+    }
+    if (monitoring.length) {
+      items.push(...monitoring.map(({ section: _, roles: __, rootOnly: ___, ...rest }) => rest))
+    }
+    if (monitoring.length && admin.length) {
+      items.push({ type: 'divider', key: 'div-2' })
+    }
+    if (admin.length) {
+      items.push(...admin.map(({ section: _, roles: __, rootOnly: ___, ...rest }) => rest))
+    }
+    return items
+  }, [visibleItems])
+
+  return { visibleItems, menuItems }
+}
 
 function AppSidebar() {
   const navigate = useNavigate()
   const location = useLocation()
   const { token } = antTheme.useToken()
   const [collapsed, setCollapsed] = useState(false)
-  const hasAny = useSessionStore((s) => s.hasAny)
-  const user = useSessionStore((s) => s.user)
   const screens = Grid.useBreakpoint()
+  const { visibleItems, menuItems } = useNavigationItems()
   
   const isMobile = !screens.md
-
-  const visibleItems = NAV_ITEMS.filter((item) => {
-    if ('rootOnly' in item && item.rootOnly) return !!user?.hasRootGroup
-    if (item.key === '/dashboard' && user?.roles.includes('tickora_beneficiary') && !user?.roles.some(r => [ROLE_ADMIN, ROLE_DISTRIBUTOR, ROLE_AUDITOR].includes(r))) {
-        // Hide customizable dashboard for pure beneficiaries
-        return false
-    }
-    return !item.roles || hasAny(item.roles)
-  })
-
-  const selectedKey = visibleItems.find((n) => location.pathname.startsWith(n.key))?.key || '/monitor'
+  const selectedKey = visibleItems.find((n) => location.pathname.startsWith(n.key))?.key || '/tickets'
 
   if (isMobile) return null
 
@@ -99,9 +138,9 @@ function AppSidebar() {
         padding: '10px', borderBottom: `1px solid ${token.colorBorder}`,
       }}>
         {collapsed ? (
-          <img src="/logo.png" alt="Tickora" style={{ width: 80, height: 80, cursor: 'pointer', objectFit: 'contain' }} onClick={() => navigate('/monitor')} />
+          <img src="/logo.png" alt="Tickora" style={{ width: 80, height: 80, cursor: 'pointer', objectFit: 'contain' }} onClick={() => navigate('/tickets')} />
         ) : (
-          <img src="/logo_text.png" alt="Tickora" style={{ height: 80, maxWidth: '100%', cursor: 'pointer', objectFit: 'contain' }} onClick={() => navigate('/monitor')} />
+          <img src="/logo_text.png" alt="Tickora" style={{ height: 80, maxWidth: '100%', cursor: 'pointer', objectFit: 'contain' }} onClick={() => navigate('/tickets')} />
         )}
       </div>
       <div style={{ padding: '4px 8px', textAlign: 'right' }}>
@@ -111,7 +150,7 @@ function AppSidebar() {
       <Menu
         mode="inline"
         selectedKeys={[selectedKey]}
-        items={visibleItems.map(({ roles: _, rootOnly: __, ...rest }) => rest)}
+        items={menuItems}
         onClick={({ key }) => navigate(key)}
         style={{ borderRight: 0 }}
       />
@@ -132,22 +171,14 @@ function AppHeader() {
   const { mode, toggle } = useThemeStore()
   const { keycloak } = useKeycloak()
   const user = useSessionStore((s) => s.user)
-  const hasAny = useSessionStore((s) => s.hasAny)
   const navigate = useNavigate()
   const location = useLocation()
   const screens = Grid.useBreakpoint()
   const [drawerVisible, setDrawerDrawerVisible] = useState(false)
+  const { visibleItems, menuItems } = useNavigationItems()
 
   const isMobile = !screens.md
-
-  const visibleItems = NAV_ITEMS.filter((item) => {
-    if ('rootOnly' in item && item.rootOnly) return !!user?.hasRootGroup
-    if (item.key === '/dashboard' && user?.roles.includes('tickora_beneficiary') && !user?.roles.some(r => [ROLE_ADMIN, ROLE_DISTRIBUTOR, ROLE_AUDITOR].includes(r))) {
-        return false
-    }
-    return !item.roles || hasAny(item.roles)
-  })
-  const selectedKey = visibleItems.find((n) => location.pathname.startsWith(n.key))?.key || '/monitor'
+  const selectedKey = visibleItems.find((n) => location.pathname.startsWith(n.key))?.key || '/tickets'
 
   return (
     <Header style={{
@@ -160,7 +191,7 @@ function AppHeader() {
         {isMobile && (
           <>
             <Button type="text" icon={<MenuOutlined />} onClick={() => setDrawerDrawerVisible(true)} />
-            <img src="/logo_text.png" alt="Tickora" style={{ height: 60, cursor: 'pointer' }} onClick={() => navigate('/monitor')} />
+            <img src="/logo_text.png" alt="Tickora" style={{ height: 60, cursor: 'pointer' }} onClick={() => navigate('/tickets')} />
           </>
         )}
         {!isMobile && (
@@ -182,7 +213,7 @@ function AppHeader() {
         <Menu
           mode="inline"
           selectedKeys={[selectedKey]}
-          items={visibleItems.map(({ roles: _, rootOnly: __, ...rest }) => rest)}
+          items={menuItems}
           onClick={({ key }) => {
             navigate(key)
             setDrawerDrawerVisible(false)
@@ -253,7 +284,7 @@ function Shell() {
         <AppHeader />
         <Content style={{ overflow: 'auto' }}>
           <Routes>
-            <Route path="/"          element={<Navigate to="/monitor" replace />} />
+            <Route path="/"          element={<Navigate to="/tickets" replace />} />
             <Route path="/monitor"   element={<MonitorPage />} />
             <Route path="/dashboard" element={<DashboardPage />} />
             <Route path="/tickets"   element={<TicketsPage />} />
@@ -276,7 +307,7 @@ function Shell() {
               path="/admin"
               element={<RequireRootGroup><AdminPage /></RequireRootGroup>}
             />
-            <Route path="*"          element={<Navigate to="/monitor" replace />} />
+            <Route path="*"          element={<Navigate to="/tickets" replace />} />
           </Routes>
         </Content>
       </Layout>

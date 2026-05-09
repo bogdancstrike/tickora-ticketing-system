@@ -203,6 +203,9 @@ export function ReviewTicketPage() {
       await queryClient.invalidateQueries({ queryKey: ['monitorOverview'] })
       await queryClient.invalidateQueries({ queryKey: ['monitorSector'] })
       await queryClient.invalidateQueries({ queryKey: ['monitorUser'] })
+      
+      // Redirect back to review queue after 1 second to allow message to be seen
+      setTimeout(() => navigate('/review'), 1000)
     },
     onError: (err) => msg.error(err.message),
   })
