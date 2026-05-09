@@ -4,7 +4,7 @@ import ReactECharts from 'echarts-for-react'
 import {
   Alert, Button, Card, Col, Empty, Flex, Form, Input, List, Modal, Row, Select, Space,
   Spin, Statistic, Table, Tag, Typography, message, theme as antTheme, Avatar, Checkbox,
-  Switch, Divider,
+  Switch, Divider, Tooltip,
 } from 'antd'
 import {
   AppstoreAddOutlined, AppstoreOutlined, DeleteOutlined, EditOutlined, PlusOutlined,
@@ -22,7 +22,7 @@ import {
   createDashboard, deleteDashboard, deleteWidget, getDashboard,
   listDashboards, updateDashboard, upsertWidget,
   listTickets, getMonitorOverview, listAudit, listTicketAudit,
-  getMonitorSector, listComments,
+  getMonitorSector, listComments, getTicketOptions, listAssignableUsers,
   type CustomDashboardDto, type DashboardWidgetDto, type TicketDto,
 } from '@/api/tickets'
 import { useSessionStore } from '@/stores/sessionStore'
@@ -33,6 +33,75 @@ import { useNavigate } from 'react-router-dom'
 import { apiClient } from '@/api/client'
 
 const ResponsiveGridLayout = WidthProvider(Responsive)
+
+// ── Helpers for selection ──────────────────────────────────────────────────
+
+function TicketSelect({ name, label, placeholder }: { name: any, label: string, placeholder?: string }) {
+    const { data, isLoading } = useQuery({
+        queryKey: ['recentTicketsForSelect'],
+        queryFn: () => listTickets({ limit: 50, sort_by: 'created_at', sort_dir: 'desc' }),
+        staleTime: 60_000,
+    })
+
+    return (
+        <Form.Item name={name} label={label}>
+            <Select
+                showSearch
+                placeholder={placeholder}
+                loading={isLoading}
+                optionFilterProp="label"
+                options={(data?.items || []).map(t => ({
+                    value: t.id,
+                    label: `${t.ticket_code} · ${t.title || t.txt?.slice(0, 30)}`,
+                }))}
+            />
+        </Form.Item>
+    )
+}
+
+function SectorSelect({ name, label }: { name: any, label: string }) {
+    const { data, isLoading } = useQuery({
+        queryKey: ['ticketOptions'],
+        queryFn: getTicketOptions,
+        staleTime: 300_000,
+    })
+
+    return (
+        <Form.Item name={name} label={label}>
+            <Select
+                showSearch
+                loading={isLoading}
+                optionFilterProp="label"
+                options={(data?.sectors || []).map(s => ({
+                    value: s.code,
+                    label: `${s.code} · ${s.name}`,
+                }))}
+            />
+        </Form.Item>
+    )
+}
+
+function UserSelect({ name, label, sectorCode }: { name: any, label: string, sectorCode?: string }) {
+    const { data, isLoading } = useQuery({
+        queryKey: ['assignableUsers', sectorCode],
+        queryFn: () => listAssignableUsers(sectorCode),
+        staleTime: 60_000,
+    })
+
+    return (
+        <Form.Item name={name} label={label}>
+            <Select
+                showSearch
+                loading={isLoading}
+                optionFilterProp="label"
+                options={(data?.items || []).map(u => ({
+                    value: u.id,
+                    label: `${u.username} (${u.sector_code})`,
+                }))}
+            />
+        </Form.Item>
+    )
+}
 
 // ── Widget Implementations ──────────────────────────────────────────────────
 
@@ -153,10 +222,6 @@ function AuditWidget({ config }: { config: any }) {
 }
 
 function RecentCommentsWidget({ config }: { config: any }) {
-  const navigate = useNavigate()
-  // Note: Backend currently doesn't have global comments feed, using a hack or assuming /api/comments works
-  // For now, let's assume we can only show comments for a specific ticket if configured, 
-  // or a placeholder if no global feed exists.
   const { data, isLoading } = useQuery({
     queryKey: ['widgetComments', config.ticketId],
     queryFn: () => config.ticketId ? listComments(config.ticketId) : Promise.resolve({ items: [] }),
@@ -352,7 +417,10 @@ function UserWorkloadWidget({ config }: { config: any }) {
   
     if (!config.sectorCode) return <div style={{ padding: 20 }}><Empty description="Configure sector" image={Empty.PRESENTED_IMAGE_SIMPLE} /></div>
     if (isLoading) return <div style={{ textAlign: 'center', padding: 20 }}><Spin /></div>
-  
+    
+    const showDone = config.showDone !== false
+    const showActive = config.showActive !== false
+
     return (
       <Table 
         size="small" 
@@ -360,9 +428,10 @@ function UserWorkloadWidget({ config }: { config: any }) {
         dataSource={data?.workload || []} 
         rowKey="assignee_user_id"
         columns={[
-          { title: 'User', dataIndex: 'assignee_user_id', render: v => v === 'unassigned' ? 'Unassigned' : v.slice(0,8) },
-          { title: 'Active', dataIndex: 'active', align: 'right' },
-        ]}
+          { title: 'Operator', dataIndex: 'username', render: v => v || 'Unassigned' },
+          showActive && { title: 'Active', dataIndex: 'active', align: 'right' as const },
+          showDone && { title: 'Done', dataIndex: 'done', align: 'right' as const },
+        ].filter(Boolean) as any}
       />
     )
 }
@@ -543,8 +612,15 @@ function DashboardDetail({ dashboardId, onBack }: { dashboardId: string, onBack:
                 padding: '4px 12px', background: token.colorFillTertiary, cursor: 'move',
                 display: 'flex', justifyContent: 'space-between', alignItems: 'center'
               }}>
-                <Typography.Text strong style={{ fontSize: 12 }}>{w.title || w.type}</Typography.Text>
-                <Space size={2}>
+                <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0, flex: 1 }}>
+                    <Typography.Text strong style={{ fontSize: 12, lineHeight: '1.2' }} ellipsis>{w.title || w.type}</Typography.Text>
+                    {w.config.legend && (
+                        <Typography.Text type="secondary" style={{ fontSize: 10, lineHeight: '1.2' }} ellipsis>
+                           {w.config.legend}
+                        </Typography.Text>
+                    )}
+                </div>
+                <Space size={2} style={{ flexShrink: 0 }}>
                   {WIDGET_TYPES.find(t => t.type === w.type)?.configurable && (
                     <Button 
                         size="small" type="text" icon={<SettingOutlined />} 
@@ -593,7 +669,13 @@ function DashboardDetail({ dashboardId, onBack }: { dashboardId: string, onBack:
           <Form.Item name="title" label="Widget Title" rules={[{ required: true }]}>
             <Input />
           </Form.Item>
+
+          <Form.Item name={['config', 'legend']} label="Legend / Description (Tooltip)">
+             <Input.TextArea rows={2} placeholder="Briefly explain what this widget shows..." />
+          </Form.Item>
           
+          <Divider style={{ margin: '12px 0' }} />
+
           <Form.Item noStyle shouldUpdate={(prev, cur) => prev.type !== cur.type}>
             {({ getFieldValue }) => {
               const type = editingWidget?.type
@@ -601,12 +683,8 @@ function DashboardDetail({ dashboardId, onBack }: { dashboardId: string, onBack:
               if (type === 'ticket_list') {
                   return (
                     <>
-                      <Form.Item name={['config', 'assignee_user_id']} label="Assignee ID">
-                        <Input placeholder="User UUID or leave empty" />
-                      </Form.Item>
-                      <Form.Item name={['config', 'current_sector_code']} label="Sector Code">
-                        <Input placeholder="e.g. s1, s10" />
-                      </Form.Item>
+                      <UserSelect name={['config', 'assignee_user_id']} label="Filter by Assignee" />
+                      <SectorSelect name={['config', 'current_sector_code']} label="Filter by Sector" />
                       <Form.Item name={['config', 'status']} label="Ticket Status">
                         <Select allowClear options={STATUS_OPTIONS} />
                       </Form.Item>
@@ -644,12 +722,8 @@ function DashboardDetail({ dashboardId, onBack }: { dashboardId: string, onBack:
               if (type === 'audit_stream') {
                   return (
                     <>
-                      <Form.Item name={['config', 'ticketId']} label="Filter by Ticket ID">
-                        <Input placeholder="Track specific task history" />
-                      </Form.Item>
-                      <Form.Item name={['config', 'userId']} label="Filter by Actor User ID">
-                        <Input placeholder="Track specific person's actions" />
-                      </Form.Item>
+                      <TicketSelect name={['config', 'ticketId']} label="Filter by Ticket" />
+                      <UserSelect name={['config', 'userId']} label="Filter by Actor" />
                       <Form.Item name={['config', 'limit']} label="Max Events">
                         <Select options={[5, 10, 20, 30].map(v => ({ value: v, label: v }))} />
                       </Form.Item>
@@ -682,16 +756,24 @@ function DashboardDetail({ dashboardId, onBack }: { dashboardId: string, onBack:
               }
               if (type === 'sector_stats' || type === 'user_workload') {
                  return (
-                    <Form.Item name={['config', 'sectorCode']} label="Sector Code" rules={[{ required: true }]}>
-                        <Input placeholder="e.g. s1" />
-                    </Form.Item>
+                    <>
+                        <SectorSelect name={['config', 'sectorCode']} label="Target Sector" />
+                        {type === 'user_workload' && (
+                            <>
+                                <Form.Item name={['config', 'showActive']} valuePropName="checked" label="Show Active Count" initialValue={true}>
+                                    <Switch />
+                                </Form.Item>
+                                <Form.Item name={['config', 'showDone']} valuePropName="checked" label="Show Done Count" initialValue={true}>
+                                    <Switch />
+                                </Form.Item>
+                            </>
+                        )}
+                    </>
                  )
               }
               if (type === 'recent_comments') {
                   return (
-                    <Form.Item name={['config', 'ticketId']} label="Watch Ticket (ID)" rules={[{ required: true }]}>
-                       <Input placeholder="Comments feed for specific task" />
-                    </Form.Item>
+                    <TicketSelect name={['config', 'ticketId']} label="Watch Ticket" />
                   )
               }
               return null

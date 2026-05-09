@@ -15,7 +15,7 @@ from sqlalchemy import (
     func,
     text,
 )
-from sqlalchemy.dialects.postgresql import INET, JSONB, UUID, TSVECTOR
+from sqlalchemy.dialects.postgresql import INET, JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.core.db import Base
@@ -412,13 +412,13 @@ class MetadataKeyDefinition(Base):
 class CustomDashboard(Base):
     __tablename__ = "custom_dashboards"
     __table_args__ = (
-        Index("idx_custom_dashboards_user", "user_id"),
+        Index("idx_custom_dashboards_user", "owner_user_id"),
     )
 
-    id:        Mapped[str] = mapped_column(UUID(as_uuid=False), primary_key=True, default=_uuid)
-    user_id:   Mapped[str] = mapped_column(UUID(as_uuid=False), ForeignKey("users.id"), nullable=False)
-    title:     Mapped[str] = mapped_column(String(255), nullable=False)
-    is_default: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    id:             Mapped[str] = mapped_column(UUID(as_uuid=False), primary_key=True, default=_uuid)
+    owner_user_id:  Mapped[str] = mapped_column(UUID(as_uuid=False), ForeignKey("users.id"), nullable=False)
+    title:          Mapped[str] = mapped_column(String(255), nullable=False)
+    is_public:      Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
@@ -443,4 +443,42 @@ class DashboardWidget(Base):
     h: Mapped[int] = mapped_column(Integer, nullable=False, default=4)
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
+
+
+class DashboardShare(Base):
+    __tablename__ = "dashboard_shares"
+    __table_args__ = (
+        Index("idx_dashboard_shares_dashboard", "dashboard_id"),
+        Index("idx_dashboard_shares_user",      "target_user_id"),
+        Index("idx_dashboard_shares_sector",    "target_sector_id"),
+        UniqueConstraint("dashboard_id", "target_user_id", name="uq_dash_share_user"),
+        UniqueConstraint("dashboard_id", "target_sector_id", name="uq_dash_share_sector"),
+    )
+
+    id:                Mapped[str] = mapped_column(UUID(as_uuid=False), primary_key=True, default=_uuid)
+    dashboard_id:      Mapped[str] = mapped_column(UUID(as_uuid=False), ForeignKey("custom_dashboards.id", ondelete="CASCADE"), nullable=False)
+    
+    target_user_id:    Mapped[str | None] = mapped_column(UUID(as_uuid=False), ForeignKey("users.id"))
+    target_sector_id:  Mapped[str | None] = mapped_column(UUID(as_uuid=False), ForeignKey("sectors.id"))
+    
+    shared_by_user_id: Mapped[str] = mapped_column(UUID(as_uuid=False), ForeignKey("users.id"), nullable=False)
+    created_at:        Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+class UserDashboardSettings(Base):
+    """User-specific settings for dashboards (favorite, default, etc)."""
+    __tablename__ = "user_dashboard_settings"
+    __table_args__ = (
+        UniqueConstraint("user_id", "dashboard_id", name="uq_user_dash_settings"),
+        Index("idx_user_dash_settings_user", "user_id"),
+    )
+
+    id:           Mapped[str] = mapped_column(UUID(as_uuid=False), primary_key=True, default=_uuid)
+    user_id:      Mapped[str] = mapped_column(UUID(as_uuid=False), ForeignKey("users.id"), nullable=False)
+    dashboard_id: Mapped[str] = mapped_column(UUID(as_uuid=False), ForeignKey("custom_dashboards.id", ondelete="CASCADE"), nullable=False)
+    
+    is_favorite: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    is_default:  Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=lambda: datetime.now(timezone.utc), nullable=False)

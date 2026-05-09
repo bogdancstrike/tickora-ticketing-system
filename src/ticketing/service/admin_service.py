@@ -283,41 +283,23 @@ def revoke_membership(db: Session, principal: Principal, membership_id: str) -> 
 
 def group_hierarchy(db: Session, principal: Principal) -> dict[str, Any]:
     require_admin(principal)
-    sectors = list(db.scalars(select(Sector).order_by(Sector.code.asc())))
-    by_sector: dict[str, dict[str, Any]] = {
-        s.code: {"key": f"sector:{s.code}", "title": f"{s.code} · {s.name}", "sector": _serialize_sector(s), "children": [
-            {"key": f"sector:{s.code}:chiefs", "title": "chiefs", "role": "chief", "children": []},
-            {"key": f"sector:{s.code}:members", "title": "members", "role": "member", "children": []},
-        ]}
-        for s in sectors
-    }
-    for m, u, s in db.execute(
-        select(SectorMembership, User, Sector)
-        .join(User, User.id == SectorMembership.user_id)
-        .join(Sector, Sector.id == SectorMembership.sector_id)
-        .where(SectorMembership.is_active.is_(True))
-        .order_by(Sector.code.asc(), User.username.asc().nulls_last())
-    ):
-        role_idx = 0 if m.membership_role == "chief" else 1
-        by_sector[s.code]["children"][role_idx]["children"].append({
-            "key": f"user:{u.id}:{m.id}",
-            "title": u.username or u.email or u.id,
-            "user": _serialize_user_basic(u),
-            "membership_id": m.id,
-        })
-
-    children = [{"key": "tickora:sectors", "title": "Platform Sectors", "children": list(by_sector.values())}]
+    
     keycloak_tree = _keycloak_group_tree()
-    if keycloak_tree:
-        # Since _keycloak_group_tree now returns the 'tickora' branch directly,
-        # we can just use it.
-        keycloak_tree["title"] = "SSO Groups (/tickora)"
-        children.append(keycloak_tree)
+    if not keycloak_tree:
+        return {
+            "key": "root",
+            "title": "Groups",
+            "children": [],
+        }
+
+    # Since _keycloak_group_tree now returns the 'tickora' branch directly,
+    # we can just return it as the root or wrapped in a generic Groups node.
+    keycloak_tree["title"] = "SSO Groups (/tickora)"
     
     return {
         "key": "root",
         "title": "Groups",
-        "children": children,
+        "children": [keycloak_tree],
     }
 
 

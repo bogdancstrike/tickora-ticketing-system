@@ -165,7 +165,7 @@ export interface MonitorSector {
   by_status: MonitorBreakdown[]
   by_priority: MonitorBreakdown[]
   by_category: MonitorBreakdown[]
-  workload: Array<{ assignee_user_id: string; active: number; done: number }>
+  workload: Array<{ assignee_user_id: string; username: string; active: number; done: number }>
   oldest: MonitorOldTicket[]
 }
 

@@ -21,7 +21,7 @@ def _check_not_beneficiary(p: Principal) -> None:
 
 def list_dashboards(db: Session, p: Principal) -> list[dict[str, Any]]:
     _check_not_beneficiary(p)
-    stmt = select(CustomDashboard).where(CustomDashboard.user_id == p.user_id).order_by(CustomDashboard.created_at.desc())
+    stmt = select(CustomDashboard).where(CustomDashboard.owner_user_id == p.user_id).order_by(CustomDashboard.created_at.desc())
     rows = list(db.scalars(stmt))
     return [_serialize_dashboard(r) for r in rows]
 
@@ -29,7 +29,7 @@ def list_dashboards(db: Session, p: Principal) -> list[dict[str, Any]]:
 def get_dashboard(db: Session, p: Principal, dashboard_id: str) -> dict[str, Any]:
     _check_not_beneficiary(p)
     d = db.get(CustomDashboard, dashboard_id)
-    if d is None or d.user_id != p.user_id:
+    if d is None or d.owner_user_id != p.user_id:
         raise NotFoundError("dashboard not found")
     return _serialize_dashboard(d, full=True)
 
@@ -39,9 +39,9 @@ def create_dashboard(db: Session, p: Principal, payload: dict[str, Any]) -> dict
     title = str(payload.get("title") or "New Dashboard").strip()
     
     d = CustomDashboard(
-        user_id=p.user_id,
+        owner_user_id=p.user_id,
         title=title,
-        is_default=bool(payload.get("is_default", False))
+        is_public=bool(payload.get("is_public", False))
     )
     db.add(d)
     db.flush()
@@ -51,13 +51,13 @@ def create_dashboard(db: Session, p: Principal, payload: dict[str, Any]) -> dict
 def update_dashboard(db: Session, p: Principal, dashboard_id: str, payload: dict[str, Any]) -> dict[str, Any]:
     _check_not_beneficiary(p)
     d = db.get(CustomDashboard, dashboard_id)
-    if d is None or d.user_id != p.user_id:
+    if d is None or d.owner_user_id != p.user_id:
         raise NotFoundError("dashboard not found")
     
     if "title" in payload:
         d.title = str(payload["title"]).strip()
-    if "is_default" in payload:
-        d.is_default = bool(payload["is_default"])
+    if "is_public" in payload:
+        d.is_public = bool(payload["is_public"])
     
     db.flush()
     return _serialize_dashboard(d)
@@ -66,7 +66,7 @@ def update_dashboard(db: Session, p: Principal, dashboard_id: str, payload: dict
 def delete_dashboard(db: Session, p: Principal, dashboard_id: str) -> None:
     _check_not_beneficiary(p)
     d = db.get(CustomDashboard, dashboard_id)
-    if d is None or d.user_id != p.user_id:
+    if d is None or d.owner_user_id != p.user_id:
         raise NotFoundError("dashboard not found")
     db.delete(d)
     db.flush()
@@ -75,7 +75,7 @@ def delete_dashboard(db: Session, p: Principal, dashboard_id: str) -> None:
 def upsert_widget(db: Session, p: Principal, dashboard_id: str, payload: dict[str, Any]) -> dict[str, Any]:
     _check_not_beneficiary(p)
     d = db.get(CustomDashboard, dashboard_id)
-    if d is None or d.user_id != p.user_id:
+    if d is None or d.owner_user_id != p.user_id:
         raise NotFoundError("dashboard not found")
     
     widget_id = payload.get("id")
@@ -109,7 +109,7 @@ def delete_widget(db: Session, p: Principal, dashboard_id: str, widget_id: str) 
         raise NotFoundError("widget not found")
     
     d = db.get(CustomDashboard, w.dashboard_id)
-    if d.user_id != p.user_id:
+    if d.owner_user_id != p.user_id:
         raise PermissionDeniedError("not allowed")
     
     db.delete(w)
@@ -120,7 +120,7 @@ def _serialize_dashboard(d: CustomDashboard, full: bool = False) -> dict[str, An
     res = {
         "id": d.id,
         "title": d.title,
-        "is_default": d.is_default,
+        "is_public": d.is_public,
         "created_at": d.created_at.isoformat(),
         "updated_at": d.updated_at.isoformat(),
     }

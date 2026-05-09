@@ -332,18 +332,26 @@ def _sector_breakdown(db: Session, *, active_only: bool = False, limit: int | No
 
 
 def _workload(db: Session, sector_id: str) -> list[dict[str, Any]]:
-    assignee = func.coalesce(sa_cast(Ticket.assignee_user_id, sa_Text), "unassigned")
+    assignee_id_col = sa_cast(Ticket.assignee_user_id, sa_Text)
     done_count = func.sum(case((Ticket.status.in_(DONE_STATUSES), 1), else_=0))
     active_count = func.sum(case((Ticket.status.in_(ACTIVE_STATUSES), 1), else_=0))
+    
+    # We join with User to get usernames. Use outer join to keep 'unassigned'.
     stmt = (
-        select(assignee, active_count, done_count)
+        select(assignee_id_col, User.username, active_count, done_count)
+        .outerjoin(User, User.id == Ticket.assignee_user_id)
         .where(Ticket.is_deleted.is_(False), Ticket.current_sector_id == sector_id)
-        .group_by(assignee)
+        .group_by(assignee_id_col, User.username)
         .order_by(active_count.desc())
     )
     return [
-        {"assignee_user_id": assignee_id, "active": int(active or 0), "done": int(done or 0)}
-        for assignee_id, active, done in db.execute(stmt).all()
+        {
+            "assignee_user_id": assignee_id or "unassigned", 
+            "username": username or "Unassigned",
+            "active": int(active or 0), 
+            "done": int(done or 0)
+        }
+        for assignee_id, username, active, done in db.execute(stmt).all()
     ]
 
 
