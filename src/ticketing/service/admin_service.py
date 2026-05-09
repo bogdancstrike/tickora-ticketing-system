@@ -87,6 +87,14 @@ def overview(db: Session, principal: Principal) -> dict[str, Any]:
     active_sectors = db.scalar(select(func.count(Sector.id)).where(Sector.is_active.is_(True))) or 0
     total_memberships = db.scalar(select(func.count(SectorMembership.id)).where(SectorMembership.is_active.is_(True))) or 0
     today = _today_start()
+    # Active sessions = users currently signed in (presence-tracked in Redis,
+    # 5-minute window). Falls back to 0 when Redis is unreachable so the
+    # overview doesn't break — Redis is a soft dependency for this widget.
+    from src.core.session_tracker import active_user_count
+    try:
+        active_sessions = active_user_count()
+    except Exception:
+        active_sessions = 0
     kpis = {
         "total_tickets": _count(db, select(Ticket).where(Ticket.is_deleted.is_(False))),
         "active_tickets": _count(db, select(Ticket).where(Ticket.is_deleted.is_(False), Ticket.status.in_(ACTIVE_STATUSES))),
@@ -94,6 +102,7 @@ def overview(db: Session, principal: Principal) -> dict[str, Any]:
         "new_today": _count(db, select(Ticket).where(Ticket.is_deleted.is_(False), Ticket.created_at >= today)),
         "users": int(total_users),
         "active_users": int(active_users),
+        "active_sessions": int(active_sessions),
         "active_sectors": int(active_sectors),
         "memberships": int(total_memberships),
         "unread_notifications": _count(db, select(Notification).where(Notification.is_read.is_(False))),

@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 from typing import Any, Iterable
 
 from flask import request as flask_request
-from sqlalchemy import and_, asc, desc, exists, or_, select
+from sqlalchemy import and_, asc, desc, exists, func, or_, select
 from sqlalchemy.orm import Session
 
 from src.core.correlation import get_correlation_id, set_ticket_id
@@ -394,7 +394,29 @@ def _list(
         )
 
     # ── Count ─────────────────────────────────────────────────────────────
-    total_count = int(db.scalar(select(func.count()).select_from(stmt.subquery())) or 0)
+    # Counting a visibility-filtered subquery on a multi-million-row table is
+    # the dominant cost on this endpoint. We accept a small inaccuracy on huge
+    # admin-scope sets in exchange for a hard cap on latency:
+    #   * If the user is admin/auditor and no narrowing filter is applied, use
+    #     `pg_class.reltuples` (kept fresh by autovacuum/ANALYZE).
+    #   * Otherwise run the real COUNT — the visibility predicate or an
+    #     explicit filter shrinks the set enough that COUNT is acceptable.
+    has_narrowing_filter = any(
+        filters.get(k)
+        for k in (
+            "status", "priority", "category", "beneficiary_type",
+            "assignee_user_id", "current_sector_code", "ticket_code",
+            "search", "created_after", "created_before",
+        )
+    )
+    if (principal.is_admin or principal.is_auditor) and not has_narrowing_filter:
+        from sqlalchemy import text
+        approx = db.scalar(
+            text("SELECT reltuples::bigint FROM pg_class WHERE relname = 'tickets'")
+        )
+        total_count = int(approx or 0)
+    else:
+        total_count = int(db.scalar(select(func.count()).select_from(stmt.subquery())) or 0)
 
     # ── Sort + cursor (cursor only supported on created_at-desc) ───────────
     sort_by = (filters.get("sort_by") or "created_at")
@@ -444,7 +466,7 @@ def _list(
         setattr(r, "beneficiary_user_id", ben_user_ids.get(r.beneficiary_id))
         setattr(r, "sector_codes", multi_sectors.get(r.id, []))
         setattr(r, "assignee_users", multi_assignees.get(r.id, []))
-    return rows, next_token
+    return rows, next_token, total_count
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────

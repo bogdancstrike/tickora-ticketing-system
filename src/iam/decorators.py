@@ -39,11 +39,22 @@ def _extract_bearer() -> str:
 
 
 def _build_principal() -> Principal:
+    """Verify the bearer token and produce the request-scoped Principal.
+
+    Side effect: refreshes the user's presence key in Redis so the admin
+    overview can show how many users are currently logged in.
+    """
     with span("iam.build_principal") as current:
         token = _extract_bearer()
         claims = verify_token(token)
         principal = principal_from_claims(claims)
         set_user_id(principal.user_id)
+        # Presence ping — failure-tolerant, fire-and-forget.
+        try:
+            from src.core.session_tracker import mark_active
+            mark_active(principal.user_id)
+        except Exception:
+            pass
         set_attr(current, "iam.user_id", principal.user_id)
         set_attr(current, "iam.username", principal.username)
         set_attr(current, "iam.user_type", principal.user_type)

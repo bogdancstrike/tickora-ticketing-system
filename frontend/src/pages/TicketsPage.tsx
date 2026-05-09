@@ -933,8 +933,6 @@ export function TicketsPage() {
     },
   ], [status, priority, sector, sectorFilterOptions, priorityFilterOptions])
 
-  if (isLoading) return <div style={{ padding: 100, textAlign: 'center' }}><Spin size="large" /></div>
-
   return (
     <div style={{ padding: 24, display: 'grid', gap: 16 }}>
       {holder}

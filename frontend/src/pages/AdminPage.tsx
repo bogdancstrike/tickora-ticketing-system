@@ -546,12 +546,39 @@ function SystemTab() {
 }
 
 export function AdminPage() {
-  const overview = useQuery({ queryKey: ['adminOverview'], queryFn: getAdminOverview, staleTime: 30_000 })
+  const overview = useQuery({
+    queryKey: ['adminOverview'],
+    queryFn: getAdminOverview,
+    staleTime: 30_000,
+    // Refresh every 30s so the "Active sessions" widget reflects users
+    // logging in/out without a manual reload. The backend keeps a 5-minute
+    // presence window, so this cadence is well below that.
+    refetchInterval: 30_000,
+  })
   if (overview.isLoading) return <div style={{ padding: 100, textAlign: 'center' }}><Spin size="large" /></div>
+
+  // Top-level KPI strip — sourced from /api/admin/overview kpis, including
+  // the new `active_sessions` (users currently signed in, presence-tracked).
+  const kpis = overview.data?.kpis || {}
+  const headlineKpis: Array<[string, number | null | undefined]> = [
+    ['Active sessions', kpis.active_sessions],
+    ['Total users', kpis.users],
+    ['Enabled users', kpis.active_users],
+    ['Active tickets', kpis.active_tickets],
+    ['SLA breached', kpis.sla_breached],
+    ['New today', kpis.new_today],
+  ]
 
   return (
     <div style={{ padding: 24 }}>
       <Typography.Title level={2}>Administration</Typography.Title>
+      <Row gutter={[12, 12]} style={{ marginBottom: 16 }}>
+        {headlineKpis.map(([label, value]) => (
+          <Col key={label} xs={12} md={4}>
+            <KpiTile label={label} value={value ?? '-'} />
+          </Col>
+        ))}
+      </Row>
       <Tabs
         defaultActiveKey="users"
         items={[
@@ -561,6 +588,23 @@ export function AdminPage() {
           { key: 'system', label: <Space><SafetyCertificateOutlined />System</Space>, children: <SystemTab /> },
         ]}
       />
+    </div>
+  )
+}
+
+function KpiTile({ label, value }: { label: string; value: number | string }) {
+  const { token } = antTheme.useToken()
+  return (
+    <div
+      style={{
+        background: token.colorBgContainer,
+        border: `1px solid ${token.colorBorderSecondary}`,
+        borderRadius: 8,
+        padding: 14,
+        minHeight: 80,
+      }}
+    >
+      <Statistic title={label} value={value} valueStyle={{ fontSize: 22 }} />
     </div>
   )
 }

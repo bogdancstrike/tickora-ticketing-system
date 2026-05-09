@@ -23,28 +23,55 @@ from src.ticketing.state_machine import ACTIVE_STATUSES, DONE_STATUSES
 
 
 def monitor_overview(db: Session, principal: Principal, *, days: int = 30) -> dict[str, Any]:
-    with span("monitor.overview", username=principal.username, user_id=principal.user_id) as current:
-        payload: dict[str, Any] = {
-            "generated_at": datetime.now(timezone.utc).isoformat(),
-            "global": None,
-            "distributor": None,
-            "sectors": [],
-            "personal": monitor_personal(db, principal, principal.user_id),
-            "timeseries": monitor_timeseries(db, principal, days=days),
-            "stale_tickets": _stale_tickets(db, principal),
-        }
-        if rbac.can_view_global_dashboard(principal):
-            payload["global"] = monitor_global(db, principal)
-            payload["sectors"] = monitor_sectors(db, principal)
-        elif principal.sector_memberships:
-            payload["sectors"] = monitor_sectors(db, principal)
+    """Top-level monitor payload with per-principal aggregates.
 
-        if principal.is_distributor or principal.is_admin:
-            payload["distributor"] = monitor_distributor(db, principal)
+    On large datasets (millions of tickets) the underlying aggregates take
+    seconds. We memoize the response in Redis for 60s, keyed by the principal's
+    visibility class so two users with the same access profile share the same
+    cached payload. A blip in Redis falls back to a live computation.
 
-        set_attr(current, "monitor.has_global", bool(payload["global"]))
-        set_attr(current, "monitor.sector_count", len(payload["sectors"]))
-        return payload
+    The cache key intentionally excludes things that don't change visibility
+    (display name, last_login, etc.) so cardinality stays bounded.
+    """
+    cache_parts = (
+        "v1",
+        days,
+        principal.user_id if not (principal.is_admin or principal.is_auditor) else "global",
+        ",".join(sorted(principal.global_roles)),
+        ",".join(sorted(principal.all_sectors)) if principal.all_sectors else "",
+    )
+
+    def _produce() -> dict[str, Any]:
+        with span("monitor.overview", username=principal.username, user_id=principal.user_id) as current:
+            payload: dict[str, Any] = {
+                "generated_at": datetime.now(timezone.utc).isoformat(),
+                "global": None,
+                "distributor": None,
+                "sectors": [],
+                "personal": monitor_personal(db, principal, principal.user_id),
+                "timeseries": monitor_timeseries(db, principal, days=days),
+                "stale_tickets": _stale_tickets(db, principal),
+            }
+            if rbac.can_view_global_dashboard(principal):
+                payload["global"] = monitor_global(db, principal)
+                payload["sectors"] = monitor_sectors(db, principal)
+            elif principal.sector_memberships:
+                payload["sectors"] = monitor_sectors(db, principal)
+
+            if principal.is_distributor or principal.is_admin:
+                payload["distributor"] = monitor_distributor(db, principal)
+
+            set_attr(current, "monitor.has_global", bool(payload["global"]))
+            set_attr(current, "monitor.sector_count", len(payload["sectors"]))
+            return payload
+
+    from src.core.cache import cached_call
+    return cached_call(
+        namespace="monitor.overview",
+        key_parts=cache_parts,
+        ttl=60,
+        producer=_produce,
+    )
 
 
 def monitor_global(db: Session, principal: Principal) -> dict[str, Any]:
