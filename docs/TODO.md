@@ -123,9 +123,13 @@ Legend: `[x]` done · `[~]` partial · `[ ]` pending
       and realm-role changes audit-log and best-effort sync to Keycloak.
 - [x] Admin page replaces placeholder with operational dashboards, users/roles
       management, sector CRUD, group hierarchy view, membership ledger,
-      metadata-key configuration, SLA policy management, and System hardening view.
+      metadata-key configuration, and System hardening view.
+- [x] Admin access is restricted to exact `/tickora` root-group members; backend principal
+      hydration falls back to Keycloak group lookup when token group claims are missing.
 - [~] Role-specific queue UIs: distributor `Review Tickets` implemented (with premature closure); remaining role queues pending
 - [x] Review queue is its own dedicated page (`/review/:ticketId`), not a drawer
+- [x] Review queue list is split into not-yet-reviewed pending tickets and already-reviewed
+      tickets routed to sectors.
 - [x] Reviewer restriction: distributors route to a sector; only chief/admin pick the operator
 - [x] Inline status changer (TicketsPage table + ticket detail) with double confirmation
 - [x] Unified `Assign` dropdown + self-only `Unassign me`; targeted user removal uses

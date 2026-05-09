@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { Alert, Button, Empty, Flex, Space, Table, Tag, Typography, theme as antTheme } from 'antd'
+import { Alert, Button, Empty, Flex, Space, Statistic, Table, Tag, Typography, theme as antTheme } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
 import { ReloadOutlined } from '@ant-design/icons'
 import { listTickets, type TicketDto } from '@/api/tickets'
@@ -20,11 +20,18 @@ export function ReviewTicketsPage() {
         listTickets({ status: 'pending', limit: 100 }),
         listTickets({ status: 'assigned_to_sector', limit: 100 }),
       ])
-      const byId = new Map<string, TicketDto>()
-      for (const ticket of [...pending.items, ...assigned.items]) byId.set(ticket.id, ticket)
-      return [...byId.values()].sort((a, b) => (b.updated_at || '').localeCompare(a.updated_at || ''))
+      const sortByUpdated = (items: TicketDto[]) =>
+        [...items].sort((a, b) => (b.updated_at || '').localeCompare(a.updated_at || ''))
+      return {
+        pending: sortByUpdated(pending.items),
+        reviewed: sortByUpdated(assigned.items),
+      }
     },
   })
+  const allTickets = useMemo(
+    () => [...(queue.data?.pending || []), ...(queue.data?.reviewed || [])],
+    [queue.data],
+  )
 
   const columns: ColumnsType<TicketDto> = useMemo(() => [
     {
@@ -72,7 +79,7 @@ export function ReviewTicketsPage() {
       render: (value) => value ? <Tag>{value}</Tag> : '-',
       sorter: (a, b) => (a.current_sector_code || '').localeCompare(b.current_sector_code || ''),
       filterSearch: true,
-      filters: Array.from(new Set((queue.data || []).map(t => t.current_sector_code).filter(Boolean) as string[]))
+      filters: Array.from(new Set(allTickets.map(t => t.current_sector_code).filter(Boolean) as string[]))
         .map((v) => ({ text: v as string, value: v as string })),
       onFilter: (val, row) => row.current_sector_code === val,
     },
@@ -89,14 +96,43 @@ export function ReviewTicketsPage() {
       sorter: (a, b) => (a.updated_at || '').localeCompare(b.updated_at || ''),
       defaultSortOrder: 'descend',
     },
-  ], [queue.data])
+  ], [allTickets])
+
+  const tablePanel = (title: string, description: string, items: TicketDto[], emptyText: string) => (
+    <div style={{
+      background: token.colorBgContainer,
+      border: `1px solid ${token.colorBorderSecondary}`,
+      borderRadius: 8,
+      overflow: 'hidden',
+      boxShadow: token.boxShadowTertiary,
+    }}>
+      <Flex justify="space-between" align="center" wrap="wrap" gap={12} style={{ padding: '14px 16px', borderBottom: `1px solid ${token.colorBorderSecondary}` }}>
+        <div>
+          <Typography.Title level={5} style={{ margin: 0 }}>{title}</Typography.Title>
+          <Typography.Text type="secondary">{description}</Typography.Text>
+        </div>
+        <Statistic value={items.length} suffix="tickets" />
+      </Flex>
+      <Table
+        rowKey="id"
+        loading={queue.isLoading}
+        columns={columns}
+        dataSource={items}
+        pagination={{ pageSize: 10, showSizeChanger: true }}
+        onRow={(record) => ({ onClick: () => navigate(`/review/${record.id}`) })}
+        locale={{ emptyText: <Empty description={emptyText} /> }}
+        rowClassName={() => 'tickora-row-clickable'}
+        scroll={{ x: 860 }}
+      />
+    </div>
+  )
 
   return (
     <div style={{ padding: 24, display: 'grid', gap: 16 }}>
       <Flex justify="space-between" align="center" wrap="wrap" gap={12}>
         <div>
           <Typography.Title level={3} style={{ margin: 0 }}>Review Queue</Typography.Title>
-          <Typography.Text type="secondary">Tickets awaiting triage and routing</Typography.Text>
+          <Typography.Text type="secondary">Tickets split by review/routing status</Typography.Text>
         </div>
         <Space wrap>
           <Button icon={<ReloadOutlined />} onClick={() => queue.refetch()} />
@@ -105,19 +141,19 @@ export function ReviewTicketsPage() {
 
       {queue.error && <Alert type="error" message={queue.error.message} showIcon />}
 
-      <div style={{ border: `1px solid ${token.colorBorderSecondary}`, borderRadius: 8, overflow: 'hidden' }}>
-        <Table
-          rowKey="id"
-          loading={queue.isLoading}
-          columns={columns}
-          dataSource={queue.data || []}
-          pagination={{ pageSize: 25, showSizeChanger: true }}
-          onRow={(record) => ({ onClick: () => navigate(`/review/${record.id}`) })}
-          locale={{ emptyText: <Empty description="No tickets waiting for review" /> }}
-          rowClassName={() => 'tickora-row-clickable'}
-          scroll={{ x: 860 }}
-        />
-      </div>
+      {tablePanel(
+        'Not Yet Reviewed',
+        'Pending tickets that still need triage, metadata review, and sector routing.',
+        queue.data?.pending || [],
+        'No tickets waiting for review',
+      )}
+
+      {tablePanel(
+        'Already Reviewed',
+        'Tickets already routed to a sector and visible to that sector queue.',
+        queue.data?.reviewed || [],
+        'No reviewed tickets in the queue',
+      )}
     </div>
   )
 }
