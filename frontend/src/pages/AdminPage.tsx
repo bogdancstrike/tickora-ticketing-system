@@ -92,28 +92,6 @@ function OverviewTab() {
             </div>
           </Panel>
         </Col>
-        <Col xs={24} xl={12}>
-          <Panel title="Backlog sectors" icon={<ApartmentOutlined />}>
-            <List
-              size="small"
-              dataSource={overview.data?.global_monitor?.top_backlog_sectors || []}
-              locale={{ emptyText: <Empty description="No backlog sectors" image={Empty.PRESENTED_IMAGE_SIMPLE} /> }}
-              renderItem={(item) => (
-                <List.Item>
-                  <List.Item.Meta
-                    title={<Space><Tag>{item.sector_code}</Tag><Typography.Text>{item.sector_name}</Typography.Text></Space>}
-                    description={`${item.count} active tickets`}
-                  />
-                </List.Item>
-              )}
-            />
-          </Panel>
-        </Col>
-        <Col xs={24}>
-          <Panel title="Platform configuration" icon={<DatabaseOutlined />}>
-            <MetricPanel values={overview.data?.system || {}} />
-          </Panel>
-        </Col>
       </Row>
     </div>
   )

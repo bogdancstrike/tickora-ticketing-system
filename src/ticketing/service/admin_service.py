@@ -306,12 +306,12 @@ def group_hierarchy(db: Session, principal: Principal) -> dict[str, Any]:
             "membership_id": m.id,
         })
 
-    children = [{"key": "tickora:sectors", "title": "local sectors", "children": list(by_sector.values())}]
+    children = [{"key": "tickora:sectors", "title": "Platform Sectors", "children": list(by_sector.values())}]
     keycloak_tree = _keycloak_group_tree()
     if keycloak_tree:
         # Since _keycloak_group_tree now returns the 'tickora' branch directly,
         # we can just use it.
-        keycloak_tree["title"] = "Keycloak hierarchy (/tickora)"
+        keycloak_tree["title"] = "SSO Groups (/tickora)"
         children.append(keycloak_tree)
     
     return {

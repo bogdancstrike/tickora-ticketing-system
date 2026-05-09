@@ -323,7 +323,7 @@ export function MonitorPage() {
     },
     personal && {
       key: 'personal',
-      label: 'User',
+      label: `User · ${personal.username || personal.email || personal.user_id}`,
       children: (
         <div style={{ display: 'grid', gap: 24 }}>
           <div>

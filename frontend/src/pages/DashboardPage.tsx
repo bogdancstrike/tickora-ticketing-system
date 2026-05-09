@@ -2,11 +2,13 @@ import { useMemo, useState, useEffect } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Alert, Button, Card, Col, Empty, Flex, Form, Input, List, Modal, Row, Select, Space,
-  Spin, Statistic, Table, Tag, Typography, message, theme as antTheme,
+  Spin, Statistic, Table, Tag, Typography, message, theme as antTheme, Avatar,
 } from 'antd'
 import {
   AppstoreAddOutlined, AppstoreOutlined, DeleteOutlined, EditOutlined, PlusOutlined,
-  ReloadOutlined, SaveOutlined, SettingOutlined,
+  ReloadOutlined, SaveOutlined, SettingOutlined, UserOutlined, WarningOutlined,
+  ClockCircleOutlined, AuditOutlined, UnorderedListOutlined, CheckCircleOutlined,
+  SendOutlined, ThunderboltOutlined,
 } from '@ant-design/icons'
 import { Responsive, WidthProvider } from 'react-grid-layout'
 import 'react-grid-layout/css/styles.css'
@@ -15,42 +17,154 @@ import 'react-resizable/css/styles.css'
 import {
   createDashboard, deleteDashboard, deleteWidget, getDashboard,
   listDashboards, updateDashboard, upsertWidget,
-  type CustomDashboardDto, type DashboardWidgetDto,
+  listTickets, getMonitorOverview, listAudit,
+  type CustomDashboardDto, type DashboardWidgetDto, type TicketDto,
 } from '@/api/tickets'
 import { useSessionStore } from '@/stores/sessionStore'
-
-// Import widgets components or implement inline-minimal ones
-import { MonitorPage } from './MonitorPage'
+import { StatusTag } from '@/components/common/StatusTag'
+import { PriorityTag } from '@/components/common/PriorityTag'
+import { fmtDateTime } from '@/components/common/format'
+import { useNavigate } from 'react-router-dom'
 
 const ResponsiveGridLayout = WidthProvider(Responsive)
 
+// ── Widget Implementations ──────────────────────────────────────────────────
+
+function TicketListWidget({ config }: { config: any }) {
+  const navigate = useNavigate()
+  const { data, isLoading } = useQuery({
+    queryKey: ['widgetTickets', config],
+    queryFn: () => listTickets(config),
+    staleTime: 30_000,
+  })
+
+  if (isLoading) return <div style={{ textAlign: 'center', padding: 20 }}><Spin /></div>
+
+  return (
+    <List
+      size="small"
+      dataSource={(data?.items || []).slice(0, 15)}
+      locale={{ emptyText: <Empty description="No tickets" image={Empty.PRESENTED_IMAGE_SIMPLE} /> }}
+      renderItem={(t: TicketDto) => (
+        <List.Item 
+          style={{ padding: '8px 12px', cursor: 'pointer' }}
+          onClick={() => navigate(`/tickets/${t.id}`)}
+          className="tickora-row-clickable"
+        >
+          <div style={{ display: 'grid', gap: 2, width: '100%' }}>
+            <Flex justify="space-between" align="center">
+              <Typography.Text strong ellipsis style={{ fontSize: 13 }}>{t.title || t.ticket_code}</Typography.Text>
+              <StatusTag status={t.status} />
+            </Flex>
+            <Space size={4} style={{ fontSize: 11 }}>
+              <PriorityTag priority={t.priority} />
+              <Typography.Text type="secondary">{t.ticket_code}</Typography.Text>
+            </Space>
+          </div>
+        </List.Item>
+      )}
+    />
+  )
+}
+
+function KpiWidget({ config }: { config: any }) {
+  const { data } = useQuery({
+    queryKey: ['monitorOverview'],
+    queryFn: getMonitorOverview,
+    staleTime: 60_000,
+  })
+  
+  const val = useMemo(() => {
+    if (!data) return '-'
+    if (config.path === 'personal.kpis.assigned_active') return data.personal.kpis.assigned_active
+    if (config.path === 'personal.beneficiary_kpis.active') return data.personal.beneficiary_kpis.active
+    if (config.path === 'global.kpis.total_tickets') return data.global?.kpis.total_tickets
+    if (config.path === 'global.kpis.sla_breached') return data.global?.kpis.sla_breached
+    if (config.path === 'distributor.kpis.pending_review') return data.distributor?.kpis.pending_review
+    return '-'
+  }, [data, config.path])
+
+  return (
+    <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%', padding: 12 }}>
+      <Statistic 
+        title={config.label || 'Metric'} 
+        value={val} 
+        valueStyle={{ color: config.color || undefined, fontWeight: 700 }}
+        prefix={config.icon === 'warning' ? <WarningOutlined /> : undefined}
+      />
+    </div>
+  )
+}
+
+function AuditWidget() {
+  const { data, isLoading } = useQuery({
+    queryKey: ['globalAuditWidget'],
+    queryFn: () => listAudit({ limit: 10 }),
+    staleTime: 30_000,
+  })
+
+  if (isLoading) return <div style={{ textAlign: 'center', padding: 20 }}><Spin /></div>
+
+  return (
+    <List
+      size="small"
+      dataSource={(data?.items || []).slice(0, 10)}
+      renderItem={(a: any) => (
+        <List.Item style={{ padding: '8px 12px', fontSize: 12 }}>
+          <List.Item.Meta
+            avatar={<Avatar size="small" icon={<UserOutlined />} />}
+            title={<Typography.Text style={{ fontSize: 12 }}><b>{a.actor_username}</b> {a.action.replace(/_/g, ' ')}</Typography.Text>}
+            description={<Typography.Text type="secondary" style={{ fontSize: 11 }}>{fmtDateTime(a.created_at)}</Typography.Text>}
+          />
+        </List.Item>
+      )}
+    />
+  )
+}
+
+function ProfileWidget() {
+  const user = useSessionStore(s => s.user)
+  const navigate = useNavigate()
+  if (!user) return null
+  return (
+    <div style={{ padding: 16, textAlign: 'center', height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+      <Avatar size={64} icon={<UserOutlined />} style={{ margin: '0 auto 12px', background: '#1677ff' }} />
+      <Typography.Title level={5} style={{ margin: 0 }}>{user.username}</Typography.Title>
+      <Typography.Text type="secondary" style={{ fontSize: 12 }}>{user.email}</Typography.Text>
+      <div style={{ marginTop: 12 }}>
+        <Button size="small" type="link" onClick={() => navigate('/profile')}>View Profile</Button>
+      </div>
+    </div>
+  )
+}
+
+function ShortcutsWidget() {
+  const navigate = useNavigate()
+  return (
+    <div style={{ padding: 16, display: 'grid', gap: 8 }}>
+      <Button block icon={<PlusOutlined />} onClick={() => navigate('/create')}>Create Ticket</Button>
+      <Button block icon={<UnorderedListOutlined />} onClick={() => navigate('/tickets')}>View Queue</Button>
+      <Button block icon={<SendOutlined />} onClick={() => navigate('/monitor')}>Monitor</Button>
+    </div>
+  )
+}
+
 function WidgetRenderer({ widget }: { widget: DashboardWidgetDto }) {
-  const { token } = antTheme.useToken()
-  
-  // Minimal widget previews
-  if (widget.type === 'ticket_list') {
-    return (
-      <div style={{ padding: 12 }}>
-        <Typography.Text type="secondary">Live ticket queue preview...</Typography.Text>
-        {/* Real implementation would fetch listTickets with widget.config params */}
-      </div>
-    )
-  }
-  
-  if (widget.type === 'monitor_kpi') {
-    return (
-      <div style={{ padding: 12, display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
-         <Statistic title={widget.config.label || 'KPI'} value={42} />
-      </div>
-    )
-  }
+  if (widget.type === 'ticket_list') return <TicketListWidget config={widget.config} />
+  if (widget.type === 'monitor_kpi') return <KpiWidget config={widget.config} />
+  if (widget.type === 'audit_stream') return <AuditWidget />
+  if (widget.type === 'profile_card') return <ProfileWidget />
+  if (widget.type === 'shortcuts') return <ShortcutsWidget />
 
   return <Empty description="Unknown widget type" image={Empty.PRESENTED_IMAGE_SIMPLE} />
 }
 
+// ── Dashboard Detail ────────────────────────────────────────────────────────
+
 function DashboardDetail({ dashboardId, onBack }: { dashboardId: string, onBack: () => void }) {
   const { token } = antTheme.useToken()
   const qc = useQueryClient()
+  const user = useSessionStore(s => s.user)
   const [editingTitle, setEditingTitle] = useState(false)
   const [isAddingWidget, setIsAddingWidget] = useState(false)
   const [form] = Form.useForm()
@@ -62,6 +176,7 @@ function DashboardDetail({ dashboardId, onBack }: { dashboardId: string, onBack:
 
   const saveLayout = useMutation({
     mutationFn: async (layout: any[]) => {
+      // Filter only widgets that actually moved/resized to reduce API noise
       for (const item of layout) {
         const w = dashboard?.widgets?.find(w => w.id === item.i)
         if (w && (w.x !== item.x || w.y !== item.y || w.w !== item.w || w.h !== item.h)) {
@@ -73,7 +188,20 @@ function DashboardDetail({ dashboardId, onBack }: { dashboardId: string, onBack:
   })
 
   const addWidget = useMutation({
-    mutationFn: (values: any) => upsertWidget(dashboardId, values),
+    mutationFn: (values: any) => {
+        let config = {}
+        if (values.type === 'ticket_list') {
+            if (values.preset === 'assigned') config = { assignee_user_id: user?.id, status: 'in_progress' }
+            if (values.preset === 'sector') config = { current_sector_code: user?.sectors?.[0]?.sectorCode, status: 'assigned_to_sector' }
+            if (values.preset === 'pending') config = { status: 'pending' }
+        }
+        if (values.type === 'monitor_kpi') {
+            if (values.preset === 'breached') config = { path: 'global.kpis.sla_breached', label: 'Breached', color: '#f5222d', icon: 'warning' }
+            if (values.preset === 'assigned') config = { path: 'personal.kpis.assigned_active', label: 'My Active' }
+            if (values.preset === 'pending') config = { path: 'distributor.kpis.pending_review', label: 'Triage Queue' }
+        }
+        return upsertWidget(dashboardId, { ...values, config, x: 0, y: 0, w: 4, h: 6 })
+    },
     onSuccess: () => {
       setIsAddingWidget(false)
       form.resetFields()
@@ -123,6 +251,7 @@ function DashboardDetail({ dashboardId, onBack }: { dashboardId: string, onBack:
 
       <div style={{ background: 'rgba(0,0,0,0.02)', borderRadius: 12, minHeight: 'calc(100vh - 200px)', padding: 8 }}>
         <ResponsiveGridLayout
+          key={dashboard.widgets?.length} // CRITICAL: Forces rebuild when widget count changes to fix "no-refresh" bug
           className="layout"
           layouts={layouts}
           breakpoints={{ lg: 1200, md: 996, sm: 768, xs: 480, xxs: 0 }}
@@ -152,7 +281,7 @@ function DashboardDetail({ dashboardId, onBack }: { dashboardId: string, onBack:
       </div>
 
       <Modal title="Add Widget" open={isAddingWidget} onCancel={() => setIsAddingWidget(false)} onOk={() => form.submit()}>
-        <Form form={form} layout="vertical" onFinish={(v) => addWidget.mutate({ ...v, x: 0, y: 0, w: 4, h: 6 })} initialValues={{ type: 'ticket_list' }}>
+        <Form form={form} layout="vertical" onFinish={addWidget.mutate} initialValues={{ type: 'ticket_list', preset: 'assigned' }}>
           <Form.Item name="title" label="Widget Title" rules={[{ required: true }]}>
             <Input placeholder="E.g., My Active Tickets" />
           </Form.Item>
@@ -160,13 +289,39 @@ function DashboardDetail({ dashboardId, onBack }: { dashboardId: string, onBack:
             <Select options={[
               { value: 'ticket_list', label: 'Ticket List' },
               { value: 'monitor_kpi', label: 'KPI Stat' },
+              { value: 'audit_stream', label: 'Audit Pulse' },
+              { value: 'profile_card', label: 'Profile Card' },
+              { value: 'shortcuts', label: 'Quick Links' },
             ]} />
+          </Form.Item>
+          <Form.Item noStyle shouldUpdate={(prev, cur) => prev.type !== cur.type}>
+            {({ getFieldValue }) => {
+              const type = getFieldValue('type')
+              if (['profile_card', 'shortcuts', 'audit_stream'].includes(type)) return null
+              return (
+                <Form.Item name="preset" label="Data Preset" rules={[{ required: true }]}>
+                  <Select options={
+                    type === 'ticket_list' ? [
+                      { value: 'assigned', label: 'Tickets assigned to me' },
+                      { value: 'sector', label: 'Sector unassigned queue' },
+                      { value: 'pending', label: 'New/Triage queue (Distributor)' },
+                    ] : [
+                      { value: 'breached', label: 'SLA Breaches (Global)' },
+                      { value: 'assigned', label: 'My active count' },
+                      { value: 'pending', label: 'Triage count' },
+                    ]
+                  } />
+                </Form.Item>
+              )
+            }}
           </Form.Item>
         </Form>
       </Modal>
     </div>
   )
 }
+
+// ── Dashboard List ──────────────────────────────────────────────────────────
 
 export function DashboardPage() {
   const { token } = antTheme.useToken()
