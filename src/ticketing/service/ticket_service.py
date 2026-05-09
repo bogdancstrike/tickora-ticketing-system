@@ -12,6 +12,7 @@ from src.core.pagination import Cursor, clamp_limit
 from src.core.spans import set_attr, span
 from src.iam.principal import Principal
 from src.iam import rbac
+from src.iam.models import User
 from src.ticketing import events
 from src.ticketing.models import (
     Beneficiary, Sector, Ticket, TicketAssignee, TicketSectorAssignment,
@@ -487,13 +488,14 @@ def _sector_codes_for_ticket(db: Session, ticket_id: str) -> list[str]:
     return [code for (code,) in rows]
 
 
-def _assignees_for_ticket(db: Session, ticket_id: str) -> list[str]:
+def _assignees_for_ticket(db: Session, ticket_id: str) -> list[tuple[str, str]]:
     rows = db.execute(
-        select(TicketAssignee.user_id)
+        select(TicketAssignee.user_id, User.username)
+        .join(User, User.id == TicketAssignee.user_id)
         .where(TicketAssignee.ticket_id == ticket_id)
         .order_by(TicketAssignee.is_primary.desc(), TicketAssignee.added_at.asc())
     ).all()
-    return [uid for (uid,) in rows]
+    return [(uid, uname or uid) for (uid, uname) in rows]
 
 
 def _sector_codes_per_ticket(db: Session, ticket_ids: list[str]) -> dict[str, list[str]]:
@@ -511,17 +513,18 @@ def _sector_codes_per_ticket(db: Session, ticket_ids: list[str]) -> dict[str, li
     return {tid: [c for _, c in sorted(items, key=lambda p: (not p[0], p[1]))] for tid, items in out.items()}
 
 
-def _assignees_per_ticket(db: Session, ticket_ids: list[str]) -> dict[str, list[str]]:
+def _assignees_per_ticket(db: Session, ticket_ids: list[str]) -> dict[str, list[tuple[str, str]]]:
     if not ticket_ids:
         return {}
     rows = db.execute(
-        select(TicketAssignee.ticket_id, TicketAssignee.user_id, TicketAssignee.is_primary, TicketAssignee.added_at)
+        select(TicketAssignee.ticket_id, TicketAssignee.user_id, User.username, TicketAssignee.is_primary, TicketAssignee.added_at)
+        .join(User, User.id == TicketAssignee.user_id)
         .where(TicketAssignee.ticket_id.in_(ticket_ids))
     ).all()
-    out: dict[str, list[tuple[bool, str, Any]]] = {}
-    for tid, uid, is_primary, added_at in rows:
-        out.setdefault(tid, []).append((bool(is_primary), uid, added_at))
+    out: dict[str, list[tuple[bool, str, str, Any]]] = {}
+    for tid, uid, uname, is_primary, added_at in rows:
+        out.setdefault(tid, []).append((bool(is_primary), uid, uname or uid, added_at))
     return {
-        tid: [u for _, u, _ in sorted(items, key=lambda p: (not p[0], p[2]))]
+        tid: [(uid, uname) for _, uid, uname, _ in sorted(items, key=lambda p: (not p[0], p[3]))]
         for tid, items in out.items()
     }

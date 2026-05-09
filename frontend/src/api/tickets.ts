@@ -34,6 +34,8 @@ export interface TicketDto {
   sector_codes?: string[]
   /** All users assigned to this ticket (primary first). */
   assignee_user_ids?: string[]
+  /** All usernames of users assigned to this ticket. */
+  assignee_usernames?: string[]
   created_at?: string | null
   updated_at?: string | null
   done_at?: string | null

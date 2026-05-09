@@ -32,10 +32,10 @@ def serialize_ticket(t: Ticket, p: Principal, *, full: bool = True) -> dict[str,
         "beneficiary_type": t.beneficiary_type,
         "title":            t.title,
         "current_sector_code": sector_code,
-        # Multi-assignment lists hydrated by the service. Empty = falls back to
-        # the legacy single-valued primary fields below.
+        # Multi-assignment lists hydrated by the service.
         "sector_codes":     list(getattr(t, "sector_codes", []) or []),
-        "assignee_user_ids": list(getattr(t, "assignee_user_ids", []) or []),
+        "assignee_user_ids": [uid for uid, _ in getattr(t, "assignee_user_ids", []) or []],
+        "assignee_usernames": [uname for _, uname in getattr(t, "assignee_user_ids", []) or []],
         "created_at":       _iso(t.created_at),
         "updated_at":       _iso(t.updated_at),
         "done_at":          _iso(t.done_at),

@@ -1,9 +1,9 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { Alert, Button, Empty, Flex, Space, Statistic, Table, Tag, Typography, theme as antTheme } from 'antd'
+import { Alert, Button, Empty, Flex, Modal, Space, Statistic, Table, Tag, Typography, theme as antTheme } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
-import { ReloadOutlined } from '@ant-design/icons'
+import { ReloadOutlined, UserOutlined } from '@ant-design/icons'
 import { listTickets, type TicketDto } from '@/api/tickets'
 import { StatusTag } from '@/components/common/StatusTag'
 import { PriorityTag } from '@/components/common/PriorityTag'
@@ -12,6 +12,7 @@ import { fmtDateTime, fmtRelative } from '@/components/common/format'
 export function ReviewTicketsPage() {
   const navigate = useNavigate()
   const { token } = antTheme.useToken()
+  const [modalUsers, setModalUsers] = useState<string[] | null>(null)
 
   const queue = useQuery({
     queryKey: ['reviewTickets'],
@@ -74,14 +75,45 @@ export function ReviewTicketsPage() {
     },
     {
       title: 'Sector',
-      dataIndex: 'current_sector_code',
-      width: 140,
-      render: (value) => value ? <Tag>{value}</Tag> : '-',
-      sorter: (a, b) => (a.current_sector_code || '').localeCompare(b.current_sector_code || ''),
+      dataIndex: 'sector_codes',
+      width: 180,
+      render: (values: string[], row) => {
+        const codes = values?.length ? values : (row.current_sector_code ? [row.current_sector_code] : [])
+        if (!codes.length) return '-'
+        return (
+          <Space wrap size={[0, 4]}>
+            {codes.map(code => <Tag key={code} color="blue">{code}</Tag>)}
+          </Space>
+        )
+      },
       filterSearch: true,
-      filters: Array.from(new Set(allTickets.map(t => t.current_sector_code).filter(Boolean) as string[]))
+      filters: Array.from(new Set(allTickets.flatMap(t => t.sector_codes || (t.current_sector_code ? [t.current_sector_code] : [])).filter(Boolean) as string[]))
         .map((v) => ({ text: v as string, value: v as string })),
-      onFilter: (val, row) => row.current_sector_code === val,
+      onFilter: (val, row) => (row.sector_codes || (row.current_sector_code ? [row.current_sector_code] : [])).includes(val as string),
+    },
+    {
+      title: 'Assigned users',
+      dataIndex: 'assignee_usernames',
+      width: 200,
+      render: (values: string[], row) => {
+        const names = values?.length ? values : (row.assignee_user_id ? [row.assignee_user_id.slice(0, 8)] : [])
+        if (!names.length) return <Typography.Text type="secondary" style={{ fontSize: 12 }}>Unassigned</Typography.Text>
+        
+        const limit = 2
+        const visible = names.slice(0, limit)
+        const extra = names.length - limit
+
+        return (
+          <Space wrap size={[0, 4]} onClick={(e) => e.stopPropagation()}>
+            {visible.map((name, idx) => <Tag key={idx} color="cyan">{name}</Tag>)}
+            {extra > 0 && (
+              <Button type="link" size="small" onClick={() => setModalUsers(names)} style={{ padding: 0 }}>
+                +{extra} more
+              </Button>
+            )}
+          </Space>
+        )
+      },
     },
     {
       title: 'Updated',
@@ -154,6 +186,23 @@ export function ReviewTicketsPage() {
         queue.data?.reviewed || [],
         'No reviewed tickets in the queue',
       )}
+
+      <Modal
+        title="Assigned Users"
+        open={!!modalUsers}
+        onCancel={() => setModalUsers(null)}
+        footer={null}
+        width={400}
+      >
+        <div style={{ display: 'grid', gap: 8, maxHeight: 400, overflowY: 'auto', padding: '4px 0' }}>
+          {(modalUsers || []).map((name, idx) => (
+            <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', background: 'rgba(0,0,0,0.02)', borderRadius: 6 }}>
+              <UserOutlined style={{ color: token.colorTextSecondary }} />
+              <Typography.Text strong>{name}</Typography.Text>
+            </div>
+          ))}
+        </div>
+      </Modal>
     </div>
   )
 }

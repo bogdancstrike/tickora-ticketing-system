@@ -11,7 +11,7 @@ import type { UploadFile, UploadProps } from 'antd'
 import {
   CheckCircleOutlined, CloseCircleOutlined, EditOutlined, PlayCircleOutlined,
   PaperClipOutlined, PlusOutlined, ReloadOutlined, RetweetOutlined, StopOutlined, UserSwitchOutlined,
-  UserAddOutlined, UserDeleteOutlined, DownOutlined,
+  UserAddOutlined, UserDeleteOutlined, DownOutlined, UserOutlined,
 } from '@ant-design/icons'
 import { Dropdown } from 'antd'
 import {
@@ -738,6 +738,7 @@ export function TicketsPage() {
   const [search, setSearch] = useState<string>('')
   const [sortBy, setSortBy] = useState<'created_at' | 'updated_at' | 'ticket_code' | 'priority' | 'status' | 'title'>('created_at')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
+  const [modalUsers, setModalUsers] = useState<string[] | null>(null)
   const me = useSessionBootstrap()
   const tickets = useQuery({
     queryKey: ['tickets', status, priority, sector, search, sortBy, sortDir],
@@ -808,13 +809,45 @@ export function TicketsPage() {
     },
     {
       title: 'Sector',
-      dataIndex: 'current_sector_code',
-      width: 140,
-      render: (value) => value ? <Tag>{value}</Tag> : '-',
+      dataIndex: 'sector_codes',
+      width: 160,
+      render: (values: string[], row) => {
+        const codes = values?.length ? values : (row.current_sector_code ? [row.current_sector_code] : [])
+        if (!codes.length) return '-'
+        return (
+          <Space wrap size={[0, 4]}>
+            {codes.map(code => <Tag key={code}>{code}</Tag>)}
+          </Space>
+        )
+      },
       filters: sectorFilterOptions,
       filteredValue: sector ? [sector] : null,
       filterMultiple: false,
       filterSearch: true,
+    },
+    {
+      title: 'Assigned users',
+      dataIndex: 'assignee_usernames',
+      width: 180,
+      render: (values: string[], row) => {
+        const names = values?.length ? values : (row.assignee_user_id ? [row.assignee_user_id.slice(0, 8)] : [])
+        if (!names.length) return <Typography.Text type="secondary" style={{ fontSize: 12 }}>Unassigned</Typography.Text>
+        
+        const limit = 2
+        const visible = names.slice(0, limit)
+        const extra = names.length - limit
+
+        return (
+          <Space wrap size={[0, 4]} onClick={(e) => e.stopPropagation()}>
+            {visible.map((name, idx) => <Tag key={idx} color="cyan">{name}</Tag>)}
+            {extra > 0 && (
+              <Button type="link" size="small" onClick={() => setModalUsers(names)} style={{ padding: 0 }}>
+                +{extra} more
+              </Button>
+            )}
+          </Space>
+        )
+      },
     },
     {
       title: 'Created',
@@ -835,6 +868,7 @@ export function TicketsPage() {
 
   return (
     <div style={{ padding: 24, display: 'grid', gap: 16 }}>
+      {holder}
       <Flex justify="space-between" align="center" wrap="wrap" gap={12}>
         <div>
           <Typography.Title level={3} style={{ margin: 0 }}>Tickets</Typography.Title>
@@ -889,6 +923,23 @@ export function TicketsPage() {
           scroll={{ x: 860 }}
         />
       </div>
+
+      <Modal
+        title="Assigned Users"
+        open={!!modalUsers}
+        onCancel={() => setModalUsers(null)}
+        footer={null}
+        width={400}
+      >
+        <div style={{ display: 'grid', gap: 8, maxHeight: 400, overflowY: 'auto', padding: '4px 0' }}>
+          {(modalUsers || []).map((name, idx) => (
+            <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', background: 'rgba(0,0,0,0.02)', borderRadius: 6 }}>
+              <UserOutlined style={{ color: token.colorTextSecondary }} />
+              <Typography.Text strong>{name}</Typography.Text>
+            </div>
+          ))}
+        </div>
+      </Modal>
     </div>
   )
 }
