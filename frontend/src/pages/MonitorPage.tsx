@@ -9,14 +9,11 @@ import type { ColumnsType } from 'antd/es/table'
 import { ReloadOutlined } from '@ant-design/icons'
 import {
   getMonitorOverview, getMonitorSector, getTicketOptions, getMonitorUser,
-  listAssignableUsers, type MonitorBreakdown, type MonitorOldTicket,
+  listAssignableUsers, type MonitorOldTicket,
   type MonitorSector,
 } from '@/api/tickets'
 import { useSessionStore } from '@/stores/sessionStore'
-
-function labelize(value: string) {
-  return value.split('_').join(' ')
-}
+import { BreakdownChart, DoughnutChart, WorkloadChart, labelize } from '@/components/dashboard/DashboardCharts'
 
 function KpiGrid({ values }: { values: Record<string, number | null | undefined> }) {
   const { token } = antTheme.useToken()
@@ -31,39 +28,6 @@ function KpiGrid({ values }: { values: Record<string, number | null | undefined>
       ))}
     </Row>
   )
-}
-
-function BreakdownChart({ data, title, color = '#1677ff' }: { data: MonitorBreakdown[]; title: string; color?: string }) {
-  if (!data.length) return <Empty description="No data" image={Empty.PRESENTED_IMAGE_SIMPLE} />
-
-  const option = {
-    tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
-    legend: { top: 0, data: [title] },
-    grid: { left: '3%', right: '4%', bottom: '3%', top: 34, containLabel: true },
-    xAxis: { type: 'category', data: data.map((i) => labelize(i.key)), axisTick: { alignWithLabel: true } },
-    yAxis: { type: 'value' },
-    series: [{ name: title, type: 'bar', barWidth: '60%', data: data.map((i) => i.count), itemStyle: { color, borderRadius: [4, 4, 0, 0] } }],
-  }
-  return <ReactECharts option={option} style={{ height: 240 }} />
-}
-
-function DoughnutChart({ data, title }: { data: MonitorBreakdown[]; title: string }) {
-  if (!data.length) return <Empty description="No data" image={Empty.PRESENTED_IMAGE_SIMPLE} />
-  const option = {
-    tooltip: { trigger: 'item', formatter: '{b}: {c} ({d}%)' },
-    legend: { bottom: 0, type: 'scroll' },
-    series: [{
-      name: title,
-      type: 'pie',
-      radius: ['45%', '70%'],
-      avoidLabelOverlap: true,
-      itemStyle: { borderRadius: 4, borderColor: 'transparent', borderWidth: 2 },
-      label: { show: false },
-      labelLine: { show: false },
-      data: data.map((i) => ({ name: labelize(i.key), value: i.count })),
-    }],
-  }
-  return <ReactECharts option={option} style={{ height: 240 }} />
 }
 
 function ChartPanel({ title, description, children }: { title: string; description?: string; children: React.ReactNode }) {
@@ -130,8 +94,24 @@ function SectorPanel({ sector, controls }: { sector: MonitorSector; controls?: R
             <OldestTickets tickets={sector.oldest} />
           </ChartPanel>
         </Col>
-        <Col xs={24}>
-          <ChartPanel title="Workload" description="Active and completed tickets by assignee in this sector.">
+        {sector.bottleneck_analysis?.length ? (
+          <Col xs={24} xl={12}>
+            <ChartPanel title="Bottleneck Analysis" description="Average time spent in each status (minutes).">
+              <BreakdownChart
+                data={sector.bottleneck_analysis.map((b) => ({ key: b.status, count: b.avg_minutes }))}
+                title="Avg Minutes"
+                color="#eb2f96"
+              />
+            </ChartPanel>
+          </Col>
+        ) : null}
+        <Col xs={24} lg={12}>
+          <ChartPanel title="Workload Chart" description="Visual breakdown of active vs done tickets per user.">
+            <WorkloadChart data={sector.workload} height={300} />
+          </ChartPanel>
+        </Col>
+        <Col xs={24} lg={12}>
+          <ChartPanel title="Workload Details" description="Tabular view of active and completed tickets.">
             <Table rowKey="assignee_user_id" size="small" pagination={false} columns={columns} dataSource={sector.workload} />
           </ChartPanel>
         </Col>
@@ -248,7 +228,7 @@ export function MonitorPage() {
         }
       ]
     }
-  }, [overview.data?.timeseries])
+  }, [overview.data])
 
   const tabs = [
     overview.data?.global && {
@@ -273,6 +253,17 @@ export function MonitorPage() {
                 <BreakdownChart data={overview.data.global.by_beneficiary_type} title="Tickets" color="#52c41a" />
               </ChartPanel>
             </Col>
+            {overview.data.global.bottleneck_analysis?.length ? (
+              <Col xs={24} xl={12}>
+                <ChartPanel title="Bottleneck Analysis" description="Average time spent in each status across all sectors (minutes).">
+                  <BreakdownChart
+                    data={overview.data.global.bottleneck_analysis.map((b) => ({ key: b.status, count: b.avg_minutes }))}
+                    title="Avg Minutes"
+                    color="#eb2f96"
+                  />
+                </ChartPanel>
+              </Col>
+            ) : null}
             {overview.data.global.by_category?.length ? (
               <Col xs={24} xl={12}>
                 <ChartPanel title="Categories" description="All non-deleted tickets grouped by category.">
@@ -371,8 +362,6 @@ export function MonitorPage() {
       {selectedSector.error && <Alert type="error" message={selectedSector.error.message} showIcon />}
       {selectedUser.error && <Alert type="error" message={selectedUser.error.message} showIcon />}
 
-      <Tabs items={tabs as any} />
-
       {timeseriesOption && (
         <div style={{ background: token.colorBgContainer, border: `1px solid ${token.colorBorderSecondary}`, borderRadius: 8, padding: 16, minHeight: 280, boxShadow: token.boxShadowTertiary }}>
           <Typography.Title level={5} style={{ marginTop: 0 }}>Created vs Closed · last 30 days</Typography.Title>
@@ -382,6 +371,8 @@ export function MonitorPage() {
           <ReactECharts option={timeseriesOption} style={{ height: 260 }} />
         </div>
       )}
+
+      <Tabs items={tabs as any} />
     </div>
   )
 }

@@ -9,10 +9,11 @@ import {
 import {
   AppstoreAddOutlined, AppstoreOutlined, DeleteOutlined, EditOutlined, PlusOutlined,
   ReloadOutlined, SaveOutlined, SettingOutlined, UserOutlined, WarningOutlined,
-  ClockCircleOutlined, AuditOutlined, UnorderedListOutlined, CheckCircleOutlined,
-  SendOutlined, ThunderboltOutlined, SearchOutlined, BarChartOutlined, PieChartOutlined,
-  MessageOutlined, FieldTimeOutlined, DatabaseOutlined, DashboardOutlined,
-  CarryOutOutlined, SmileOutlined, InfoCircleOutlined, TeamOutlined,
+  AuditOutlined, UnorderedListOutlined,
+  SendOutlined, ThunderboltOutlined, BarChartOutlined, PieChartOutlined,
+  MessageOutlined, FieldTimeOutlined, DatabaseOutlined,
+  CarryOutOutlined, SmileOutlined, TeamOutlined, HistoryOutlined, LineChartOutlined,
+  ClockCircleOutlined, CheckCircleOutlined, SearchOutlined, DashboardOutlined, InfoCircleOutlined,
 } from '@ant-design/icons'
 import { Responsive, WidthProvider } from 'react-grid-layout'
 import 'react-grid-layout/css/styles.css'
@@ -31,6 +32,7 @@ import { PriorityTag, PRIORITY_OPTIONS } from '@/components/common/PriorityTag'
 import { fmtDateTime } from '@/components/common/format'
 import { useNavigate } from 'react-router-dom'
 import { apiClient } from '@/api/client'
+import { BreakdownChart, WorkloadChart } from '@/components/dashboard/DashboardCharts'
 
 const ResponsiveGridLayout = WidthProvider(Responsive)
 
@@ -428,12 +430,83 @@ function UserWorkloadWidget({ config }: { config: any }) {
         dataSource={data?.workload || []} 
         rowKey="assignee_user_id"
         columns={[
-          { title: 'Operator', dataIndex: 'username', render: v => v || 'Unassigned' },
+          { title: 'Operator', dataIndex: 'username', render: (v: string) => v || 'Unassigned' },
           showActive && { title: 'Active', dataIndex: 'active', align: 'right' as const },
           showDone && { title: 'Done', dataIndex: 'done', align: 'right' as const },
         ].filter(Boolean) as any}
       />
     )
+}
+
+function StaleTicketsWidget({ config }: { config: any }) {
+    const navigate = useNavigate()
+    const { data, isLoading } = useQuery<any>({
+        queryKey: ['monitorStale', config.sectorCode, config.hours],
+        queryFn: () => config.sectorCode ? getMonitorSector(config.sectorCode) : getMonitorOverview(),
+        staleTime: 60_000,
+    })
+
+    if (isLoading) return <div style={{ textAlign: 'center', padding: 20 }}><Spin /></div>
+
+    const tickets = (config.sectorCode ? (data as any)?.stale_tickets : (data as any)?.stale_tickets) || []
+
+    return (
+        <List
+            size="small"
+            dataSource={tickets}
+            locale={{ emptyText: <Empty description="No stale tickets" image={Empty.PRESENTED_IMAGE_SIMPLE} /> }}
+            renderItem={(t: any) => (
+                <List.Item
+                    style={{ padding: '8px 12px', cursor: 'pointer' }}
+                    onClick={() => navigate(`/tickets/${t.id}`)}
+                    className="tickora-row-clickable"
+                >
+                    <div style={{ display: 'grid', gap: 2, width: '100%' }}>
+                        <Flex justify="space-between" align="center">
+                            <Typography.Text strong ellipsis style={{ fontSize: 13 }}>{t.title || t.ticket_code}</Typography.Text>
+                            <StatusTag status={t.status} />
+                        </Flex>
+                        <Space size={4} style={{ fontSize: 11 }}>
+                            <PriorityTag priority={t.priority} />
+                            <Typography.Text type="secondary">{t.ticket_code}</Typography.Text>
+                        </Space>
+                    </div>
+                </List.Item>
+            )}
+        />
+    )
+}
+
+function WorkloadBalancerWidget({ config }: { config: any }) {
+    const { data, isLoading } = useQuery({
+        queryKey: ['monitorSector', config.sectorCode],
+        queryFn: () => getMonitorSector(config.sectorCode!),
+        enabled: !!config.sectorCode,
+        staleTime: 60_000,
+    })
+
+    if (!config.sectorCode) return <div style={{ padding: 20 }}><Empty description="Configure sector" image={Empty.PRESENTED_IMAGE_SIMPLE} /></div>
+    if (isLoading) return <div style={{ textAlign: 'center', padding: 20 }}><Spin /></div>
+
+    return <WorkloadChart data={data?.workload || []} height={200} />
+}
+
+function BottleneckWidget({ config }: { config: any }) {
+    const { data, isLoading } = useQuery<any>({
+        queryKey: ['monitorBottleneck', config.sectorCode],
+        queryFn: () => config.sectorCode ? getMonitorSector(config.sectorCode) : getMonitorOverview(),
+        staleTime: 60_000,
+    })
+
+    if (isLoading) return <div style={{ textAlign: 'center', padding: 20 }}><Spin /></div>
+
+    const analysis = (config.sectorCode ? (data as any)?.bottleneck_analysis : (data as any)?.global?.bottleneck_analysis) || []
+    const chartData = analysis.map((item: any) => ({
+        key: item.status,
+        count: item.avg_minutes
+    }))
+
+    return <BreakdownChart data={chartData} title="Avg. Minutes per Status" height={200} />
 }
 
 const WIDGET_TYPES = [
@@ -444,6 +517,9 @@ const WIDGET_TYPES = [
     { type: 'recent_comments', label: 'Recent Comments', icon: <MessageOutlined />, configurable: true },
     { type: 'sector_stats', label: 'Sector Chart', icon: <PieChartOutlined />, configurable: true },
     { type: 'user_workload', label: 'User Workload', icon: <TeamOutlined />, configurable: true },
+    { type: 'stale_tickets', label: 'Stale Tickets', icon: <HistoryOutlined />, configurable: true },
+    { type: 'workload_balancer', label: 'Workload Balancer', icon: <BarChartOutlined />, configurable: true },
+    { type: 'bottleneck_analysis', label: 'Bottleneck Analysis', icon: <LineChartOutlined />, configurable: true },
     { type: 'shortcuts', label: 'Quick Links', icon: <SendOutlined />, configurable: true },
     { type: 'clock', label: 'Clock', icon: <FieldTimeOutlined />, configurable: false },
     { type: 'system_health', label: 'System Health', icon: <DatabaseOutlined />, configurable: false },
@@ -464,6 +540,9 @@ function WidgetRenderer({ widget }: { widget: DashboardWidgetDto }) {
   if (widget.type === 'sector_stats') return <SectorStatsWidget config={widget.config} />
   if (widget.type === 'user_workload') return <UserWorkloadWidget config={widget.config} />
   if (widget.type === 'recent_comments') return <RecentCommentsWidget config={widget.config} />
+  if (widget.type === 'stale_tickets') return <StaleTicketsWidget config={widget.config} />
+  if (widget.type === 'workload_balancer') return <WorkloadBalancerWidget config={widget.config} />
+  if (widget.type === 'bottleneck_analysis') return <BottleneckWidget config={widget.config} />
 
   return <Empty description={`Widget type ${widget.type} coming soon`} image={Empty.PRESENTED_IMAGE_SIMPLE} />
 }
@@ -754,7 +833,7 @@ function DashboardDetail({ dashboardId, onBack }: { dashboardId: string, onBack:
                     </Form.Item>
                   )
               }
-              if (type === 'sector_stats' || type === 'user_workload') {
+              if (type === 'sector_stats' || type === 'user_workload' || type === 'workload_balancer' || type === 'bottleneck_analysis') {
                  return (
                     <>
                         <SectorSelect name={['config', 'sectorCode']} label="Target Sector" />
@@ -770,6 +849,16 @@ function DashboardDetail({ dashboardId, onBack }: { dashboardId: string, onBack:
                         )}
                     </>
                  )
+              }
+              if (type === 'stale_tickets') {
+                  return (
+                    <>
+                        <SectorSelect name={['config', 'sectorCode']} label="Target Sector (Optional)" />
+                        <Form.Item name={['config', 'hours']} label="Inactivity Threshold (Hours)" initialValue={24}>
+                            <Select options={[1, 4, 8, 12, 24, 48, 72].map(v => ({ value: v, label: `${v} hours` }))} />
+                        </Form.Item>
+                    </>
+                  )
               }
               if (type === 'recent_comments') {
                   return (

@@ -158,6 +158,12 @@ export interface MonitorOldTicket {
   created_at: string | null
 }
 
+export interface MonitorBottleneck {
+  status: string
+  avg_minutes: number
+  count: number
+}
+
 export interface MonitorSector {
   sector_code: string
   sector_name: string
@@ -167,6 +173,8 @@ export interface MonitorSector {
   by_category: MonitorBreakdown[]
   workload: Array<{ assignee_user_id: string; username: string; active: number; done: number }>
   oldest: MonitorOldTicket[]
+  stale_tickets?: MonitorOldTicket[]
+  bottleneck_analysis?: MonitorBottleneck[]
 }
 
 export interface MonitorTimeseriesPoint {
@@ -185,6 +193,8 @@ export interface MonitorOverview {
     by_category: MonitorBreakdown[]
     by_sector: Array<{ sector_code: string; sector_name: string; count: number }>
     top_backlog_sectors: Array<{ sector_code: string; sector_name: string; count: number }>
+    stale_tickets?: MonitorOldTicket[]
+    bottleneck_analysis?: MonitorBottleneck[]
   } | null
   distributor?: {
     kpis: Record<string, number | null>
@@ -204,6 +214,7 @@ export interface MonitorOverview {
     oldest: MonitorOldTicket[]
   }
   timeseries: MonitorTimeseriesPoint[]
+  stale_tickets?: MonitorOldTicket[]
 }
 
 export interface DashboardWidgetDto {
@@ -264,7 +275,7 @@ export const reviewTicket = async (ticketId: string, payload: ReviewTicketPayloa
 }
 
 export const changeTicketStatus = async (ticketId: string, status: string, reason?: string): Promise<TicketDto> => {
-  const { data } = await apiClient.post(`/api/tickets/${ticketId}/status`, { status, reason })
+  const { data } = await apiClient.post(`/api/tickets/${ticketId}/change-status`, { status, reason })
   return data
 }
 

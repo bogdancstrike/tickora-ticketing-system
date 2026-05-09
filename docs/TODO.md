@@ -141,14 +141,14 @@ Legend: `[x]` done · `[~]` partial · `[ ]` pending
       (`sector_codes`, `assignee_user_ids`), endpoint map entries, service helpers, and frontend client
       methods are present; remaining UI polish and regression testing are still in progress.
 - [x] Profile page: chief sees a force-graph of their sector members
-- [~] Profile page: "Teams I lead" redesign with maximize/minimize fullscreen view is in progress.
-- [~] Profile page access tree for hierarchical RBAC is planned/in progress so users can see the
+- [x] Profile page: "Teams I lead" redesign with maximize/minimize fullscreen view is in progress.
+- [x] Profile page access tree for hierarchical RBAC is planned/in progress so users can see the
       sectors and members implied by their group tree.
 - [x] Reusable common components: StatusTag, PriorityTag, AuditTimeline, format helpers, StatusChanger
 
 ## Phase 7 — Modern features (MVP-3)
 
-- [ ] FTS surface, auto-suggest sector, duplicate detection, parent/child links,
+- [~] FTS surface, auto-suggest sector, duplicate detection, parent/child links,
       watchers, mentions, attachements (via Minio, keep in mind the RBAC and who can see what), templates, beneficiary feedback, auto-escalation
 
 ## Phase 8 — Hardening
@@ -203,10 +203,3 @@ Legend: `[x]` done · `[~]` partial · `[ ]` pending
 | `tests/integration/test_dashboard_service.py` | 2 | 🟡 added; requires `testcontainers` locally |
 | `tests/integration/test_notifications.py` | 3 | 🟡 added; requires `testcontainers` locally |
 | **Tracked total**                           | **95** | **🟡 broader local integration dependency may require Docker/testcontainers** |
-
----
-
-## Open questions (architecture §18)
-
-1. External beneficiary auth path — Keycloak realm or magic-link?
-3. Email provider — SMTP relay or transactional service?

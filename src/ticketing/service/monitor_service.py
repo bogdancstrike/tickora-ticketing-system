@@ -17,7 +17,7 @@ from src.core.spans import set_attr, span
 from src.iam import rbac
 from src.iam.principal import Principal
 from src.iam.models import User
-from src.ticketing.models import Beneficiary, Sector, SectorMembership, Ticket
+from src.ticketing.models import Beneficiary, Sector, SectorMembership, Ticket, TicketComment, TicketStatusHistory
 from src.ticketing.service.ticket_service import _visibility_filter
 
 ACTIVE_STATUSES = ("pending", "assigned_to_sector", "in_progress", "reopened")
@@ -33,6 +33,7 @@ def monitor_overview(db: Session, principal: Principal) -> dict[str, Any]:
             "sectors": [],
             "personal": monitor_personal(db, principal, principal.user_id),
             "timeseries": monitor_timeseries(db, principal),
+            "stale_tickets": _stale_tickets(db, principal),
         }
         if rbac.can_view_global_dashboard(principal):
             payload["global"] = monitor_global(db, principal)
@@ -61,6 +62,8 @@ def monitor_global(db: Session, principal: Principal) -> dict[str, Any]:
         "by_category": _breakdown(db, Ticket.category),
         "by_sector": _sector_breakdown(db),
         "top_backlog_sectors": _sector_breakdown(db, active_only=True, limit=5),
+        "stale_tickets": _stale_tickets(db, principal, hours=24, limit=10),
+        "bottleneck_analysis": _bottleneck_analysis(db, days=30),
     }
 
 
@@ -107,6 +110,8 @@ def monitor_sector(db: Session, principal: Principal, sector_code: str) -> dict[
         "by_category": _breakdown(db, Ticket.category, sector_id=sector_row.id),
         "workload": _workload(db, sector_row.id),
         "oldest": _oldest_tickets(db, sector_id=sector_row.id, status=ACTIVE_STATUSES, limit=5),
+        "stale_tickets": _stale_tickets(db, principal, sector_id=sector_row.id, hours=24, limit=10),
+        "bottleneck_analysis": _bottleneck_analysis(db, sector_id=sector_row.id, days=30),
     }
 
 
@@ -394,6 +399,95 @@ def _daily_counts(db: Session, stmt, column, start: datetime) -> dict[str, int]:
     day = func.date_trunc("day", col).label("day")
     rows = db.execute(select(day, func.count()).select_from(base).group_by(day)).all()
     return {value.date().isoformat(): int(count) for value, count in rows if value}
+
+
+def _stale_tickets(db: Session, principal: Principal, *, sector_id: str | None = None, hours: int = 24, limit: int = 10) -> list[dict[str, Any]]:
+    now = datetime.now(timezone.utc)
+    threshold = now - timedelta(hours=hours)
+
+    # Subquery: find all ticket_ids that HAVE a recent activity (comments)
+    recent_activity = select(TicketComment.ticket_id).where(
+        TicketComment.created_at >= threshold,
+        TicketComment.is_deleted.is_(False)
+    )
+
+    stmt = _visible_stmt(principal).where(
+        Ticket.status.in_(ACTIVE_STATUSES),
+        Ticket.created_at < threshold,
+        ~Ticket.id.in_(recent_activity)
+    )
+    
+    if sector_id:
+        stmt = stmt.where(Ticket.current_sector_id == sector_id)
+
+    rows = db.scalars(stmt.order_by(Ticket.created_at.asc()).limit(limit)).all()
+    
+    return [
+        {
+            "id": t.id,
+            "ticket_code": t.ticket_code,
+            "title": t.title,
+            "status": t.status,
+            "priority": t.priority,
+            "created_at": t.created_at.isoformat(),
+            "last_activity_at": None,
+        }
+        for t in rows
+    ]
+
+
+def _bottleneck_analysis(db: Session, sector_id: str | None = None, days: int = 30) -> list[dict[str, Any]]:
+    threshold = datetime.now(timezone.utc) - timedelta(days=days)
+
+    # We want to find durations of each status.
+    # For a given history entry h, the duration of h.old_status is
+    # h.created_at - (previous h.created_at OR ticket.created_at).
+
+    # Subquery to get history with previous timestamp
+    h = TicketStatusHistory.__table__.alias("h")
+    t = Ticket.__table__.alias("t")
+
+    prev_at = func.lag(h.c.created_at).over(partition_by=h.c.ticket_id, order_by=h.c.created_at)
+    # If prev_at is null, it means it's the first transition, so use ticket.created_at
+    started_at = func.coalesce(prev_at, t.c.created_at)
+    duration_sec = func.extract("epoch", h.c.created_at - started_at)
+
+    inner_stmt = (
+        select(
+            h.c.old_status.label("status"),
+            duration_sec.label("duration")
+        )
+        .join(t, t.c.id == h.c.ticket_id)
+        .where(t.c.status == "closed")
+        .where(t.c.closed_at >= threshold)
+        .where(t.c.is_deleted.is_(False))
+    )
+
+    if sector_id:
+        inner_stmt = inner_stmt.where(t.c.current_sector_id == sector_id)
+
+    subq = inner_stmt.subquery()
+
+    stmt = (
+        select(
+            subq.c.status,
+            func.avg(subq.c.duration).label("avg_duration_sec"),
+            func.count().label("transition_count")
+        )
+        .group_by(subq.c.status)
+        .order_by(func.avg(subq.c.duration).desc())
+    )
+
+    results = db.execute(stmt).all()
+
+    return [
+        {
+            "status": row.status or "pending",
+            "avg_minutes": round(float(row.avg_duration_sec) / 60, 1) if row.avg_duration_sec is not None else 0,
+            "count": int(row.transition_count)
+        }
+        for row in results
+    ]
 
 
 def _can_view_user_dashboard(db: Session, principal: Principal, user_id: str) -> bool:
