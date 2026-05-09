@@ -294,7 +294,8 @@ def list_(
     filters: dict[str, Any] | None = None,
     cursor_token: str | None = None,
     limit: int | None = None,
-) -> tuple[list[Ticket], str | None]:
+    offset: int | None = None,
+) -> tuple[list[Ticket], str | None, int]:
     """Lists tickets visible to the principal, supporting filtering and pagination.
 
     Args:
@@ -303,16 +304,17 @@ def list_(
         filters: Optional filters (status, priority, sector, search, etc.).
         cursor_token: Optional token for cursor-based pagination (created_at desc).
         limit: Max number of items to return.
+        offset: Optional offset for page-based pagination.
 
     Returns:
-        A tuple of (list of tickets, next_cursor_token).
+        A tuple of (list of tickets, next_cursor_token, total_count).
     """
     with span("ticket.list", username=principal.username, user_id=principal.user_id) as current:
-
-        rows, next_token = _list(db, principal, filters=filters, cursor_token=cursor_token, limit=limit)
+        rows, next_token, total = _list(db, principal, filters=filters, cursor_token=cursor_token, limit=limit, offset=offset)
         set_attr(current, "ticket.count", len(rows))
+        set_attr(current, "ticket.total", total)
         set_attr(current, "pagination.has_next", bool(next_token))
-        return rows, next_token
+        return rows, next_token, total
 
 
 def _list(
@@ -322,7 +324,8 @@ def _list(
     filters: dict[str, Any] | None = None,
     cursor_token: str | None = None,
     limit: int | None = None,
-) -> tuple[list[Ticket], str | None]:
+    offset: int | None = None,
+) -> tuple[list[Ticket], str | None, int]:
     filters = filters or {}
     limit = clamp_limit(limit, default=50, max_=200)
 
@@ -390,6 +393,9 @@ def _list(
             )
         )
 
+    # ── Count ─────────────────────────────────────────────────────────────
+    total_count = int(db.scalar(select(func.count()).select_from(stmt.subquery())) or 0)
+
     # ── Sort + cursor (cursor only supported on created_at-desc) ───────────
     sort_by = (filters.get("sort_by") or "created_at")
     sort_dir = (filters.get("sort_dir") or "desc").lower()
@@ -411,14 +417,19 @@ def _list(
                 and_(Ticket.created_at == cursor.sort_value, Ticket.id < cursor.id),
             )
         )
-    stmt = stmt.order_by(direction(sort_col), direction(Ticket.id)).limit(limit + 1)
+    
+    stmt = stmt.order_by(direction(sort_col), direction(Ticket.id))
+    
+    if offset is not None:
+        stmt = stmt.offset(offset)
+        
+    stmt = stmt.limit(limit + 1)
 
     rows = list(db.scalars(stmt))
     next_token: str | None = None
     if len(rows) > limit:
         nxt = rows[limit - 1]
-        # Cursor is only emitted for the default sort (created_at desc) — non-default
-        # sorts fall back to offset-style pagination (or repeated requests with a smaller limit).
+        # Cursor is only emitted for the default sort (created_at desc)
         if sort_by == "created_at" and sort_dir == "desc":
             next_token = Cursor(sort_value=nxt.created_at, id=nxt.id).encode()
         rows = rows[:limit]

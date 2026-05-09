@@ -50,16 +50,17 @@ def list_tickets(app, operation, request, *, principal: Principal, **kwargs):
         raise ValidationError("invalid query", details={"errors": e.errors()})
 
     with get_db() as db:
-        items, next_cursor = ticket_service.list_(
+        items, next_cursor, total = ticket_service.list_(
             db, principal,
             filters={
                 k: v for k, v in q.model_dump(mode="json").items()
-                if k not in ("cursor", "limit") and v is not None
+                if k not in ("cursor", "limit", "offset") and v is not None
             },
             cursor_token=q.cursor,
             limit=q.limit,
+            offset=q.offset,
         )
-        return (list_response(items, principal, next_cursor), 200)
+        return (list_response(items, principal, next_cursor, total), 200)
 
 
 @require_authenticated

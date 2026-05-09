@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import ReactECharts from 'echarts-for-react'
 import {
   Alert, Button, Col, Empty, Flex, List, Row, Select, Space, Statistic, Table, Tabs, Tag,
-  Typography, theme as antTheme,
+  Typography, theme as antTheme, Spin,
 } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
 import { ReloadOutlined } from '@ant-design/icons'
@@ -194,6 +194,9 @@ export function MonitorPage() {
 
   const activeSector = selectedSector.data || overview.data?.sectors[0]
   const personal = selectedUser.data || overview.data?.personal
+
+  if (overview.isLoading) return <div style={{ padding: 100, textAlign: 'center' }}><Spin size="large" /></div>
+
   const sectorControls = canSelectSector ? (
     <Space wrap>
       <Select

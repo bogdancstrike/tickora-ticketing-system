@@ -226,7 +226,7 @@ function AuditWidget({ config }: { config: any }) {
             <div style={{ flex: 1 }}>
               <Typography.Text style={{ fontSize: 12 }}><b>{a.actor_username}</b> {a.action.replace(/_/g, ' ')}</Typography.Text>
               <div style={{ marginTop: 4 }}>
-                <Space direction="vertical" size={0}>
+                <Space orientation="vertical" size={0}>
                    <Typography.Text type="secondary" style={{ fontSize: 11 }}>{fmtDateTime(a.created_at)}</Typography.Text>
                    {a.ticket_id && <Typography.Text type="link" style={{ fontSize: 10 }}>Ticket: {a.ticket_id.slice(0,8)}</Typography.Text>}
                 </Space>
@@ -1157,6 +1157,8 @@ export function DashboardPage() {
   if (activeDashboardId) {
     return <div style={{ padding: 24 }}><DashboardDetail dashboardId={activeDashboardId} onBack={() => setActiveDashboardId(null)} /></div>
   }
+
+  if (list.isLoading) return <div style={{ padding: 100, textAlign: 'center' }}><Spin size="large" /></div>
 
   return (
     <div style={{ padding: 24, display: 'grid', gap: 24 }}>

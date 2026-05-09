@@ -76,10 +76,11 @@ def serialize_ticket(t: Ticket, p: Principal, *, full: bool = True) -> dict[str,
     return payload
 
 
-def list_response(items: list[Ticket], p: Principal, next_cursor: str | None) -> dict[str, Any]:
+def list_response(items: list[Ticket], p: Principal, next_cursor: str | None, total: int = 0) -> dict[str, Any]:
     return {
         "items": [serialize_ticket(t, p, full=False) for t in items],
         "next_cursor": next_cursor,
+        "total": total,
     }
 
 

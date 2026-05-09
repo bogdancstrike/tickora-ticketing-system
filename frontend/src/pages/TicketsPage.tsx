@@ -3,7 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Alert, Button, Card, Checkbox, Col, Descriptions, Empty, Flex, Form, Input, Modal, Row, Select,
-  Space, Table, Tag, Typography, message, theme as antTheme, Upload,
+  Space, Table, Tag, Typography, message, theme as antTheme, Upload, Statistic, Spin,
 } from 'antd'
 import type { ColumnsType, TablePaginationConfig } from 'antd/es/table'
 import type { SorterResult } from 'antd/es/table/interface'
@@ -699,6 +699,8 @@ function TicketDetails({ ticketId }: { ticketId?: string }) {
   if (!ticket && !isLoading) return <div style={{ padding: 80 }}><Empty /></div>
   if (!ticket) return null
 
+  if (isLoading) return <div style={{ padding: 100, textAlign: 'center' }}><Spin size="large" /></div>
+
   return (
     <div style={{ padding: 24, display: 'grid', gap: 16 }}>
       {/* Top breadcrumb / back */}
@@ -800,14 +802,18 @@ export function TicketsPage() {
   const [sortBy, setSortBy] = useState<'created_at' | 'updated_at' | 'ticket_code' | 'priority' | 'status' | 'title'>('created_at')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
   const [modalUsers, setModalUsers] = useState<string[] | null>(null)
+  
+  const [pagination, setPagination] = useState({ current: 1, pageSize: 20 })
+
   const me = useSessionBootstrap()
   const tickets = useQuery({
-    queryKey: ['tickets', status, priority, sector, search, sortBy, sortDir],
+    queryKey: ['tickets', status, priority, sector, search, sortBy, sortDir, pagination],
     queryFn: () => listTickets({
       status, priority, current_sector_code: sector,
       search: search || undefined,
       sort_by: sortBy, sort_dir: sortDir,
-      limit: 100,
+      limit: pagination.pageSize,
+      offset: (pagination.current - 1) * pagination.pageSize
     }),
   })
   const options = useQuery({
@@ -927,6 +933,8 @@ export function TicketsPage() {
     },
   ], [status, priority, sector, sectorFilterOptions, priorityFilterOptions])
 
+  if (isLoading) return <div style={{ padding: 100, textAlign: 'center' }}><Spin size="large" /></div>
+
   return (
     <div style={{ padding: 24, display: 'grid', gap: 16 }}>
       {holder}
@@ -936,6 +944,7 @@ export function TicketsPage() {
           <Typography.Text type="secondary">Operational queue with workflow actions</Typography.Text>
         </div>
         <Space wrap>
+          <Statistic value={tickets.data?.total || 0} suffix="tickets" styles={{ content: { fontSize: 18 } }} style={{ marginRight: 16 }} />
           <Button type="primary" icon={<PlusOutlined />} onClick={() => navigate('/create')}>
             Create Ticket
           </Button>
@@ -959,8 +968,15 @@ export function TicketsPage() {
           loading={tickets.isLoading}
           columns={columns}
           dataSource={tickets.data?.items || []}
-          pagination={{ pageSize: 25, showSizeChanger: true, showTotal: (n) => `${n} tickets` }}
-          onChange={(_p, filters, sorter: SorterResult<TicketDto> | SorterResult<TicketDto>[]) => {
+          pagination={{ 
+            current: pagination.current,
+            pageSize: pagination.pageSize,
+            total: tickets.data?.total || 0,
+            showSizeChanger: true, 
+            showTotal: (n) => `Total ${n} tickets` 
+          }}
+          onChange={(p, filters, sorter: SorterResult<TicketDto> | SorterResult<TicketDto>[]) => {
+            setPagination({ current: p.current || 1, pageSize: p.pageSize || 20 })
             const s = Array.isArray(sorter) ? sorter[0] : sorter
             const field = (s?.field as any)
             if (s?.order && field && ['created_at', 'updated_at', 'ticket_code', 'priority', 'status', 'title'].includes(field)) {

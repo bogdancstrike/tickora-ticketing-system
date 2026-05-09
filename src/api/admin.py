@@ -112,17 +112,18 @@ def upsert_metadata_key(app, operation, request, *, principal: Principal, **kwar
 @require_authenticated
 def ticket_metadatas(app, operation, request, *, principal: Principal, **kwargs):
     limit = int(_arg("limit", 100) or 100)
+    offset = int(_arg("offset", 0) or 0)
     with get_db() as db:
-        return ({
-            "items": admin_service.ticket_metadatas(
-                db,
-                principal,
-                ticket_code=_arg("ticket_code"),
-                key=_arg("key"),
-                search=_arg("search"),
-                limit=limit,
-            )
-        }, 200)
+        items, total = admin_service.ticket_metadatas(
+            db,
+            principal,
+            ticket_code=_arg("ticket_code"),
+            key=_arg("key"),
+            search=_arg("search"),
+            limit=limit,
+            offset=offset,
+        )
+        return ({"items": items, "total": total}, 200)
 
 
 @require_authenticated
@@ -227,4 +228,6 @@ def _serialize_widget_definition(wd: WidgetDefinition) -> dict:
         "required_roles": wd.required_roles,
         "created_at": wd.created_at.isoformat(),
         "updated_at": wd.updated_at.isoformat(),
+    }
+at": wd.updated_at.isoformat(),
     }

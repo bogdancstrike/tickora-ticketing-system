@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { Alert, Button, Empty, Flex, Modal, Space, Statistic, Table, Tag, Typography, theme as antTheme } from 'antd'
+import { Alert, Button, Empty, Flex, Modal, Space, Statistic, Table, Tag, Typography, theme as antTheme, Spin } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
 import { ReloadOutlined, UserOutlined } from '@ant-design/icons'
 import { listTickets, type TicketDto } from '@/api/tickets'
@@ -13,26 +13,34 @@ export function ReviewTicketsPage() {
   const navigate = useNavigate()
   const { token } = antTheme.useToken()
   const [modalUsers, setModalUsers] = useState<string[] | null>(null)
+  
+  const [pendingPage, setPendingPage] = useState({ current: 1, pageSize: 10 })
+  const [reviewedPage, setReviewedPage] = useState({ current: 1, pageSize: 10 })
 
-  const queue = useQuery({
-    queryKey: ['reviewTickets'],
-    queryFn: async () => {
-      const [pending, assigned] = await Promise.all([
-        listTickets({ status: 'pending', limit: 100 }),
-        listTickets({ status: 'assigned_to_sector', limit: 100 }),
-      ])
-      const sortByUpdated = (items: TicketDto[]) =>
-        [...items].sort((a, b) => (b.updated_at || '').localeCompare(a.updated_at || ''))
-      return {
-        pending: sortByUpdated(pending.items),
-        reviewed: sortByUpdated(assigned.items),
-      }
-    },
+  const pendingQueue = useQuery({
+    queryKey: ['reviewTicketsPending', pendingPage],
+    queryFn: () => listTickets({ 
+        status: 'pending', 
+        limit: pendingPage.pageSize, 
+        offset: (pendingPage.current - 1) * pendingPage.pageSize 
+    }),
+    staleTime: 30_000,
   })
-  const allTickets = useMemo(
-    () => [...(queue.data?.pending || []), ...(queue.data?.reviewed || [])],
-    [queue.data],
-  )
+
+  const reviewedQueue = useQuery({
+    queryKey: ['reviewTicketsReviewed', reviewedPage],
+    queryFn: () => listTickets({ 
+        status: 'assigned_to_sector', 
+        limit: reviewedPage.pageSize, 
+        offset: (reviewedPage.current - 1) * reviewedPage.pageSize 
+    }),
+    staleTime: 30_000,
+  })
+
+  const allTickets = useMemo(() => [
+    ...(pendingQueue.data?.items || []),
+    ...(reviewedQueue.data?.items || []),
+  ], [pendingQueue.data, reviewedQueue.data])
 
   const columns: ColumnsType<TicketDto> = useMemo(() => [
     {
@@ -128,9 +136,16 @@ export function ReviewTicketsPage() {
       sorter: (a, b) => (a.updated_at || '').localeCompare(b.updated_at || ''),
       defaultSortOrder: 'descend',
     },
-  ], [allTickets])
+  ], [])
 
-  const tablePanel = (title: string, description: string, items: TicketDto[], emptyText: string) => (
+  const tablePanel = (
+    title: string, 
+    description: string, 
+    query: any, 
+    pagination: { current: number, pageSize: number }, 
+    setPagination: any,
+    emptyText: string
+  ) => (
     <div style={{
       background: token.colorBgContainer,
       border: `1px solid ${token.colorBorderSecondary}`,
@@ -143,14 +158,21 @@ export function ReviewTicketsPage() {
           <Typography.Title level={5} style={{ margin: 0 }}>{title}</Typography.Title>
           <Typography.Text type="secondary">{description}</Typography.Text>
         </div>
-        <Statistic value={items.length} suffix="tickets" />
+        <Statistic value={query.data?.total ?? 0} suffix="tickets" />
       </Flex>
       <Table
         rowKey="id"
-        loading={queue.isLoading}
+        loading={query.isLoading}
         columns={columns}
-        dataSource={items}
-        pagination={{ pageSize: 10, showSizeChanger: true }}
+        dataSource={query.data?.items || []}
+        pagination={{ 
+            current: pagination.current,
+            pageSize: pagination.pageSize,
+            total: query.data?.total || 0,
+            showSizeChanger: true,
+            showTotal: (total) => `Total ${total} items`
+        }}
+        onChange={(p) => setPagination({ current: p.current || 1, pageSize: p.pageSize || 10 })}
         onRow={(record) => ({ onClick: () => navigate(`/review/${record.id}`) })}
         locale={{ emptyText: <Empty description={emptyText} /> }}
         rowClassName={() => 'tickora-row-clickable'}
@@ -158,6 +180,8 @@ export function ReviewTicketsPage() {
       />
     </div>
   )
+
+  if (pendingQueue.isLoading || reviewedQueue.isLoading) return <div style={{ padding: 100, textAlign: 'center' }}><Spin size="large" /></div>
 
   return (
     <div style={{ padding: 24, display: 'grid', gap: 16 }}>
@@ -167,23 +191,28 @@ export function ReviewTicketsPage() {
           <Typography.Text type="secondary">Tickets split by review/routing status</Typography.Text>
         </div>
         <Space wrap>
-          <Button icon={<ReloadOutlined />} onClick={() => queue.refetch()} />
+          <Button icon={<ReloadOutlined />} onClick={() => { pendingQueue.refetch(); reviewedQueue.refetch() }} />
         </Space>
       </Flex>
 
-      {queue.error && <Alert type="error" message={queue.error.message} showIcon />}
+      {pendingQueue.error && <Alert type="error" message={(pendingQueue.error as any).message} showIcon />}
+      {reviewedQueue.error && <Alert type="error" message={(reviewedQueue.error as any).message} showIcon />}
 
       {tablePanel(
         'Not Yet Reviewed',
         'Pending tickets that still need triage, metadata review, and sector routing.',
-        queue.data?.pending || [],
+        pendingQueue,
+        pendingPage,
+        setPendingPage,
         'No tickets waiting for review',
       )}
 
       {tablePanel(
         'Already Reviewed',
         'Tickets already routed to a sector and visible to that sector queue.',
-        queue.data?.reviewed || [],
+        reviewedQueue,
+        reviewedPage,
+        setReviewedPage,
         'No reviewed tickets in the queue',
       )}
 

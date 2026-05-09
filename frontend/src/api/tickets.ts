@@ -60,20 +60,22 @@ export interface TicketDto {
 }
 
 export interface ListTicketParams {
-  status?: string
-  priority?: string
+  status?: string | string[]
+  priority?: string | string[]
   current_sector_code?: string
   assignee_user_id?: string
   search?: string
   sort_by?: string
   sort_dir?: 'asc' | 'desc'
   limit?: number
+  offset?: number
   cursor?: string
 }
 
 export interface TicketListResponse {
   items: TicketDto[]
   next_cursor?: string | null
+  total: number
 }
 
 export interface CreateTicketPayload {

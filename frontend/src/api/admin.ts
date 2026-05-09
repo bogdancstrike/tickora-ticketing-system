@@ -176,13 +176,15 @@ export const upsertAdminMetadataKey = async (payload: AdminMetadataKey): Promise
   return data
 }
 
-export const listAdminTicketMetadatas = async (params?: {
+export const listAdminTicketMetadatas = async (params: {
   search?: string
   ticket_code?: string
   key?: string
-}): Promise<{ items: AdminTicketMetadata[] }> => {
+  limit?: number
+  offset?: number
+} = {}): Promise<{ items: AdminTicketMetadata[]; total: number }> => {
   const { data } = await apiClient.get('/api/admin/ticket-metadatas', {
-    params: { ...params, limit: 200 },
+    params: { ...params, limit: params.limit || 200 },
   })
   return data
 }

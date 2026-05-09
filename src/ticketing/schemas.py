@@ -45,3 +45,4 @@ class ListTicketsQuery(BaseModel):
     sort_dir:             Literal["asc", "desc"] | None = None
     cursor:               str | None = None
     limit:                int | None = Field(default=None, ge=1, le=200)
+    offset:               int | None = Field(default=None, ge=0)

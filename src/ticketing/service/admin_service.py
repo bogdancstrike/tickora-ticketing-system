@@ -358,15 +358,14 @@ def ticket_metadatas(
     key: str | None = None,
     search: str | None = None,
     limit: int = 100,
-) -> list[dict[str, Any]]:
+    offset: int | None = None,
+) -> tuple[list[dict[str, Any]], int]:
     require_admin(principal)
     limit = max(1, min(limit, 250))
     stmt = (
         select(TicketMetadata, Ticket)
         .join(Ticket, Ticket.id == TicketMetadata.ticket_id)
         .where(Ticket.is_deleted.is_(False))
-        .order_by(desc(TicketMetadata.updated_at), Ticket.ticket_code.asc(), TicketMetadata.key.asc())
-        .limit(limit)
     )
     if ticket_code:
         stmt = stmt.where(Ticket.ticket_code.ilike(f"%{ticket_code.strip()}%"))
@@ -381,7 +380,16 @@ def ticket_metadatas(
             Ticket.ticket_code.ilike(term),
             Ticket.title.ilike(term),
         ))
-    return [_serialize_ticket_metadata(row, ticket) for row, ticket in db.execute(stmt)]
+    
+    total = int(db.scalar(select(func.count()).select_from(stmt.subquery())) or 0)
+    
+    stmt = stmt.order_by(desc(TicketMetadata.updated_at), Ticket.ticket_code.asc(), TicketMetadata.key.asc())
+    if offset is not None:
+        stmt = stmt.offset(offset)
+    stmt = stmt.limit(limit)
+
+    results = [_serialize_ticket_metadata(row, ticket) for row, ticket in db.execute(stmt)]
+    return results, total
 
 
 def upsert_ticket_metadata(db: Session, principal: Principal, payload: dict[str, Any]) -> dict[str, Any]:
@@ -818,3 +826,4 @@ def _today_start() -> datetime:
 
 def _dt(value) -> str | None:
     return value.isoformat() if value else None
+value.isoformat() if value else None
