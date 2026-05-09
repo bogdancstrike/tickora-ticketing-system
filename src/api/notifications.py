@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 
 from flask import Response, stream_with_context
 from sqlalchemy import desc, select, update
+from flask import request as flask_request
 
 from framework.commons.logger import logger
 from src.core.db import get_db
@@ -45,6 +46,23 @@ def mark_notifications_read(app, operation, request, *, principal: Principal, **
         db.execute(
             update(Notification)
             .where(Notification.user_id == principal.user_id, Notification.is_read.is_(False))
+            .values(is_read=True, read_at=datetime.now(timezone.utc))
+        )
+        return ({"ok": True}, 200)
+
+
+@require_authenticated
+def mark_notification_read(app, operation, request, *, principal: Principal, **kwargs):
+    """Mark one notification for the current user as read."""
+    notification_id = kwargs.get("notification_id") or flask_request.view_args.get("notification_id")
+    with get_db() as db:
+        db.execute(
+            update(Notification)
+            .where(
+                Notification.id == notification_id,
+                Notification.user_id == principal.user_id,
+                Notification.is_read.is_(False),
+            )
             .values(is_read=True, read_at=datetime.now(timezone.utc))
         )
         return ({"ok": True}, 200)

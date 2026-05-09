@@ -2,8 +2,8 @@ import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
-  Alert, Button, Checkbox, Descriptions, Empty, Flex, Form, Input, List, Modal, Select,
-  Space, Table, Tabs, Tag, Typography, message, theme as antTheme,
+  Alert, Button, Card, Checkbox, Col, Descriptions, Empty, Flex, Form, Input, List, Modal, Row, Select,
+  Space, Table, Tag, Typography, message, theme as antTheme,
 } from 'antd'
 import type { ColumnsType, TablePaginationConfig } from 'antd/es/table'
 import type { SorterResult } from 'antd/es/table/interface'
@@ -532,7 +532,6 @@ function TicketAudit({ ticketId }: { ticketId: string }) {
 }
 
 function TicketSidebar({ ticket }: { ticket: TicketDto }) {
-  const { token } = antTheme.useToken()
   const meta = useQuery({
     queryKey: ['ticketMetadata', ticket.id],
     queryFn: () => listTicketMetadata(ticket.id),
@@ -540,7 +539,7 @@ function TicketSidebar({ ticket }: { ticket: TicketDto }) {
   const items = meta.data?.items || []
   return (
     <div style={{ display: 'grid', gap: 16 }}>
-      <div style={{ border: `1px solid ${token.colorBorderSecondary}`, borderRadius: 8, padding: 14 }}>
+      <Card size="small" title="Details">
         <Typography.Text type="secondary" style={{ fontSize: 12, letterSpacing: '0.05em' }}>DETAILS</Typography.Text>
         <Descriptions size="small" column={1} colon={false} style={{ marginTop: 8 }}>
           <Descriptions.Item label="Sector">{ticket.current_sector_code || '—'}</Descriptions.Item>
@@ -550,11 +549,11 @@ function TicketSidebar({ ticket }: { ticket: TicketDto }) {
           <Descriptions.Item label="SLA">
             {ticket.sla_status
               ? <Tag color={ticket.sla_status === 'breached' ? 'red' : ticket.sla_status === 'at_risk' ? 'orange' : 'green'}>{ticket.sla_status}</Tag>
-              : '—'}
+            : '—'}
           </Descriptions.Item>
         </Descriptions>
-      </div>
-      <div style={{ border: `1px solid ${token.colorBorderSecondary}`, borderRadius: 8, padding: 14 }}>
+      </Card>
+      <Card size="small" title="Requester">
         <Typography.Text type="secondary" style={{ fontSize: 12, letterSpacing: '0.05em' }}>REQUESTER</Typography.Text>
         <Descriptions size="small" column={1} colon={false} style={{ marginTop: 8 }}>
           <Descriptions.Item label="Name">
@@ -563,8 +562,8 @@ function TicketSidebar({ ticket }: { ticket: TicketDto }) {
           <Descriptions.Item label="Email">{ticket.requester_email || '—'}</Descriptions.Item>
           <Descriptions.Item label="Type"><Tag>{ticket.beneficiary_type}</Tag></Descriptions.Item>
         </Descriptions>
-      </div>
-      <div style={{ border: `1px solid ${token.colorBorderSecondary}`, borderRadius: 8, padding: 14 }}>
+      </Card>
+      <Card size="small" title="Timeline">
         <Typography.Text type="secondary" style={{ fontSize: 12, letterSpacing: '0.05em' }}>TIMELINE</Typography.Text>
         <Descriptions size="small" column={1} colon={false} style={{ marginTop: 8 }}>
           <Descriptions.Item label="Created">{fmt(ticket.created_at)}</Descriptions.Item>
@@ -575,9 +574,9 @@ function TicketSidebar({ ticket }: { ticket: TicketDto }) {
           <Descriptions.Item label="Closed">{fmt(ticket.closed_at)}</Descriptions.Item>
           <Descriptions.Item label="SLA due">{fmt(ticket.sla_due_at)}</Descriptions.Item>
         </Descriptions>
-      </div>
+      </Card>
       {items.length > 0 && (
-        <div style={{ border: `1px solid ${token.colorBorderSecondary}`, borderRadius: 8, padding: 14 }}>
+        <Card size="small" title="Metadata">
           <Typography.Text type="secondary" style={{ fontSize: 12, letterSpacing: '0.05em' }}>METADATA</Typography.Text>
           <div style={{ display: 'grid', gap: 4, marginTop: 8 }}>
             {items.map((m) => (
@@ -587,7 +586,7 @@ function TicketSidebar({ ticket }: { ticket: TicketDto }) {
               </Flex>
             ))}
           </div>
-        </div>
+        </Card>
       )}
     </div>
   )
@@ -653,39 +652,39 @@ function TicketDetails({ ticketId }: { ticketId?: string }) {
       </div>
 
       {/* Two-column body */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 320px', gap: 16 }}
-           className="tickora-ticket-grid">
-        <div style={{ minWidth: 0, display: 'grid', gap: 16 }}>
-          <div style={{
-            border: `1px solid ${token.colorBorderSecondary}`,
-            borderRadius: 8, padding: 16,
-          }}>
-            <Typography.Text type="secondary" style={{ fontSize: 12, letterSpacing: '0.05em' }}>DESCRIPTION</Typography.Text>
-            <Typography.Paragraph style={{ margin: '8px 0 0', whiteSpace: 'pre-wrap' }}>{ticket.txt}</Typography.Paragraph>
-            {ticket.resolution && (
-              <Alert style={{ marginTop: 12 }} type="success" showIcon message="Resolution" description={ticket.resolution} />
-            )}
+      <Row gutter={[16, 16]}>
+        <Col xs={24} xl={16}>
+          <div style={{ display: 'grid', gap: 16 }}>
+            <Card title="Description" size="small">
+              <Typography.Paragraph style={{ margin: 0, whiteSpace: 'pre-wrap' }}>{ticket.txt}</Typography.Paragraph>
+              {ticket.resolution && (
+                <Alert style={{ marginTop: 12 }} type="success" showIcon message="Resolution" description={ticket.resolution} />
+              )}
+            </Card>
+            <Card title="Conversation" size="small">
+              <CommentBox ticketId={ticket.id} disabled={isClosed} ticket={ticket} />
+            </Card>
+            <Card title="Attachments" size="small">
+              <AttachmentUploader ticketId={ticket.id} disabled={isClosed} />
+            </Card>
+            {(() => {
+              const isAdmin = user?.roles.includes('tickora_admin')
+              const isAuditor = user?.roles.includes('tickora_auditor')
+              const isDistributor = user?.roles.includes('tickora_distributor')
+              const isStaff = !!user?.sectors?.some(s => s.sectorCode === ticket.current_sector_code)
+              if (!(isAdmin || isAuditor || isDistributor || isStaff)) return null
+              return (
+                <Card title="Activity" size="small">
+                  <TicketAudit ticketId={ticket.id} />
+                </Card>
+              )
+            })()}
           </div>
-          <Tabs
-            defaultActiveKey="comments"
-            items={[
-              { key: 'comments', label: 'Conversation', children: <CommentBox ticketId={ticket.id} disabled={isClosed} ticket={ticket} /> },
-              { key: 'attachments', label: 'Attachments', children: <AttachmentUploader ticketId={ticket.id} disabled={isClosed} /> },
-              { key: 'audit', label: 'Activity', children: <TicketAudit ticketId={ticket.id} /> },
-            ].filter(item => {
-              if (item.key === 'audit') {
-                const isAdmin = user?.roles.includes('tickora_admin')
-                const isAuditor = user?.roles.includes('tickora_auditor')
-                const isDistributor = user?.roles.includes('tickora_distributor')
-                const isStaff = !!user?.sectors?.some(s => s.sectorCode === ticket.current_sector_code)
-                return isAdmin || isAuditor || isDistributor || isStaff
-              }
-              return true
-            })}
-          />
-        </div>
-        <TicketSidebar ticket={ticket} />
-      </div>
+        </Col>
+        <Col xs={24} xl={8}>
+          <TicketSidebar ticket={ticket} />
+        </Col>
+      </Row>
     </div>
   )
 }

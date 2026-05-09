@@ -271,8 +271,8 @@ export function AuditExplorerPage() {
                   )}
                   <Descriptions.Item label="Request Details">
                     <Space orientation="vertical">
-                      <Typography.Text type="secondary">IP: {(row.metadata?.request_ip as string) || '-'}</Typography.Text>
-                      <Typography.Text type="secondary" style={{ fontSize: 11 }}>Agent: {(row.metadata?.user_agent as string) || '-'}</Typography.Text>
+                      <Typography.Text type="secondary">IP: {row.request_ip || (row.metadata?.request_ip as string) || '-'}</Typography.Text>
+                      <Typography.Text type="secondary" style={{ fontSize: 11 }}>Agent: {row.user_agent || (row.metadata?.user_agent as string) || '-'}</Typography.Text>
                     </Space>
                   </Descriptions.Item>
                 </Descriptions>

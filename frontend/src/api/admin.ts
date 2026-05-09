@@ -59,6 +59,18 @@ export interface AdminMetadataKey {
   is_active: boolean
 }
 
+export interface AdminTicketMetadata {
+  id: string
+  ticket_id: string
+  ticket_code?: string | null
+  ticket_title?: string | null
+  key: string
+  value: string
+  label?: string | null
+  created_at?: string | null
+  updated_at?: string | null
+}
+
 export interface AdminSlaPolicy {
   id?: string
   name: string
@@ -162,6 +174,28 @@ export const listAdminMetadataKeys = async (): Promise<{ items: AdminMetadataKey
 export const upsertAdminMetadataKey = async (payload: AdminMetadataKey): Promise<AdminMetadataKey> => {
   const { data } = await apiClient.post('/api/admin/metadata-keys', payload)
   return data
+}
+
+export const listAdminTicketMetadatas = async (params?: {
+  search?: string
+  ticket_code?: string
+  key?: string
+}): Promise<{ items: AdminTicketMetadata[] }> => {
+  const { data } = await apiClient.get('/api/admin/ticket-metadatas', {
+    params: { ...params, limit: 200 },
+  })
+  return data
+}
+
+export const upsertAdminTicketMetadata = async (
+  payload: Partial<AdminTicketMetadata> & { ticket_id?: string; ticket_code?: string; key?: string; value?: string },
+): Promise<AdminTicketMetadata> => {
+  const { data } = await apiClient.post('/api/admin/ticket-metadatas', payload)
+  return data
+}
+
+export const deleteAdminTicketMetadata = async (metadataId: string): Promise<void> => {
+  await apiClient.delete(`/api/admin/ticket-metadatas/${metadataId}`)
 }
 
 export const listAdminSlaPolicies = async (): Promise<{ items: AdminSlaPolicy[] }> => {

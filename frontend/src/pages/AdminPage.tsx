@@ -13,9 +13,11 @@ import {
 import {
   ADMIN_ROLES, createAdminSector, createAdminSlaPolicy, getAdminOverview,
   getGroupHierarchy, grantMembership, listAdminMemberships, listAdminMetadataKeys,
-  listAdminSectors, listAdminSlaPolicies, listAdminUsers, revokeMembership,
-  updateAdminSector, updateAdminSlaPolicy, updateAdminUser, upsertAdminMetadataKey,
+  listAdminSectors, listAdminSlaPolicies, listAdminTicketMetadatas, listAdminUsers,
+  revokeMembership, deleteAdminTicketMetadata, updateAdminSector, updateAdminSlaPolicy,
+  updateAdminUser, upsertAdminMetadataKey, upsertAdminTicketMetadata,
   type AdminMembership, type AdminMetadataKey, type AdminSector, type AdminSlaPolicy,
+  type AdminTicketMetadata,
   type AdminUser,
 } from '@/api/admin'
 import type { DashboardBreakdown } from '@/api/tickets'
@@ -249,8 +251,11 @@ function GroupsTab() {
 function ConfigTab() {
   const qc = useQueryClient()
   const [editing, setEditing] = useState<AdminMetadataKey | null>(null)
+  const [editingValue, setEditingValue] = useState<AdminTicketMetadata | null>(null)
+  const [metadataSearch, setMetadataSearch] = useState('')
   const [editingPolicy, setEditingPolicy] = useState<AdminSlaPolicy | null>(null)
   const keys = useQuery({ queryKey: ['adminMetadataKeys'], queryFn: listAdminMetadataKeys, staleTime: 60_000 })
+  const values = useQuery({ queryKey: ['adminTicketMetadatas', metadataSearch], queryFn: () => listAdminTicketMetadatas({ search: metadataSearch }), staleTime: 30_000 })
   const policies = useQuery({ queryKey: ['adminSlaPolicies'], queryFn: listAdminSlaPolicies, staleTime: 60_000 })
   const save = useMutation({
     mutationFn: (values: AdminMetadataKey) => upsertAdminMetadataKey({ ...values, options: typeof values.options === 'string' ? String(values.options).split(',').map((v) => v.trim()).filter(Boolean) : values.options }),
@@ -259,6 +264,14 @@ function ConfigTab() {
   const savePolicy = useMutation({
     mutationFn: (values: AdminSlaPolicy) => values.id ? updateAdminSlaPolicy(values.id, values) : createAdminSlaPolicy(values),
     onSuccess: () => { message.success('SLA policy saved'); setEditingPolicy(null); qc.invalidateQueries({ queryKey: ['adminSlaPolicies'] }); qc.invalidateQueries({ queryKey: ['adminOverview'] }) },
+  })
+  const saveValue = useMutation({
+    mutationFn: upsertAdminTicketMetadata,
+    onSuccess: () => { message.success('Ticket metadata saved'); setEditingValue(null); qc.invalidateQueries({ queryKey: ['adminTicketMetadatas'] }) },
+  })
+  const deleteValue = useMutation({
+    mutationFn: deleteAdminTicketMetadata,
+    onSuccess: () => { message.success('Ticket metadata deleted'); qc.invalidateQueries({ queryKey: ['adminTicketMetadatas'] }) },
   })
   return (
     <div style={{ display: 'grid', gap: 16 }}>
@@ -276,6 +289,47 @@ function ConfigTab() {
             { title: 'Options', dataIndex: 'options', render: (options: string[]) => <Space wrap>{options?.map((o) => <Tag key={o}>{o}</Tag>)}</Space> },
             { title: 'Active', dataIndex: 'is_active', width: 100, render: (active) => <Tag color={active ? 'green' : 'default'}>{active ? 'active' : 'inactive'}</Tag> },
             { title: 'Edit', width: 90, render: (_, row) => <Button size="small" onClick={() => setEditing(row)}>Edit</Button> },
+          ]}
+        />
+      </Panel>
+      <Panel title="Ticket metadata values" icon={<DatabaseOutlined />}>
+        <Flex justify="space-between" wrap="wrap" gap={12} style={{ marginBottom: 12 }}>
+          <Input.Search placeholder="Search ticket code, key, label, value" allowClear onSearch={setMetadataSearch} style={{ maxWidth: 360 }} />
+          <Button
+            type="primary"
+            icon={<PlusOutlined />}
+            onClick={() => setEditingValue({ id: '', ticket_id: '', ticket_code: '', key: '', value: '' })}
+          >
+            New metadata value
+          </Button>
+        </Flex>
+        <Table
+          rowKey="id"
+          loading={values.isLoading}
+          dataSource={values.data?.items || []}
+          pagination={{ pageSize: 8 }}
+          columns={[
+            { title: 'Ticket', dataIndex: 'ticket_code', width: 150, render: (code, row) => <Space direction="vertical" size={0}><Typography.Text strong>{code}</Typography.Text><Typography.Text type="secondary" ellipsis style={{ maxWidth: 260 }}>{row.ticket_title}</Typography.Text></Space> },
+            { title: 'Key', dataIndex: 'key', width: 160, render: (key) => <Tag>{key}</Tag> },
+            { title: 'Label', dataIndex: 'label', width: 180, render: (label) => label || '-' },
+            { title: 'Value', dataIndex: 'value', ellipsis: true },
+            { title: 'Actions', width: 150, render: (_, row) => (
+              <Space>
+                <Button size="small" onClick={() => setEditingValue(row)}>Edit</Button>
+                <Button
+                  size="small"
+                  danger
+                  onClick={() => Modal.confirm({
+                    title: 'Delete metadata value?',
+                    content: `${row.ticket_code} · ${row.key}`,
+                    okButtonProps: { danger: true },
+                    onOk: () => deleteValue.mutate(row.id),
+                  })}
+                >
+                  Delete
+                </Button>
+              </Space>
+            ) },
           ]}
         />
       </Panel>
@@ -321,6 +375,22 @@ function ConfigTab() {
           <Form.Item name="description" label="Description"><Input.TextArea rows={3} /></Form.Item>
           <Form.Item name="is_active" label="Active" valuePropName="checked"><Switch /></Form.Item>
           <Button type="primary" htmlType="submit" loading={save.isPending}>Save</Button>
+        </Form>
+      </Modal>
+      <Modal title="Ticket metadata value" open={!!editingValue} onCancel={() => setEditingValue(null)} footer={null}>
+        <Form layout="vertical" initialValues={editingValue || undefined} onFinish={(formValues) => saveValue.mutate({ ...editingValue, ...formValues })}>
+          <Form.Item name="ticket_code" label="Ticket code or id" rules={[{ required: !editingValue?.id }]}>
+            <Input disabled={!!editingValue?.id} placeholder="TK-2026-000001" />
+          </Form.Item>
+          <Form.Item name="key" label="Key" rules={[{ required: true }]}>
+            <Select
+              showSearch
+              options={(keys.data?.items || []).map((item) => ({ value: item.key, label: `${item.key} · ${item.label}` }))}
+            />
+          </Form.Item>
+          <Form.Item name="label" label="Label"><Input /></Form.Item>
+          <Form.Item name="value" label="Value" rules={[{ required: true }]}><Input.TextArea rows={4} /></Form.Item>
+          <Button type="primary" htmlType="submit" loading={saveValue.isPending}>Save</Button>
         </Form>
       </Modal>
       <Modal title="SLA policy" open={!!editingPolicy} onCancel={() => setEditingPolicy(null)} footer={null}>

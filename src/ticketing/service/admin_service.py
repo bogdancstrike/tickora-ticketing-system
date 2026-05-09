@@ -27,6 +27,7 @@ from src.ticketing.models import (
     SectorMembership,
     SlaPolicy,
     Ticket,
+    TicketMetadata,
 )
 from src.ticketing.service import audit_service, dashboard_service
 
@@ -167,9 +168,9 @@ def list_sectors(db: Session, principal: Principal) -> list[dict[str, Any]]:
     counts = {
         sector_id: count
         for sector_id, count in db.execute(
-        select(SectorMembership.sector_id, func.count(SectorMembership.id))
-        .where(SectorMembership.is_active.is_(True))
-        .group_by(SectorMembership.sector_id)
+            select(SectorMembership.sector_id, func.count(SectorMembership.id))
+            .where(SectorMembership.is_active.is_(True))
+            .group_by(SectorMembership.sector_id)
         )
     }
     return [_serialize_sector(s, membership_count=int(counts.get(s.id, 0))) for s in sectors]
@@ -353,6 +354,111 @@ def upsert_metadata_key(db: Session, principal: Principal, payload: dict[str, An
     return new
 
 
+def ticket_metadatas(
+    db: Session,
+    principal: Principal,
+    *,
+    ticket_code: str | None = None,
+    key: str | None = None,
+    search: str | None = None,
+    limit: int = 100,
+) -> list[dict[str, Any]]:
+    require_admin(principal)
+    limit = max(1, min(limit, 250))
+    stmt = (
+        select(TicketMetadata, Ticket)
+        .join(Ticket, Ticket.id == TicketMetadata.ticket_id)
+        .where(Ticket.is_deleted.is_(False))
+        .order_by(desc(TicketMetadata.updated_at), Ticket.ticket_code.asc(), TicketMetadata.key.asc())
+        .limit(limit)
+    )
+    if ticket_code:
+        stmt = stmt.where(Ticket.ticket_code.ilike(f"%{ticket_code.strip()}%"))
+    if key:
+        stmt = stmt.where(TicketMetadata.key == key.strip().lower())
+    if search:
+        term = f"%{search.strip()}%"
+        stmt = stmt.where(or_(
+            TicketMetadata.key.ilike(term),
+            TicketMetadata.value.ilike(term),
+            TicketMetadata.label.ilike(term),
+            Ticket.ticket_code.ilike(term),
+            Ticket.title.ilike(term),
+        ))
+    return [_serialize_ticket_metadata(row, ticket) for row, ticket in db.execute(stmt)]
+
+
+def upsert_ticket_metadata(db: Session, principal: Principal, payload: dict[str, Any]) -> dict[str, Any]:
+    require_admin(principal)
+    metadata_id = payload.get("id")
+    ticket_ref = str(payload.get("ticket_id") or payload.get("ticket_code") or "").strip()
+    key = str(payload.get("key") or "").strip().lower()
+    value = payload.get("value")
+    if metadata_id:
+        row = db.get(TicketMetadata, metadata_id)
+        if row is None:
+            raise NotFoundError("ticket metadata not found")
+        ticket = db.get(Ticket, row.ticket_id)
+    else:
+        if not ticket_ref or not key or value is None:
+            raise ValidationError("ticket_id or ticket_code, key and value are required")
+        ticket = _ticket_by_ref(db, ticket_ref)
+        row = db.scalar(select(TicketMetadata).where(TicketMetadata.ticket_id == ticket.id, TicketMetadata.key == key))
+    if ticket is None:
+        raise NotFoundError("ticket not found")
+
+    old = _serialize_ticket_metadata(row, ticket) if row else None
+    if row is None:
+        row = TicketMetadata(ticket_id=ticket.id, key=key, value=str(value), label=payload.get("label"))
+        db.add(row)
+    else:
+        if key:
+            row.key = key
+        if value is not None:
+            row.value = str(value)
+        if "label" in payload:
+            row.label = payload.get("label")
+    try:
+        db.flush()
+    except IntegrityError as exc:
+        raise BusinessRuleError("ticket metadata key already exists for this ticket") from exc
+    new = _serialize_ticket_metadata(row, ticket)
+    audit_service.record(
+        db,
+        actor=principal,
+        action=events.CONFIG_CHANGED,
+        entity_type="ticket_metadata",
+        entity_id=row.id,
+        ticket_id=ticket.id,
+        old_value=old,
+        new_value=new,
+        metadata={"operation": "admin_upsert_ticket_metadata", "metadata_key": row.key},
+    )
+    return new
+
+
+def delete_ticket_metadata(db: Session, principal: Principal, metadata_id: str) -> None:
+    require_admin(principal)
+    row = db.get(TicketMetadata, metadata_id)
+    if row is None:
+        raise NotFoundError("ticket metadata not found")
+    ticket = db.get(Ticket, row.ticket_id)
+    old = _serialize_ticket_metadata(row, ticket)
+    db.delete(row)
+    db.flush()
+    audit_service.record(
+        db,
+        actor=principal,
+        action=events.CONFIG_CHANGED,
+        entity_type="ticket_metadata",
+        entity_id=metadata_id,
+        ticket_id=ticket.id if ticket else None,
+        old_value=old,
+        new_value=None,
+        metadata={"operation": "admin_delete_ticket_metadata", "metadata_key": old["key"] if old else None},
+    )
+
+
 def sla_policies(db: Session, principal: Principal) -> list[dict[str, Any]]:
     require_admin(principal)
     rows = list(db.scalars(select(SlaPolicy).order_by(SlaPolicy.priority.asc(), SlaPolicy.name.asc())))
@@ -486,6 +592,22 @@ def _serialize_metadata_key(row: MetadataKeyDefinition | None) -> dict[str, Any]
     }
 
 
+def _serialize_ticket_metadata(row: TicketMetadata | None, ticket: Ticket | None) -> dict[str, Any] | None:
+    if row is None:
+        return None
+    return {
+        "id": row.id,
+        "ticket_id": row.ticket_id,
+        "ticket_code": ticket.ticket_code if ticket else None,
+        "ticket_title": ticket.title if ticket else None,
+        "key": row.key,
+        "value": row.value,
+        "label": row.label,
+        "created_at": _dt(row.created_at),
+        "updated_at": _dt(row.updated_at),
+    }
+
+
 def _serialize_sla_policy(row: SlaPolicy | None) -> dict[str, Any] | None:
     if row is None:
         return None
@@ -609,6 +731,15 @@ def _positive_int(value: Any, field: str) -> int:
     if parsed <= 0:
         raise ValidationError(f"{field} must be a positive integer")
     return parsed
+
+
+def _ticket_by_ref(db: Session, ticket_ref: str) -> Ticket:
+    ticket = db.get(Ticket, ticket_ref)
+    if ticket is None:
+        ticket = db.scalar(select(Ticket).where(Ticket.ticket_code == ticket_ref))
+    if ticket is None or ticket.is_deleted:
+        raise NotFoundError("ticket not found")
+    return ticket
 
 
 def _rows_to_breakdown(rows) -> list[dict[str, Any]]:

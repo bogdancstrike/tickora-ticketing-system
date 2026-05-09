@@ -108,6 +108,36 @@ def upsert_metadata_key(app, operation, request, *, principal: Principal, **kwar
 
 
 @require_authenticated
+def ticket_metadatas(app, operation, request, *, principal: Principal, **kwargs):
+    limit = int(_arg("limit", 100) or 100)
+    with get_db() as db:
+        return ({
+            "items": admin_service.ticket_metadatas(
+                db,
+                principal,
+                ticket_code=_arg("ticket_code"),
+                key=_arg("key"),
+                search=_arg("search"),
+                limit=limit,
+            )
+        }, 200)
+
+
+@require_authenticated
+def upsert_ticket_metadata(app, operation, request, *, principal: Principal, **kwargs):
+    with get_db() as db:
+        return (admin_service.upsert_ticket_metadata(db, principal, _payload()), 200)
+
+
+@require_authenticated
+def delete_ticket_metadata(app, operation, request, *, principal: Principal, **kwargs):
+    metadata_id = kwargs.get("metadata_id") or flask_request.view_args.get("metadata_id")
+    with get_db() as db:
+        admin_service.delete_ticket_metadata(db, principal, metadata_id)
+        return ("", 204)
+
+
+@require_authenticated
 def sla_policies(app, operation, request, *, principal: Principal, **kwargs):
     with get_db() as db:
         return ({"items": admin_service.sla_policies(db, principal)}, 200)

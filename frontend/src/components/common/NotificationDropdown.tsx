@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react'
-import { Badge, Button, Dropdown, Empty, List, Space, Tag, Typography, theme as antTheme } from 'antd'
+import { Badge, Button, Dropdown, Empty, List, Space, Tag, Tooltip, Typography, theme as antTheme } from 'antd'
 import { BellOutlined, CheckOutlined } from '@ant-design/icons'
 import { useNavigate } from 'react-router-dom'
 import { useSessionStore } from '@/stores/sessionStore'
@@ -98,7 +98,23 @@ export function NotificationDropdown() {
     } catch { /* silent */ }
   }, [])
 
+  const markOneRead = useCallback(async (item: NotificationItem) => {
+    if (item.read) return
+    setNotifications((prev) => prev.map((n) => n.id === item.id ? { ...n, read: true } : n))
+    setUnreadCount((prev) => Math.max(0, prev - 1))
+    try {
+      await fetch(`${API_BASE}/api/notifications/${item.id}/mark-read`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${getToken() || ''}`,
+        },
+      })
+    } catch { /* silent */ }
+  }, [])
+
   const onClickItem = (item: NotificationItem) => {
+    markOneRead(item)
     const dest = destinationFor(item, user?.roles || [])
     if (dest) navigate(dest)
   }
@@ -130,6 +146,21 @@ export function NotificationDropdown() {
         renderItem={(item) => (
           <List.Item
             onClick={() => onClickItem(item)}
+            actions={[
+              !item.read && (
+                <Tooltip key="read" title="Mark as read">
+                  <Button
+                    size="small"
+                    type="text"
+                    icon={<CheckOutlined />}
+                    onClick={(event) => {
+                      event.stopPropagation()
+                      markOneRead(item)
+                    }}
+                  />
+                </Tooltip>
+              ),
+            ].filter(Boolean)}
             style={{
               padding: '10px 14px',
               cursor: item.ticket_id ? 'pointer' : 'default',

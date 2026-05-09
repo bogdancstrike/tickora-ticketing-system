@@ -97,6 +97,8 @@ export interface AuditEventDto {
   old_value?: Record<string, unknown> | null
   new_value?: Record<string, unknown> | null
   metadata?: Record<string, unknown> | null
+  request_ip?: string | null
+  user_agent?: string | null
   correlation_id?: string | null
   created_at?: string | null
 }
