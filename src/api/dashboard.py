@@ -58,12 +58,6 @@ def user_dashboard(app, operation, request, *, principal: Principal, **kwargs):
 
 
 @require_authenticated
-def beneficiary_dashboard(app, operation, request, *, principal: Principal, **kwargs):
-    with get_db() as db:
-        return (dashboard_service.beneficiary(db, principal), 200)
-
-
-@require_authenticated
 def sla_dashboard(app, operation, request, *, principal: Principal, **kwargs):
     with get_db() as db:
         return (dashboard_service.sla(db, principal), 200)

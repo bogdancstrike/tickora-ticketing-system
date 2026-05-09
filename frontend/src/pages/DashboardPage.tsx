@@ -283,23 +283,33 @@ export function DashboardPage() {
       key: 'personal',
       label: 'User',
       children: (
-        <div style={{ display: 'grid', gap: 16 }}>
-          <Typography.Text type="secondary">{personal.username || personal.email || personal.user_id}</Typography.Text>
-          <KpiGrid values={personal.kpis} />
-          <Row gutter={[16, 16]}>
-            <Col xs={24} xl={12}><ChartPanel title="User Status" description="Visible tickets involving the selected user, grouped by status."><BreakdownChart data={personal.by_status} title="Tickets" /></ChartPanel></Col>
-            <Col xs={24} xl={12}><ChartPanel title="Oldest Assigned" description="Oldest active tickets assigned to the selected user."><OldestTickets tickets={personal.oldest} /></ChartPanel></Col>
-          </Row>
-        </div>
-      ),
-    },
-    overview.data?.beneficiary && {
-      key: 'beneficiary',
-      label: 'Requester',
-      children: (
-        <div style={{ display: 'grid', gap: 16 }}>
-          <KpiGrid values={overview.data.beneficiary.kpis} />
-          <ChartPanel title="Requester Status" description="Tickets created by or linked to you as requester, grouped by status."><BreakdownChart data={overview.data.beneficiary.by_status} title="Tickets" /></ChartPanel>
+        <div style={{ display: 'grid', gap: 24 }}>
+          <div>
+            <Typography.Title level={5} style={{ fontSize: 14, marginBottom: 12 }}>Operator Role</Typography.Title>
+            <KpiGrid values={personal.kpis} />
+            <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
+              <Col xs={24} xl={12}>
+                <ChartPanel title="Operator Status" description="Tickets where this user is an assignee or primary sector responder.">
+                  <BreakdownChart data={personal.by_status} title="Tickets" />
+                </ChartPanel>
+              </Col>
+              <Col xs={24} xl={12}>
+                <ChartPanel title="Oldest Assigned" description="Oldest active tickets assigned to this user.">
+                  <OldestTickets tickets={personal.oldest} />
+                </ChartPanel>
+              </Col>
+            </Row>
+          </div>
+
+          <div>
+            <Typography.Title level={5} style={{ fontSize: 14, marginBottom: 12 }}>Requester Role</Typography.Title>
+            <KpiGrid values={personal.beneficiary_kpis} />
+            <div style={{ marginTop: 16 }}>
+              <ChartPanel title="Requester Status" description="Tickets created by or linked to this user as beneficiary.">
+                <BreakdownChart data={personal.beneficiary_by_status} title="Tickets" color="#52c41a" />
+              </ChartPanel>
+            </div>
+          </div>
         </div>
       ),
     },

@@ -32,7 +32,6 @@ def overview(db: Session, principal: Principal) -> dict[str, Any]:
             "distributor": None,
             "sectors": [],
             "personal": personal(db, principal, principal.user_id),
-            "beneficiary": beneficiary(db, principal),
             "timeseries": timeseries(db, principal),
         }
         if rbac.can_view_global_dashboard(principal):
@@ -117,6 +116,13 @@ def personal(db: Session, principal: Principal, user_id: str) -> dict[str, Any]:
     user = db.get(User, user_id)
     if user is None:
         raise NotFoundError("user not found")
+
+    # Requester-side: tickets where user is creator or beneficiary
+    user_beneficiary_ids = select(Beneficiary.id).where(Beneficiary.user_id == user_id)
+    req_base = _visible_stmt(principal).where(
+        or_(Ticket.created_by_user_id == user_id, Ticket.beneficiary_id.in_(user_beneficiary_ids))
+    )
+
     return {
         "user_id": user_id,
         "username": user.username,
@@ -131,24 +137,15 @@ def personal(db: Session, principal: Principal, user_id: str) -> dict[str, Any]:
                 Ticket.reopened_count > 0,
             )),
         },
-        "by_status": _breakdown_visible(db, principal, Ticket.status, user_id=user_id),
-        "oldest": _oldest_tickets(db, principal=principal, assignee_user_id=user_id, status=ACTIVE_STATUSES, limit=5),
-    }
-
-
-def beneficiary(db: Session, principal: Principal) -> dict[str, Any]:
-    user_beneficiary_ids = select(Beneficiary.id).where(Beneficiary.user_id == principal.user_id)
-    base = _visible_stmt(principal).where(
-        or_(Ticket.created_by_user_id == principal.user_id, Ticket.beneficiary_id.in_(user_beneficiary_ids))
-    )
-    return {
-        "kpis": {
-            "active": _count(db, base.where(Ticket.status.in_(ACTIVE_STATUSES))),
-            "closed": _count(db, base.where(Ticket.status == "closed")),
-            "waiting_confirmation": _count(db, base.where(Ticket.status == "done")),
-            "reopened": _count(db, base.where(Ticket.reopened_count > 0)),
+        "beneficiary_kpis": {
+            "active": _count(db, req_base.where(Ticket.status.in_(ACTIVE_STATUSES))),
+            "closed": _count(db, req_base.where(Ticket.status == "closed")),
+            "waiting_confirmation": _count(db, req_base.where(Ticket.status == "done")),
+            "reopened": _count(db, req_base.where(Ticket.reopened_count > 0)),
         },
-        "by_status": _breakdown_visible(db, principal, Ticket.status, requester_user_id=principal.user_id),
+        "by_status": _breakdown_visible(db, principal, Ticket.status, user_id=user_id),
+        "beneficiary_by_status": _breakdown_visible(db, principal, Ticket.status, requester_user_id=user_id),
+        "oldest": _oldest_tickets(db, principal=principal, assignee_user_id=user_id, status=ACTIVE_STATUSES, limit=5),
     }
 
 

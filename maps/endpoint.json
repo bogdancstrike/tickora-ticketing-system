@@ -419,17 +419,12 @@
       "model_name": "Empty",
       "request_method": ["GET"],
       "api_url": "/api/dashboard/users/<user_id>",
-      "exec_method": { "module_name": "api.dashboard", "method_name": "user_dashboard" }
-    },
-    {
-      "namespace": "tickora",
-      "operation_name": "dashboard_beneficiaries",
-      "model_name": "Empty",
-      "request_method": ["GET"],
-      "api_url": "/api/dashboard/beneficiaries",
-      "exec_method": { "module_name": "api.dashboard", "method_name": "beneficiary_dashboard" }
-    },
-    {
+      "exec_method": {
+        "module_name": "api.dashboard",
+        "method_name": "user_dashboard"
+      }
+      },
+      {
       "namespace": "tickora",
       "operation_name": "dashboard_sla",
       "model_name": "Empty",

@@ -229,12 +229,10 @@ export interface DashboardOverview {
     username?: string | null
     email?: string | null
     kpis: Record<string, number | null>
+    beneficiary_kpis: Record<string, number | null>
     by_status: DashboardBreakdown[]
+    beneficiary_by_status: DashboardBreakdown[]
     oldest: DashboardOldTicket[]
-  }
-  beneficiary: {
-    kpis: Record<string, number | null>
-    by_status: DashboardBreakdown[]
   }
   timeseries: DashboardTimeseriesPoint[]
 }
