@@ -15,7 +15,7 @@ from sqlalchemy import (
     func,
     text,
 )
-from sqlalchemy.dialects.postgresql import INET, JSONB, UUID
+from sqlalchemy.dialects.postgresql import INET, JSONB, UUID, TSVECTOR
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.core.db import Base

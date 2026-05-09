@@ -1,14 +1,17 @@
 import { useMemo, useState, useEffect } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import ReactECharts from 'echarts-for-react'
 import {
   Alert, Button, Card, Col, Empty, Flex, Form, Input, List, Modal, Row, Select, Space,
-  Spin, Statistic, Table, Tag, Typography, message, theme as antTheme, Avatar,
+  Spin, Statistic, Table, Tag, Typography, message, theme as antTheme, Avatar, Checkbox,
 } from 'antd'
 import {
   AppstoreAddOutlined, AppstoreOutlined, DeleteOutlined, EditOutlined, PlusOutlined,
   ReloadOutlined, SaveOutlined, SettingOutlined, UserOutlined, WarningOutlined,
   ClockCircleOutlined, AuditOutlined, UnorderedListOutlined, CheckCircleOutlined,
-  SendOutlined, ThunderboltOutlined,
+  SendOutlined, ThunderboltOutlined, SearchOutlined, BarChartOutlined, PieChartOutlined,
+  MessageOutlined, FieldTimeOutlined, DatabaseOutlined, DashboardOutlined,
+  CarryOutOutlined, SmileOutlined,
 } from '@ant-design/icons'
 import { Responsive, WidthProvider } from 'react-grid-layout'
 import 'react-grid-layout/css/styles.css'
@@ -17,14 +20,16 @@ import 'react-resizable/css/styles.css'
 import {
   createDashboard, deleteDashboard, deleteWidget, getDashboard,
   listDashboards, updateDashboard, upsertWidget,
-  listTickets, getMonitorOverview, listAudit,
+  listTickets, getMonitorOverview, listAudit, listTicketAudit,
+  getMonitorSector,
   type CustomDashboardDto, type DashboardWidgetDto, type TicketDto,
 } from '@/api/tickets'
 import { useSessionStore } from '@/stores/sessionStore'
-import { StatusTag } from '@/components/common/StatusTag'
+import { StatusTag, STATUS_OPTIONS } from '@/components/common/StatusTag'
 import { PriorityTag } from '@/components/common/PriorityTag'
 import { fmtDateTime } from '@/components/common/format'
 import { useNavigate } from 'react-router-dom'
+import { apiClient } from '@/api/client'
 
 const ResponsiveGridLayout = WidthProvider(Responsive)
 
@@ -76,11 +81,13 @@ function KpiWidget({ config }: { config: any }) {
   
   const val = useMemo(() => {
     if (!data) return '-'
-    if (config.path === 'personal.kpis.assigned_active') return data.personal.kpis.assigned_active
-    if (config.path === 'personal.beneficiary_kpis.active') return data.personal.beneficiary_kpis.active
-    if (config.path === 'global.kpis.total_tickets') return data.global?.kpis.total_tickets
-    if (config.path === 'global.kpis.sla_breached') return data.global?.kpis.sla_breached
-    if (config.path === 'distributor.kpis.pending_review') return data.distributor?.kpis.pending_review
+    const p = config.path || 'personal.kpis.assigned_active'
+    if (p === 'personal.kpis.assigned_active') return data.personal.kpis.assigned_active
+    if (p === 'personal.beneficiary_kpis.active') return data.personal.beneficiary_kpis.active
+    if (p === 'global.kpis.total_tickets') return data.global?.kpis.total_tickets
+    if (p === 'global.kpis.sla_breached') return data.global?.kpis.sla_breached
+    if (p === 'global.kpis.active_tickets') return data.global?.kpis.active_tickets
+    if (p === 'distributor.kpis.pending_review') return data.distributor?.kpis.pending_review
     return '-'
   }, [data, config.path])
 
@@ -96,10 +103,10 @@ function KpiWidget({ config }: { config: any }) {
   )
 }
 
-function AuditWidget() {
+function AuditWidget({ config }: { config: any }) {
   const { data, isLoading } = useQuery({
-    queryKey: ['globalAuditWidget'],
-    queryFn: () => listAudit({ limit: 10 }),
+    queryKey: ['auditWidget', config],
+    queryFn: () => config.ticketId ? listTicketAudit(config.ticketId) : listAudit({ limit: config.limit || 10, action: config.action }),
     staleTime: 30_000,
   })
 
@@ -108,13 +115,18 @@ function AuditWidget() {
   return (
     <List
       size="small"
-      dataSource={(data?.items || []).slice(0, 10)}
+      dataSource={(data?.items || []).slice(0, config.limit || 10)}
       renderItem={(a: any) => (
         <List.Item style={{ padding: '8px 12px', fontSize: 12 }}>
           <List.Item.Meta
             avatar={<Avatar size="small" icon={<UserOutlined />} />}
             title={<Typography.Text style={{ fontSize: 12 }}><b>{a.actor_username}</b> {a.action.replace(/_/g, ' ')}</Typography.Text>}
-            description={<Typography.Text type="secondary" style={{ fontSize: 11 }}>{fmtDateTime(a.created_at)}</Typography.Text>}
+            description={
+              <Space direction="vertical" size={0}>
+                 <Typography.Text type="secondary" style={{ fontSize: 11 }}>{fmtDateTime(a.created_at)}</Typography.Text>
+                 {a.ticket_id && <Typography.Text type="link" style={{ fontSize: 10 }}>Ticket: {a.ticket_id.slice(0,8)}</Typography.Text>}
+              </Space>
+            }
           />
         </List.Item>
       )}
@@ -138,25 +150,180 @@ function ProfileWidget() {
   )
 }
 
-function ShortcutsWidget() {
+function ShortcutsWidget({ config }: { config: any }) {
   const navigate = useNavigate()
+  const items = config.items || ['create', 'tickets', 'monitor']
   return (
     <div style={{ padding: 16, display: 'grid', gap: 8 }}>
-      <Button block icon={<PlusOutlined />} onClick={() => navigate('/create')}>Create Ticket</Button>
-      <Button block icon={<UnorderedListOutlined />} onClick={() => navigate('/tickets')}>View Queue</Button>
-      <Button block icon={<SendOutlined />} onClick={() => navigate('/monitor')}>Monitor</Button>
+      {items.includes('create') && <Button block icon={<PlusOutlined />} onClick={() => navigate('/create')}>Create Ticket</Button>}
+      {items.includes('tickets') && <Button block icon={<UnorderedListOutlined />} onClick={() => navigate('/tickets')}>View Queue</Button>}
+      {items.includes('monitor') && <Button block icon={<SendOutlined />} onClick={() => navigate('/monitor')}>Monitor</Button>}
+      {items.includes('admin') && <Button block icon={<SettingOutlined />} onClick={() => navigate('/admin')}>Admin</Button>}
     </div>
   )
 }
 
+function ClockWidget() {
+  const [time, setTime] = useState(new Date())
+  useEffect(() => {
+    const timer = setInterval(() => setTime(new Date()), 1000)
+    return () => clearInterval(timer)
+  }, [])
+
+  return (
+    <div style={{ padding: 16, textAlign: 'center', height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+      <Typography.Title level={2} style={{ margin: 0, fontFamily: 'monospace' }}>
+        {time.toLocaleTimeString()}
+      </Typography.Title>
+      <Typography.Text type="secondary">
+        {time.toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+      </Typography.Text>
+    </div>
+  )
+}
+
+function SystemHealthWidget() {
+  const { data, isLoading } = useQuery({
+    queryKey: ['healthCheck'],
+    queryFn: async () => {
+        const { data } = await apiClient.get('/api/health')
+        return data
+    },
+    refetchInterval: 30_000
+  })
+
+  if (isLoading) return <div style={{ textAlign: 'center', padding: 20 }}><Spin /></div>
+
+  const checks = data?.checks || {}
+  return (
+    <div style={{ padding: 12 }}>
+      <Flex vertical gap={12}>
+        {Object.entries(checks).map(([service, status]) => (
+          <Flex key={service} justify="space-between" align="center">
+            <Typography.Text strong style={{ textTransform: 'capitalize' }}>{service}</Typography.Text>
+            <Tag color={status === 'ok' ? 'success' : 'error'}>{String(status).toUpperCase()}</Tag>
+          </Flex>
+        ))}
+        {!Object.keys(checks).length && <Empty description="No health data" image={Empty.PRESENTED_IMAGE_SIMPLE} />}
+      </Flex>
+    </div>
+  )
+}
+
+function WelcomeWidget() {
+  const user = useSessionStore(s => s.user)
+  return (
+    <div style={{ padding: 16, height: '100%', display: 'flex', alignItems: 'center', gap: 16 }}>
+      <SmileOutlined style={{ fontSize: 32, color: '#faad14' }} />
+      <div>
+        <Typography.Title level={4} style={{ margin: 0 }}>Hello, {user?.firstName || user?.username}!</Typography.Title>
+        <Typography.Text type="secondary">Have a productive day at Tickora.</Typography.Text>
+      </div>
+    </div>
+  )
+}
+
+function SlaOverviewWidget() {
+  const { data } = useQuery({
+    queryKey: ['monitorOverview'],
+    queryFn: getMonitorOverview,
+  })
+  
+  return (
+    <div style={{ padding: 16 }}>
+      <Row gutter={16}>
+        <Col span={12}>
+           <Statistic title="Breached" value={data?.global?.kpis.sla_breached ?? 0} valueStyle={{ color: '#cf1322' }} />
+        </Col>
+        <Col span={12}>
+           <Statistic title="Critical" value={data?.distributor?.kpis.critical_pending ?? 0} valueStyle={{ color: '#d46b08' }} />
+        </Col>
+      </Row>
+    </div>
+  )
+}
+
+function SectorStatsWidget({ config }: { config: any }) {
+  const { data, isLoading } = useQuery({
+    queryKey: ['monitorSector', config.sectorCode],
+    queryFn: () => getMonitorSector(config.sectorCode!),
+    enabled: !!config.sectorCode,
+  })
+
+  if (!config.sectorCode) return <Empty description="Set sector code" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+  if (isLoading) return <div style={{ textAlign: 'center', padding: 20 }}><Spin /></div>
+  if (!data) return <Empty />
+
+  const chartData = config.groupBy === 'priority' ? data.by_priority : data.by_status
+  
+  const option = {
+    tooltip: { trigger: 'item' },
+    series: [{
+      type: 'pie',
+      radius: ['40%', '70%'],
+      avoidLabelOverlap: false,
+      itemStyle: { borderRadius: 6 },
+      label: { show: false },
+      data: chartData.map(i => ({ value: i.count, name: i.key.replace(/_/g, ' ') }))
+    }]
+  }
+
+  return <ReactECharts option={option} style={{ height: '100%', minHeight: 150 }} />
+}
+
+function UserWorkloadWidget({ config }: { config: any }) {
+    const { data, isLoading } = useQuery({
+      queryKey: ['monitorSector', config.sectorCode],
+      queryFn: () => getMonitorSector(config.sectorCode!),
+      enabled: !!config.sectorCode,
+    })
+  
+    if (!config.sectorCode) return <Empty description="Set sector code" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+    if (isLoading) return <div style={{ textAlign: 'center', padding: 20 }}><Spin /></div>
+  
+    return (
+      <Table 
+        size="small" 
+        pagination={false} 
+        dataSource={data?.workload || []} 
+        rowKey="assignee_user_id"
+        columns={[
+          { title: 'User', dataIndex: 'assignee_user_id', render: v => v === 'unassigned' ? 'Unassigned' : v.slice(0,8) },
+          { title: 'Active', dataIndex: 'active', align: 'right' },
+        ]}
+      />
+    )
+}
+
+const WIDGET_TYPES = [
+    { type: 'ticket_list', label: 'Ticket List', icon: <UnorderedListOutlined />, configurable: true },
+    { type: 'monitor_kpi', label: 'KPI Statistic', icon: <BarChartOutlined />, configurable: true },
+    { type: 'audit_stream', label: 'Audit Log', icon: <AuditOutlined />, configurable: true },
+    { type: 'recent_comments', label: 'Recent Comments', icon: <MessageOutlined />, configurable: true },
+    { type: 'sector_stats', label: 'Sector Chart', icon: <PieChartOutlined />, configurable: true },
+    { type: 'user_workload', label: 'User Workload', icon: <TeamOutlined />, configurable: true },
+    { type: 'shortcuts', label: 'Quick Links', icon: <SendOutlined />, configurable: true },
+    { type: 'clock', label: 'Clock', icon: <FieldTimeOutlined />, configurable: false },
+    { type: 'system_health', label: 'System Health', icon: <DatabaseOutlined />, configurable: false },
+    { type: 'profile_card', label: 'Profile Card', icon: <UserOutlined />, configurable: false },
+    { type: 'sla_overview', label: 'SLA Overview', icon: <CarryOutOutlined />, configurable: false },
+    { type: 'welcome_banner', label: 'Welcome Banner', icon: <SmileOutlined />, configurable: false },
+]
+
 function WidgetRenderer({ widget }: { widget: DashboardWidgetDto }) {
   if (widget.type === 'ticket_list') return <TicketListWidget config={widget.config} />
   if (widget.type === 'monitor_kpi') return <KpiWidget config={widget.config} />
-  if (widget.type === 'audit_stream') return <AuditWidget />
+  if (widget.type === 'audit_stream') return <AuditWidget config={widget.config} />
   if (widget.type === 'profile_card') return <ProfileWidget />
-  if (widget.type === 'shortcuts') return <ShortcutsWidget />
+  if (widget.type === 'shortcuts') return <ShortcutsWidget config={widget.config} />
+  if (widget.type === 'clock') return <ClockWidget />
+  if (widget.type === 'system_health') return <SystemHealthWidget />
+  if (widget.type === 'welcome_banner') return <WelcomeWidget />
+  if (widget.type === 'sla_overview') return <SlaOverviewWidget />
+  if (widget.type === 'sector_stats') return <SectorStatsWidget config={widget.config} />
+  if (widget.type === 'user_workload') return <UserWorkloadWidget config={widget.config} />
 
-  return <Empty description="Unknown widget type" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+  return <Empty description={`Widget type ${widget.type} coming soon`} image={Empty.PRESENTED_IMAGE_SIMPLE} />
 }
 
 // ── Dashboard Detail ────────────────────────────────────────────────────────
@@ -164,8 +331,8 @@ function WidgetRenderer({ widget }: { widget: DashboardWidgetDto }) {
 function DashboardDetail({ dashboardId, onBack }: { dashboardId: string, onBack: () => void }) {
   const { token } = antTheme.useToken()
   const qc = useQueryClient()
-  const user = useSessionStore(s => s.user)
   const [editingTitle, setEditingTitle] = useState(false)
+  const [editingWidget, setEditingWidget] = useState<DashboardWidgetDto | null>(null)
   const [isAddingWidget, setIsAddingWidget] = useState(false)
   const [form] = Form.useForm()
   
@@ -176,7 +343,6 @@ function DashboardDetail({ dashboardId, onBack }: { dashboardId: string, onBack:
 
   const saveLayout = useMutation({
     mutationFn: async (layout: any[]) => {
-      // Filter only widgets that actually moved/resized to reduce API noise
       for (const item of layout) {
         const w = dashboard?.widgets?.find(w => w.id === item.i)
         if (w && (w.x !== item.x || w.y !== item.y || w.w !== item.w || w.h !== item.h)) {
@@ -188,26 +354,35 @@ function DashboardDetail({ dashboardId, onBack }: { dashboardId: string, onBack:
   })
 
   const addWidget = useMutation({
-    mutationFn: (values: any) => {
-        let config = {}
-        if (values.type === 'ticket_list') {
-            if (values.preset === 'assigned') config = { assignee_user_id: user?.id, status: 'in_progress' }
-            if (values.preset === 'sector') config = { current_sector_code: user?.sectors?.[0]?.sectorCode, status: 'assigned_to_sector' }
-            if (values.preset === 'pending') config = { status: 'pending' }
+    mutationFn: (type: string) => {
+        const typeInfo = WIDGET_TYPES.find(t => t.type === type)
+        const payload = {
+            type,
+            title: typeInfo?.label,
+            x: 0, y: 0, w: 4, h: 6,
+            config: {}
         }
-        if (values.type === 'monitor_kpi') {
-            if (values.preset === 'breached') config = { path: 'global.kpis.sla_breached', label: 'Breached', color: '#f5222d', icon: 'warning' }
-            if (values.preset === 'assigned') config = { path: 'personal.kpis.assigned_active', label: 'My Active' }
-            if (values.preset === 'pending') config = { path: 'distributor.kpis.pending_review', label: 'Triage Queue' }
-        }
-        return upsertWidget(dashboardId, { ...values, config, x: 0, y: 0, w: 4, h: 6 })
+        return upsertWidget(dashboardId, payload)
     },
-    onSuccess: () => {
+    onSuccess: (w) => {
       setIsAddingWidget(false)
-      form.resetFields()
       qc.invalidateQueries({ queryKey: ['customDashboard', dashboardId] })
       message.success('Widget added')
+      // Auto-open config if configurable
+      const typeInfo = WIDGET_TYPES.find(t => t.type === w.type)
+      if (typeInfo?.configurable) {
+          setEditingWidget(w)
+      }
     }
+  })
+
+  const saveConfig = useMutation({
+      mutationFn: (values: any) => upsertWidget(dashboardId, { ...values, id: editingWidget?.id }),
+      onSuccess: () => {
+          setEditingWidget(null)
+          qc.invalidateQueries({ queryKey: ['customDashboard', dashboardId] })
+          message.success('Configuration saved')
+      }
   })
 
   const removeWidget = useMutation({
@@ -222,6 +397,15 @@ function DashboardDetail({ dashboardId, onBack }: { dashboardId: string, onBack:
     mutationFn: (title: string) => updateDashboard(dashboardId, { title }),
     onSuccess: () => { setEditingTitle(false); qc.invalidateQueries({ queryKey: ['customDashboard', dashboardId] }) }
   })
+
+  useEffect(() => {
+    if (editingWidget) {
+        form.setFieldsValue({
+            title: editingWidget.title,
+            config: editingWidget.config,
+        })
+    }
+  }, [editingWidget, form])
 
   if (isLoading) return <div style={{ padding: 100, textAlign: 'center' }}><Spin size="large" /></div>
   if (!dashboard) return <Alert type="error" message="Dashboard not found" />
@@ -251,7 +435,7 @@ function DashboardDetail({ dashboardId, onBack }: { dashboardId: string, onBack:
 
       <div style={{ background: 'rgba(0,0,0,0.02)', borderRadius: 12, minHeight: 'calc(100vh - 200px)', padding: 8 }}>
         <ResponsiveGridLayout
-          key={dashboard.widgets?.length} // CRITICAL: Forces rebuild when widget count changes to fix "no-refresh" bug
+          key={dashboard.widgets?.length} 
           className="layout"
           layouts={layouts}
           breakpoints={{ lg: 1200, md: 996, sm: 768, xs: 480, xxs: 0 }}
@@ -267,7 +451,12 @@ function DashboardDetail({ dashboardId, onBack }: { dashboardId: string, onBack:
                 display: 'flex', justifyContent: 'space-between', alignItems: 'center'
               }}>
                 <Typography.Text strong style={{ fontSize: 12 }}>{w.title || w.type}</Typography.Text>
-                <Button size="small" type="text" danger icon={<DeleteOutlined />} onClick={() => removeWidget.mutate(w.id)} />
+                <Space size={2}>
+                  {WIDGET_TYPES.find(t => t.type === w.type)?.configurable && (
+                    <Button size="small" type="text" icon={<SettingOutlined />} onClick={() => setEditingWidget(w)} />
+                  )}
+                  <Button size="small" type="text" danger icon={<DeleteOutlined />} onClick={() => removeWidget.mutate(w.id)} />
+                </Space>
               </div>
               <div style={{ flex: 1, overflow: 'auto' }}>
                 <WidgetRenderer widget={w} />
@@ -280,41 +469,99 @@ function DashboardDetail({ dashboardId, onBack }: { dashboardId: string, onBack:
         )}
       </div>
 
-      <Modal title="Add Widget" open={isAddingWidget} onCancel={() => setIsAddingWidget(false)} onOk={() => form.submit()}>
-        <Form form={form} layout="vertical" onFinish={addWidget.mutate} initialValues={{ type: 'ticket_list', preset: 'assigned' }}>
+      <Modal title="Choose Widget Type" open={isAddingWidget} onCancel={() => setIsAddingWidget(false)} footer={null} width={600}>
+         <Row gutter={[16, 16]}>
+            {WIDGET_TYPES.map(w => (
+                <Col key={w.type} xs={12} sm={8}>
+                    <Card size="small" hoverable onClick={() => addWidget.mutate(w.type)} style={{ textAlign: 'center' }}>
+                        <div style={{ fontSize: 24, marginBottom: 8, color: token.colorPrimary }}>{w.icon}</div>
+                        <div style={{ fontWeight: 500 }}>{w.label}</div>
+                    </Card>
+                </Col>
+            ))}
+         </Row>
+      </Modal>
+
+      <Modal 
+        title="Configure Widget" 
+        open={!!editingWidget} 
+        onCancel={() => { setEditingWidget(null); form.resetFields() }} 
+        onOk={() => form.submit()}
+      >
+        <Form form={form} layout="vertical" onFinish={saveConfig.mutate}>
           <Form.Item name="title" label="Widget Title" rules={[{ required: true }]}>
-            <Input placeholder="E.g., My Active Tickets" />
+            <Input />
           </Form.Item>
-          <Form.Item name="type" label="Widget Type" rules={[{ required: true }]}>
-            <Select options={[
-              { value: 'ticket_list', label: 'Ticket List' },
-              { value: 'monitor_kpi', label: 'KPI Stat' },
-              { value: 'audit_stream', label: 'Audit Pulse' },
-              { value: 'profile_card', label: 'Profile Card' },
-              { value: 'shortcuts', label: 'Quick Links' },
-            ]} />
-          </Form.Item>
-          <Form.Item noStyle shouldUpdate={(prev, cur) => prev.type !== cur.type}>
-            {({ getFieldValue }) => {
-              const type = getFieldValue('type')
-              if (['profile_card', 'shortcuts', 'audit_stream'].includes(type)) return null
-              return (
-                <Form.Item name="preset" label="Data Preset" rules={[{ required: true }]}>
-                  <Select options={
-                    type === 'ticket_list' ? [
-                      { value: 'assigned', label: 'Tickets assigned to me' },
-                      { value: 'sector', label: 'Sector unassigned queue' },
-                      { value: 'pending', label: 'New/Triage queue (Distributor)' },
-                    ] : [
-                      { value: 'breached', label: 'SLA Breaches (Global)' },
-                      { value: 'assigned', label: 'My active count' },
-                      { value: 'pending', label: 'Triage count' },
-                    ]
-                  } />
+          {editingWidget?.type === 'ticket_list' && (
+            <>
+                <Form.Item name={['config', 'assignee_user_id']} label="Filter by Assignee ID (Optional)">
+                <Input placeholder="Leave empty for all" />
                 </Form.Item>
-              )
-            }}
-          </Form.Item>
+                <Form.Item name={['config', 'current_sector_code']} label="Filter by Sector Code (Optional)">
+                <Input placeholder="E.g., s1" />
+                </Form.Item>
+                <Form.Item name={['config', 'status']} label="Filter by Status">
+                <Select allowClear options={STATUS_OPTIONS} />
+                </Form.Item>
+            </>
+          )}
+          {editingWidget?.type === 'monitor_kpi' && (
+            <>
+                <Form.Item name={['config', 'path']} label="Metric Data Point" rules={[{ required: true }]}>
+                <Select options={[
+                    { value: 'personal.kpis.assigned_active', label: 'Personal: Active Assigned' },
+                    { value: 'personal.beneficiary_kpis.active', label: 'Personal: My Active Requests' },
+                    { value: 'global.kpis.active_tickets', label: 'Global: Active Total' },
+                    { value: 'global.kpis.sla_breached', label: 'Global: SLA Breaches' },
+                    { value: 'distributor.kpis.pending_review', label: 'Distribution: Pending Review' },
+                ]} />
+                </Form.Item>
+                <Form.Item name={['config', 'label']} label="Display Label">
+                <Input placeholder="E.g., Breached" />
+                </Form.Item>
+                <Form.Item name={['config', 'color']} label="Metric Color">
+                <Input placeholder="CSS color (e.g. #ff4d4f)" />
+                </Form.Item>
+            </>
+          )}
+          {editingWidget?.type === 'audit_stream' && (
+            <>
+                <Form.Item name={['config', 'ticketId']} label="Filter by Ticket ID (Optional)">
+                <Input placeholder="Leave empty for global pulse" />
+                </Form.Item>
+                <Form.Item name={['config', 'limit']} label="Event Limit">
+                <Select options={[5, 10, 15, 20].map(v => ({ value: v, label: v }))} />
+                </Form.Item>
+            </>
+          )}
+          {editingWidget?.type === 'shortcuts' && (
+            <Form.Item name={['config', 'items']} label="Enabled Links">
+                <Checkbox.Group options={[
+                { label: 'Create', value: 'create' },
+                { label: 'Queue', value: 'tickets' },
+                { label: 'Monitor', value: 'monitor' },
+                { label: 'Admin', value: 'admin' },
+                ]} />
+            </Form.Item>
+          )}
+          {editingWidget?.type === 'sector_stats' && (
+             <>
+                <Form.Item name={['config', 'sectorCode']} label="Sector Code" rules={[{ required: true }]}>
+                   <Input placeholder="E.g., s1" />
+                </Form.Item>
+                <Form.Item name={['config', 'groupBy']} label="Group By" initialValue="status">
+                   <Select options={[
+                       { value: 'status', label: 'Status' },
+                       { value: 'priority', label: 'Priority' },
+                   ]} />
+                </Form.Item>
+             </>
+          )}
+          {editingWidget?.type === 'user_workload' && (
+             <Form.Item name={['config', 'sectorCode']} label="Sector Code" rules={[{ required: true }]}>
+                <Input placeholder="E.g., s10" />
+             </Form.Item>
+          )}
         </Form>
       </Modal>
     </div>
