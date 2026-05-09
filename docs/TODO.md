@@ -118,7 +118,12 @@ Legend: `[x]` done · `[~]` partial · `[ ]` pending
 
 ## Phase 6 — Admin module
 
-- [ ] All sectors/ Sector / User / Nomenclature CRUD endpoints; Keycloak group sync
+- [x] Admin backend endpoints for overview dashboards, users, sectors, memberships,
+      group hierarchy, metadata-key nomenclature, and SLA policies; membership
+      and realm-role changes audit-log and best-effort sync to Keycloak.
+- [x] Admin page replaces placeholder with operational dashboards, users/roles
+      management, sector CRUD, group hierarchy view, membership ledger,
+      metadata-key configuration, SLA policy management, and System hardening view.
 - [~] Role-specific queue UIs: distributor `Review Tickets` implemented (with premature closure); remaining role queues pending
 - [x] Review queue is its own dedicated page (`/review/:ticketId`), not a drawer
 - [x] Reviewer restriction: distributors route to a sector; only chief/admin pick the operator
@@ -150,10 +155,15 @@ Legend: `[x]` done · `[~]` partial · `[ ]` pending
       defence-in-depth gaps, performance hotspots, hardening backlog
 - [x] `assignable_users` endpoint refuses non-admins without an explicit sector
       and rejects sectors the caller doesn't belong to
+- [x] Phase 8 hardening index migration (`0007_phase8_hardening_indexes`) adds
+      hot-path indexes for admin queues, SLA breach views, audit recency,
+      notifications, active memberships, metadata keys, and trigram lookup.
 
 ## Phase 9 - Testing
 - [ ] Unit tests for all services
 - [ ] Integration tests for all services
+- [x] Admin service integration coverage for admin-only access, membership grant
+      and hierarchy visibility, and SLA policy validation/creation.
 - [ ] Acceptance tests for all services
 - [ ] End2End tests for all services
 - [ ] Performance tests for all services
@@ -164,7 +174,7 @@ Legend: `[x]` done · `[~]` partial · `[ ]` pending
 
 ## Phase 10 - Internalization and Wrapping Up
 
-- [ ] add useful indices on often used columns from tables and generate seed.sql in scripts/ to create (with indices) tables and populate the DB
+- [x] add useful indices on often used columns from tables and generate seed.sql in scripts/ to create (with indices) tables and populate the DB
 - [ ] add useful React Joyride info points that explain all functionalities of the module
 - [ ] i18n (en + ro)
 - [ ] write very comprehensive technical documentation in docs/technical_documentation.md with examples, mermaid charts, etc.
@@ -185,9 +195,10 @@ Legend: `[x]` done · `[~]` partial · `[ ]` pending
 | `tests/integration/test_workflow_acceptance.py` |  3 | ✅ |
 | `tests/integration/test_workflow_concurrency.py` |  1 | ✅ |
 | `tests/integration/test_rbac_new.py` | 11 | ✅ |
+| `tests/integration/test_admin_service.py` | 5 | ✅ |
 | `tests/integration/test_dashboard_service.py` | 2 | 🟡 added; requires `testcontainers` locally |
 | `tests/integration/test_notifications.py` | 3 | 🟡 added; requires `testcontainers` locally |
-| **Tracked total**                           | **90** | **🟡 local integration dependency missing in this environment** |
+| **Tracked total**                           | **95** | **🟡 broader local integration dependency may require Docker/testcontainers** |
 
 ---
 

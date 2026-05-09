@@ -164,11 +164,14 @@ def update_user(db: Session, principal: Principal, user_id: str, payload: dict[s
 def list_sectors(db: Session, principal: Principal) -> list[dict[str, Any]]:
     require_admin(principal)
     sectors = list(db.scalars(select(Sector).order_by(Sector.code.asc())))
-    counts = dict(db.execute(
+    counts = {
+        sector_id: count
+        for sector_id, count in db.execute(
         select(SectorMembership.sector_id, func.count(SectorMembership.id))
         .where(SectorMembership.is_active.is_(True))
         .group_by(SectorMembership.sector_id)
-    ))
+        )
+    }
     return [_serialize_sector(s, membership_count=int(counts.get(s.id, 0))) for s in sectors]
 
 
@@ -301,12 +304,14 @@ def group_hierarchy(db: Session, principal: Principal) -> dict[str, Any]:
             "membership_id": m.id,
         })
 
+    children = [{"key": "tickora:sectors", "title": "sectors", "children": list(by_sector.values())}]
     keycloak_tree = _keycloak_group_tree()
+    if keycloak_tree:
+        children.append(keycloak_tree)
     return {
         "key": "tickora",
         "title": "tickora",
-        "children": [{"key": "tickora:sectors", "title": "sectors", "children": list(by_sector.values())}],
-        "keycloak": keycloak_tree,
+        "children": children,
     }
 
 
@@ -344,6 +349,58 @@ def upsert_metadata_key(db: Session, principal: Principal, payload: dict[str, An
         old_value=old,
         new_value=new,
         metadata={"metadata_key": key},
+    )
+    return new
+
+
+def sla_policies(db: Session, principal: Principal) -> list[dict[str, Any]]:
+    require_admin(principal)
+    rows = list(db.scalars(select(SlaPolicy).order_by(SlaPolicy.priority.asc(), SlaPolicy.name.asc())))
+    return [_serialize_sla_policy(r) for r in rows]
+
+
+def upsert_sla_policy(
+    db: Session,
+    principal: Principal,
+    payload: dict[str, Any],
+    *,
+    policy_id: str | None = None,
+) -> dict[str, Any]:
+    require_admin(principal)
+    name = str(payload.get("name") or "").strip()
+    priority = str(payload.get("priority") or "").strip().lower()
+    if policy_id is None and (not name or not priority):
+        raise ValidationError("name and priority are required")
+    row = db.get(SlaPolicy, policy_id) if policy_id else None
+    old = _serialize_sla_policy(row) if row else None
+    if row is None:
+        row = SlaPolicy(
+            name=name,
+            priority=priority,
+            first_response_minutes=_positive_int(payload.get("first_response_minutes"), "first_response_minutes"),
+            resolution_minutes=_positive_int(payload.get("resolution_minutes"), "resolution_minutes"),
+        )
+        db.add(row)
+    for field in ("name", "priority", "category", "beneficiary_type"):
+        if field in payload:
+            value = payload.get(field)
+            setattr(row, field, str(value).strip().lower() if field == "priority" and value else value)
+    for field in ("first_response_minutes", "resolution_minutes"):
+        if field in payload:
+            setattr(row, field, _positive_int(payload.get(field), field))
+    if "is_active" in payload:
+        row.is_active = bool(payload["is_active"])
+    db.flush()
+    new = _serialize_sla_policy(row)
+    audit_service.record(
+        db,
+        actor=principal,
+        action=events.CONFIG_CHANGED,
+        entity_type="sla_policy",
+        entity_id=row.id,
+        old_value=old,
+        new_value=new,
+        metadata={"operation": "admin_upsert_sla_policy"},
     )
     return new
 
@@ -423,6 +480,23 @@ def _serialize_metadata_key(row: MetadataKeyDefinition | None) -> dict[str, Any]
         "value_type": row.value_type,
         "options": row.options or [],
         "description": row.description,
+        "is_active": row.is_active,
+        "created_at": _dt(row.created_at),
+        "updated_at": _dt(row.updated_at),
+    }
+
+
+def _serialize_sla_policy(row: SlaPolicy | None) -> dict[str, Any] | None:
+    if row is None:
+        return None
+    return {
+        "id": row.id,
+        "name": row.name,
+        "priority": row.priority,
+        "category": row.category,
+        "beneficiary_type": row.beneficiary_type,
+        "first_response_minutes": row.first_response_minutes,
+        "resolution_minutes": row.resolution_minutes,
         "is_active": row.is_active,
         "created_at": _dt(row.created_at),
         "updated_at": _dt(row.updated_at),
@@ -525,6 +599,16 @@ def _validate_membership_role(role: str) -> str:
     if role not in MEMBERSHIP_ROLES:
         raise ValidationError("role must be member or chief")
     return role
+
+
+def _positive_int(value: Any, field: str) -> int:
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError) as exc:
+        raise ValidationError(f"{field} must be a positive integer") from exc
+    if parsed <= 0:
+        raise ValidationError(f"{field} must be a positive integer")
+    return parsed
 
 
 def _rows_to_breakdown(rows) -> list[dict[str, Any]]:

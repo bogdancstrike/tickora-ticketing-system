@@ -59,6 +59,19 @@ export interface AdminMetadataKey {
   is_active: boolean
 }
 
+export interface AdminSlaPolicy {
+  id?: string
+  name: string
+  priority: 'low' | 'medium' | 'high' | 'critical'
+  category?: string | null
+  beneficiary_type?: 'internal' | 'external' | null
+  first_response_minutes: number
+  resolution_minutes: number
+  is_active: boolean
+  created_at?: string | null
+  updated_at?: string | null
+}
+
 export interface AdminOverview {
   generated_at: string
   kpis: Record<string, number | null>
@@ -148,5 +161,20 @@ export const listAdminMetadataKeys = async (): Promise<{ items: AdminMetadataKey
 
 export const upsertAdminMetadataKey = async (payload: AdminMetadataKey): Promise<AdminMetadataKey> => {
   const { data } = await apiClient.post('/api/admin/metadata-keys', payload)
+  return data
+}
+
+export const listAdminSlaPolicies = async (): Promise<{ items: AdminSlaPolicy[] }> => {
+  const { data } = await apiClient.get('/api/admin/sla-policies')
+  return data
+}
+
+export const createAdminSlaPolicy = async (payload: AdminSlaPolicy): Promise<AdminSlaPolicy> => {
+  const { data } = await apiClient.post('/api/admin/sla-policies', payload)
+  return data
+}
+
+export const updateAdminSlaPolicy = async (policyId: string, payload: AdminSlaPolicy): Promise<AdminSlaPolicy> => {
+  const { data } = await apiClient.patch(`/api/admin/sla-policies/${policyId}`, payload)
   return data
 }

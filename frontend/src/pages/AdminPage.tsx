@@ -11,10 +11,12 @@ import {
   SafetyCertificateOutlined, TeamOutlined,
 } from '@ant-design/icons'
 import {
-  ADMIN_ROLES, createAdminSector, getAdminOverview, getGroupHierarchy, grantMembership,
-  listAdminMemberships, listAdminMetadataKeys, listAdminSectors, listAdminUsers,
-  revokeMembership, updateAdminSector, updateAdminUser, upsertAdminMetadataKey,
-  type AdminMembership, type AdminMetadataKey, type AdminSector, type AdminUser,
+  ADMIN_ROLES, createAdminSector, createAdminSlaPolicy, getAdminOverview,
+  getGroupHierarchy, grantMembership, listAdminMemberships, listAdminMetadataKeys,
+  listAdminSectors, listAdminSlaPolicies, listAdminUsers, revokeMembership,
+  updateAdminSector, updateAdminSlaPolicy, updateAdminUser, upsertAdminMetadataKey,
+  type AdminMembership, type AdminMetadataKey, type AdminSector, type AdminSlaPolicy,
+  type AdminUser,
 } from '@/api/admin'
 import type { DashboardBreakdown } from '@/api/tickets'
 
@@ -247,27 +249,69 @@ function GroupsTab() {
 function ConfigTab() {
   const qc = useQueryClient()
   const [editing, setEditing] = useState<AdminMetadataKey | null>(null)
+  const [editingPolicy, setEditingPolicy] = useState<AdminSlaPolicy | null>(null)
   const keys = useQuery({ queryKey: ['adminMetadataKeys'], queryFn: listAdminMetadataKeys, staleTime: 60_000 })
+  const policies = useQuery({ queryKey: ['adminSlaPolicies'], queryFn: listAdminSlaPolicies, staleTime: 60_000 })
   const save = useMutation({
     mutationFn: (values: AdminMetadataKey) => upsertAdminMetadataKey({ ...values, options: typeof values.options === 'string' ? String(values.options).split(',').map((v) => v.trim()).filter(Boolean) : values.options }),
     onSuccess: () => { message.success('Metadata key saved'); setEditing(null); qc.invalidateQueries({ queryKey: ['adminMetadataKeys'] }) },
   })
+  const savePolicy = useMutation({
+    mutationFn: (values: AdminSlaPolicy) => values.id ? updateAdminSlaPolicy(values.id, values) : createAdminSlaPolicy(values),
+    onSuccess: () => { message.success('SLA policy saved'); setEditingPolicy(null); qc.invalidateQueries({ queryKey: ['adminSlaPolicies'] }); qc.invalidateQueries({ queryKey: ['adminOverview'] }) },
+  })
   return (
-    <div style={{ display: 'grid', gap: 12 }}>
-      <Flex justify="end"><Button type="primary" icon={<PlusOutlined />} onClick={() => setEditing({ key: '', label: '', value_type: 'string', options: [], is_active: true })}>New metadata key</Button></Flex>
-      <Table
-        rowKey="key"
-        loading={keys.isLoading}
-        dataSource={keys.data?.items || []}
-        columns={[
-          { title: 'Key', dataIndex: 'key' },
-          { title: 'Label', dataIndex: 'label' },
-          { title: 'Type', dataIndex: 'value_type', width: 110 },
-          { title: 'Options', dataIndex: 'options', render: (options: string[]) => <Space wrap>{options?.map((o) => <Tag key={o}>{o}</Tag>)}</Space> },
-          { title: 'Active', dataIndex: 'is_active', width: 100, render: (active) => <Tag color={active ? 'green' : 'default'}>{active ? 'active' : 'inactive'}</Tag> },
-          { title: 'Edit', width: 90, render: (_, row) => <Button size="small" onClick={() => setEditing(row)}>Edit</Button> },
-        ]}
-      />
+    <div style={{ display: 'grid', gap: 16 }}>
+      <Panel title="Metadata catalogue" icon={<DatabaseOutlined />}>
+        <Flex justify="end" style={{ marginBottom: 12 }}><Button type="primary" icon={<PlusOutlined />} onClick={() => setEditing({ key: '', label: '', value_type: 'string', options: [], is_active: true })}>New metadata key</Button></Flex>
+        <Table
+          rowKey="key"
+          loading={keys.isLoading}
+          dataSource={keys.data?.items || []}
+          pagination={{ pageSize: 6 }}
+          columns={[
+            { title: 'Key', dataIndex: 'key' },
+            { title: 'Label', dataIndex: 'label' },
+            { title: 'Type', dataIndex: 'value_type', width: 110 },
+            { title: 'Options', dataIndex: 'options', render: (options: string[]) => <Space wrap>{options?.map((o) => <Tag key={o}>{o}</Tag>)}</Space> },
+            { title: 'Active', dataIndex: 'is_active', width: 100, render: (active) => <Tag color={active ? 'green' : 'default'}>{active ? 'active' : 'inactive'}</Tag> },
+            { title: 'Edit', width: 90, render: (_, row) => <Button size="small" onClick={() => setEditing(row)}>Edit</Button> },
+          ]}
+        />
+      </Panel>
+      <Panel title="SLA policies" icon={<SafetyCertificateOutlined />}>
+        <Flex justify="end" style={{ marginBottom: 12 }}>
+          <Button
+            type="primary"
+            icon={<PlusOutlined />}
+            onClick={() => setEditingPolicy({
+              name: '',
+              priority: 'medium',
+              first_response_minutes: 60,
+              resolution_minutes: 480,
+              is_active: true,
+            })}
+          >
+            New SLA policy
+          </Button>
+        </Flex>
+        <Table
+          rowKey="id"
+          loading={policies.isLoading}
+          dataSource={policies.data?.items || []}
+          pagination={{ pageSize: 6 }}
+          columns={[
+            { title: 'Name', dataIndex: 'name' },
+            { title: 'Priority', dataIndex: 'priority', width: 110, render: (priority) => <Tag color={priority === 'critical' ? 'red' : priority === 'high' ? 'orange' : undefined}>{priority}</Tag> },
+            { title: 'Category', dataIndex: 'category', render: (value) => value || 'Any' },
+            { title: 'Beneficiary', dataIndex: 'beneficiary_type', width: 120, render: (value) => value || 'Any' },
+            { title: 'First response', dataIndex: 'first_response_minutes', width: 140, render: (value) => `${value} min` },
+            { title: 'Resolution', dataIndex: 'resolution_minutes', width: 120, render: (value) => `${value} min` },
+            { title: 'Active', dataIndex: 'is_active', width: 100, render: (active) => <Tag color={active ? 'green' : 'default'}>{active ? 'active' : 'inactive'}</Tag> },
+            { title: 'Edit', width: 90, render: (_, row) => <Button size="small" onClick={() => setEditingPolicy(row)}>Edit</Button> },
+          ]}
+        />
+      </Panel>
       <Modal title="Metadata key" open={!!editing} onCancel={() => setEditing(null)} footer={null}>
         <Form layout="vertical" initialValues={editing ? { ...editing, options: editing.options?.join(', ') } : undefined} onFinish={(values) => save.mutate(values)}>
           <Form.Item name="key" label="Key" rules={[{ required: true }]}><Input disabled={!!editing?.key} /></Form.Item>
@@ -279,7 +323,65 @@ function ConfigTab() {
           <Button type="primary" htmlType="submit" loading={save.isPending}>Save</Button>
         </Form>
       </Modal>
+      <Modal title="SLA policy" open={!!editingPolicy} onCancel={() => setEditingPolicy(null)} footer={null}>
+        <Form layout="vertical" initialValues={editingPolicy || undefined} onFinish={(values) => savePolicy.mutate({ ...editingPolicy, ...values })}>
+          <Form.Item name="name" label="Name" rules={[{ required: true }]}><Input /></Form.Item>
+          <Form.Item name="priority" label="Priority" rules={[{ required: true }]}>
+            <Select options={['low', 'medium', 'high', 'critical'].map((value) => ({ value, label: value }))} />
+          </Form.Item>
+          <Form.Item name="category" label="Category"><Input placeholder="Any category" /></Form.Item>
+          <Form.Item name="beneficiary_type" label="Beneficiary type">
+            <Select allowClear options={[{ value: 'internal', label: 'internal' }, { value: 'external', label: 'external' }]} />
+          </Form.Item>
+          <Row gutter={12}>
+            <Col span={12}><Form.Item name="first_response_minutes" label="First response minutes" rules={[{ required: true }]}><Input type="number" min={1} /></Form.Item></Col>
+            <Col span={12}><Form.Item name="resolution_minutes" label="Resolution minutes" rules={[{ required: true }]}><Input type="number" min={1} /></Form.Item></Col>
+          </Row>
+          <Form.Item name="is_active" label="Active" valuePropName="checked"><Switch /></Form.Item>
+          <Button type="primary" htmlType="submit" loading={savePolicy.isPending}>Save</Button>
+        </Form>
+      </Modal>
     </div>
+  )
+}
+
+function SystemTab() {
+  const overview = useQuery({ queryKey: ['adminOverview'], queryFn: getAdminOverview, staleTime: 30_000 })
+  const hardening = [
+    { key: 'hot_path_indexes', label: 'Hot-path indexes migration', status: 'ready', detail: '0007_phase8_hardening_indexes' },
+    { key: 'seed_sql', label: 'Seed SQL artifact', status: 'ready', detail: 'scripts/seed.sql' },
+    { key: 'audit_review', label: 'Audit events today', status: `${overview.data?.kpis.audit_events_today ?? 0}`, detail: 'Global immutable audit ledger' },
+    { key: 'sla_breaches', label: 'SLA breaches', status: `${overview.data?.sla.breached ?? 0}`, detail: 'Operational breach queue' },
+    { key: 'unread_notifications', label: 'Unread notifications', status: `${overview.data?.kpis.unread_notifications ?? 0}`, detail: 'In-app notification backlog' },
+  ]
+  return (
+    <Row gutter={[16, 16]}>
+      <Col xs={24} xl={12}>
+        <Panel title="System counters" icon={<DatabaseOutlined />}>
+          <MetricPanel values={overview.data?.system || {}} />
+        </Panel>
+      </Col>
+      <Col xs={24} xl={12}>
+        <Panel title="Hardening checklist" icon={<SafetyCertificateOutlined />}>
+          <Table
+            rowKey="key"
+            size="small"
+            pagination={false}
+            dataSource={hardening}
+            columns={[
+              { title: 'Item', dataIndex: 'label' },
+              { title: 'Status', dataIndex: 'status', width: 130, render: (value) => <Tag color={value === 'ready' ? 'green' : undefined}>{value}</Tag> },
+              { title: 'Detail', dataIndex: 'detail' },
+            ]}
+          />
+        </Panel>
+      </Col>
+      <Col xs={24}>
+        <Panel title="SLA posture" icon={<SafetyCertificateOutlined />}>
+          <MetricPanel values={{ breached: overview.data?.sla.breached, due_24h: overview.data?.sla.due_24h }} />
+        </Panel>
+      </Col>
+    </Row>
   )
 }
 
@@ -297,6 +399,7 @@ export function AdminPage() {
           { key: 'sectors', label: <Space><ApartmentOutlined />Sectors</Space>, children: <SectorsTab /> },
           { key: 'groups', label: <Space><SafetyCertificateOutlined />Groups</Space>, children: <GroupsTab /> },
           { key: 'config', label: <Space><DatabaseOutlined />Configuration</Space>, children: <ConfigTab /> },
+          { key: 'system', label: <Space><SafetyCertificateOutlined />System</Space>, children: <SystemTab /> },
         ]}
       />
     </div>

@@ -105,3 +105,22 @@ def metadata_keys(app, operation, request, *, principal: Principal, **kwargs):
 def upsert_metadata_key(app, operation, request, *, principal: Principal, **kwargs):
     with get_db() as db:
         return (admin_service.upsert_metadata_key(db, principal, _payload()), 200)
+
+
+@require_authenticated
+def sla_policies(app, operation, request, *, principal: Principal, **kwargs):
+    with get_db() as db:
+        return ({"items": admin_service.sla_policies(db, principal)}, 200)
+
+
+@require_authenticated
+def create_sla_policy(app, operation, request, *, principal: Principal, **kwargs):
+    with get_db() as db:
+        return (admin_service.upsert_sla_policy(db, principal, _payload()), 201)
+
+
+@require_authenticated
+def update_sla_policy(app, operation, request, *, principal: Principal, **kwargs):
+    policy_id = kwargs.get("policy_id") or flask_request.view_args.get("policy_id")
+    with get_db() as db:
+        return (admin_service.upsert_sla_policy(db, principal, _payload(), policy_id=policy_id), 200)
