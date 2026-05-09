@@ -183,6 +183,16 @@ export function ReviewTicketPage() {
     enabled: !!ticketId,
   })
 
+  const unassignSector = useMutation({
+    mutationFn: (code: string) => removeSector(ticketId!, code),
+    onSuccess: async () => {
+      msg.success('Sector removed')
+      await queryClient.invalidateQueries({ queryKey: ['ticket', ticketId] })
+      await queryClient.invalidateQueries({ queryKey: ['reviewTickets'] })
+    },
+    onError: (err) => msg.error(err.message),
+  })
+
   const review = useMutation({
     mutationFn: async (values: ReviewTicketPayload) => reviewTicket(ticketId!, values),
     onSuccess: async () => {
@@ -219,6 +229,7 @@ export function ReviewTicketPage() {
 
   const t: TicketDto = ticket.data
   const isOpen = ['pending', 'assigned_to_sector', 'in_progress', 'reopened'].includes(t.status)
+  const sectors = Array.from(new Set([t.current_sector_code, ...(t.sector_codes || [])].filter(Boolean) as string[]))
 
   return (
     <div style={{ padding: 24, display: 'grid', gap: 16 }}>
@@ -241,10 +252,23 @@ export function ReviewTicketPage() {
 
       {/* Hero */}
       <Card>
-        <Space size={8} style={{ marginBottom: 8 }}>
+        <Space size={8} wrap style={{ marginBottom: 8 }}>
           <StatusTag status={t.status} />
           <PriorityTag priority={t.priority} />
-          {t.current_sector_code && <Tag color="cyan">{t.current_sector_code}</Tag>}
+          {sectors.map((code) => {
+            const isPrimary = code === t.current_sector_code
+            const canRemove = !isPrimary && (isAdmin || isDistributor || !!user?.sectors?.some(s => s.sectorCode === code && s.role === 'chief'))
+            return (
+              <Tag
+                key={code}
+                color={isPrimary ? 'blue' : undefined}
+                closable={canRemove}
+                onClose={() => unassignSector.mutate(code)}
+              >
+                {code} {isPrimary && '(primary)'}
+              </Tag>
+            )
+          })}
           {t.beneficiary_type && <Tag>{t.beneficiary_type}</Tag>}
         </Space>
         <Typography.Title level={3} style={{ margin: 0 }}>{t.title || 'Untitled ticket'}</Typography.Title>

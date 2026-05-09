@@ -594,6 +594,14 @@
     },
     {
       "namespace": "tickora",
+      "operation_name": "notifications_stream_ticket",
+      "model_name": "Empty",
+      "request_method": ["POST"],
+      "api_url": "/api/notifications/stream-ticket",
+      "exec_method": { "module_name": "api.notifications", "method_name": "create_stream_ticket" }
+    },
+    {
+      "namespace": "tickora",
       "operation_name": "notifications_stream",
       "model_name": "Empty",
       "request_method": ["GET"],

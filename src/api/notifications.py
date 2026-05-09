@@ -1,5 +1,6 @@
 """Notification and SSE endpoints."""
 import json
+import uuid
 from datetime import datetime, timezone
 
 from flask import Response, stream_with_context
@@ -66,6 +67,30 @@ def mark_notification_read(app, operation, request, *, principal: Principal, **k
             .values(is_read=True, read_at=datetime.now(timezone.utc))
         )
         return ({"ok": True}, 200)
+
+
+@require_authenticated
+def create_stream_ticket(app, operation, request, *, principal: Principal, **kwargs):
+    """Generate a short-lived ticket to authenticate the SSE stream without
+    putting the JWT in the URL.
+    """
+    # Extract token from Authorization header
+    auth = flask_request.headers.get("Authorization") or ""
+    if not auth.lower().startswith("bearer "):
+        return ({"error": "missing token"}, 401)
+
+    token = auth.split(" ", 1)[1].strip()
+    ticket = str(uuid.uuid4())
+
+    redis = get_redis()
+    if not redis:
+        return ({"error": "redis unavailable"}, 503)
+
+    # Store the token with a short TTL (30s)
+    redis.set(f"sse_ticket:{ticket}", token, ex=30)
+
+    return ({"ticket": ticket}, 200)
+
 
 @require_authenticated
 def stream(app, operation, request, *, principal: Principal, **kwargs):

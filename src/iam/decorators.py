@@ -22,12 +22,21 @@ def _extract_bearer() -> str:
     auth = flask_request.headers.get("Authorization") or ""
     if auth.lower().startswith("bearer "):
         return auth.split(" ", 1)[1].strip()
-    
-    # Fallback to query parameter for EventSource (SSE) support
-    token = flask_request.args.get("access_token")
-    if token:
-        return token
-        
+
+    # Fallback to query parameter for EventSource (SSE) support.
+    # We prefer a short-lived one-time ticket instead of the raw JWT.
+    val = flask_request.args.get("access_token")
+    if val:
+        from src.core.redis_client import get_redis
+        redis = get_redis()
+        if redis:
+            # Check if this is a ticket
+            token = redis.get(f"sse_ticket:{val}")
+            if token:
+                redis.delete(f"sse_ticket:{val}")  # One-time use
+                return token
+        return val
+
     raise AuthenticationError("missing bearer token")
 
 

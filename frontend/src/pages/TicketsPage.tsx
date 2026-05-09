@@ -573,19 +573,64 @@ function TicketAudit({ ticketId }: { ticketId: string }) {
 }
 
 function TicketSidebar({ ticket }: { ticket: TicketDto }) {
+  const queryClient = useQueryClient()
+  const user = useSessionStore((s) => s.user)
+  const [msg, holder] = message.useMessage()
+
   const meta = useQuery({
     queryKey: ['ticketMetadata', ticket.id],
     queryFn: () => listTicketMetadata(ticket.id),
   })
+
+  const unassignSector = useMutation({
+    mutationFn: (sectorCode: string) => removeSector(ticket.id, sectorCode),
+    onSuccess: async () => {
+      msg.success('Sector removed')
+      await queryClient.invalidateQueries({ queryKey: ['ticket', ticket.id] })
+      await queryClient.invalidateQueries({ queryKey: ['tickets'] })
+    },
+    onError: (err) => msg.error(err.message),
+  })
+
+  const isAdmin = !!user?.roles.includes('tickora_admin')
+  const isDistributor = !!user?.roles.includes('tickora_distributor')
+  const sectors = ticketSectorCodes(ticket)
   const items = meta.data?.items || []
+
   return (
     <div style={{ display: 'grid', gap: 16 }}>
+      {holder}
       <Card size="small" title="Details">
         <Descriptions size="small" column={1} colon={false}>
-          <Descriptions.Item label="Sector">{ticket.current_sector_code || '—'}</Descriptions.Item>
+          <Descriptions.Item label="Sectors">
+            <Space wrap size={[0, 4]}>
+              {sectors.map((code) => {
+                const isPrimary = code === ticket.current_sector_code
+                const canRemove = !isPrimary && (isAdmin || isDistributor || !!user?.sectors?.some(s => s.sectorCode === code && s.role === 'chief'))
+                return (
+                  <Tag
+                    key={code}
+                    color={isPrimary ? 'blue' : undefined}
+                    closable={canRemove}
+                    onClose={() => unassignSector.mutate(code)}
+                  >
+                    {code} {isPrimary && '(primary)'}
+                  </Tag>
+                )
+              })}
+              {sectors.length === 0 && '—'}
+            </Space>
+          </Descriptions.Item>
           <Descriptions.Item label="Category">{ticket.category || '—'}</Descriptions.Item>
           <Descriptions.Item label="Type">{ticket.type || '—'}</Descriptions.Item>
-          <Descriptions.Item label="Assignee">{ticket.assignee_user_id ? <Typography.Text code style={{ fontSize: 11 }}>{ticket.assignee_user_id.slice(0, 8)}…</Typography.Text> : 'Unassigned'}</Descriptions.Item>
+          <Descriptions.Item label="Assignees">
+            <Space wrap size={[0, 4]}>
+              {(ticket.assignee_usernames || []).map((name, idx) => (
+                <Tag key={idx} color="cyan">{name}</Tag>
+              ))}
+              {!ticket.assignee_usernames?.length && 'Unassigned'}
+            </Space>
+          </Descriptions.Item>
           <Descriptions.Item label="SLA">
             {ticket.sla_status
               ? <Tag color={ticket.sla_status === 'breached' ? 'red' : ticket.sla_status === 'at_risk' ? 'orange' : 'green'}>{ticket.sla_status}</Tag>

@@ -91,6 +91,15 @@ def can_assign_sector(p: Principal, t: _TicketLike) -> bool:
     return False
 
 
+def can_remove_sector(p: Principal, t: _TicketLike, sector_code: str) -> bool:
+    """Detach a sector. Restricted to admins, distributors, or the chief of that sector."""
+    if p.is_admin or p.is_distributor:
+        return True
+    if p.is_chief_of(sector_code):
+        return True
+    return False
+
+
 def can_assign_to_me(p: Principal, t: _TicketLike) -> bool:
     if p.is_admin:
         return True

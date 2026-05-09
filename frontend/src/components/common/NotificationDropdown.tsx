@@ -65,23 +65,50 @@ export function NotificationDropdown() {
 
   // Live SSE
   useEffect(() => {
-    const accessToken = getToken()
-    if (!user?.id || !accessToken) return
+    if (!user?.id) return
 
-    const es = new EventSource(`${API_BASE}/api/notifications/stream?access_token=${accessToken}`)
+    let es: EventSource | null = null
+    let cancelled = false
 
-    es.onmessage = (event) => {
+    const connectSSE = async () => {
       try {
-        const data = JSON.parse(event.data) as NotificationItem & { type: string }
-        if (data.type === 'connection') return
-        setNotifications((prev) => [{ ...data, read: false }, ...prev].slice(0, 25))
-        setUnreadCount((prev) => prev + 1)
+        const response = await fetch(`${API_BASE}/api/notifications/stream-ticket`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${getToken() || ''}` },
+        })
+        if (!response.ok || cancelled) return
+        const { ticket } = await response.json()
+        if (!ticket || cancelled) return
+
+        es = new EventSource(`${API_BASE}/api/notifications/stream?access_token=${ticket}`)
+
+        es.onmessage = (event) => {
+          try {
+            const data = JSON.parse(event.data) as NotificationItem & { type: string }
+            if (data.type === 'connection') return
+            setNotifications((prev) => [{ ...data, read: false }, ...prev].slice(0, 25))
+            setUnreadCount((prev) => prev + 1)
+          } catch (e) {
+            // ignore malformed SSE frames
+          }
+        }
+        es.onerror = () => {
+          if (es) {
+            es.close()
+            es = null
+          }
+        }
       } catch (e) {
-        // ignore malformed SSE frames
+        // silent fail on connection errors
       }
     }
-    es.onerror = () => es.close()
-    return () => es.close()
+
+    connectSSE()
+
+    return () => {
+      cancelled = true
+      if (es) es.close()
+    }
   }, [user?.id])
 
   const markAllRead = useCallback(async () => {

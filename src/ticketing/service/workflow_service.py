@@ -400,8 +400,8 @@ def remove_sector(db: Session, p: Principal, ticket_id: str, sector_code: str) -
     with span("workflow.remove_sector", username=p.username, user_id=p.user_id, ticket_id=ticket_id, sector_code=sector_code):
         t = _load(db, ticket_id)
         _check_visible(p, t)
-        if not rbac.can_assign_sector(p, t):
-            _denied(sm.ACTION_ASSIGN_SECTOR, p, ticket_id, db, "not allowed to remove sector")
+        if not rbac.can_remove_sector(p, t, sector_code):
+            _denied(sm.ACTION_ASSIGN_SECTOR, p, ticket_id, db, f"not allowed to remove sector {sector_code}")
         sector = db.scalar(select(Sector).where(Sector.code == sector_code))
         if sector is None:
             raise BusinessRuleError(f"unknown sector: {sector_code}")
