@@ -191,26 +191,26 @@ export function StatusChanger({
               return (
                 <>
                   <p>You are about to change <code>{ticket.ticket_code}</code> from <b>{ticket.status}</b> to <b>{pending}</b>.</p>
-                  {(showField || requiresSector) && (
-                    <Form form={form} layout="vertical" initialValues={{ sector_code: ticket.current_sector_code || undefined }}>
-                      {requiresSector && (
-                        <Form.Item
-                          name="sector_code"
-                          label="Target sector"
-                          rules={[{ required: true, message: 'Select the sector that should receive this ticket' }]}
-                        >
-                          <Select
-                            showSearch
-                            optionFilterProp="label"
-                            loading={options.isLoading}
-                            placeholder="Select sector"
-                            options={(options.data?.sectors || []).map((s) => ({
-                              value: s.code,
-                              label: `${s.code} · ${s.name}`,
-                            }))}
-                          />
-                        </Form.Item>
-                      )}
+                  <Form form={form} layout="vertical" initialValues={{ sector_code: ticket.current_sector_code || undefined }}>
+                    {requiresSector && (
+                      <Form.Item
+                        name="sector_code"
+                        label="Target sector"
+                        rules={[{ required: true, message: 'Select the sector that should receive this ticket' }]}
+                      >
+                        <Select
+                          showSearch
+                          optionFilterProp="label"
+                          loading={options.isLoading}
+                          placeholder="Select sector"
+                          options={(options.data?.sectors || []).map((s) => ({
+                            value: s.code,
+                            label: `${s.code} · ${s.name}`,
+                          }))}
+                        />
+                      </Form.Item>
+                    )}
+                    {showField && (
                       <Form.Item
                         name="reason"
                         label={reasonMeta?.label || (required ? 'Reason' : 'Reason (optional)')}
@@ -218,8 +218,8 @@ export function StatusChanger({
                       >
                         <Input.TextArea rows={3} placeholder={reasonMeta?.placeholder} />
                       </Form.Item>
-                    </Form>
-                  )}
+                    )}
+                  </Form>
                   <Space style={{ marginTop: 8 }}>
                     <Button onClick={() => { setPending(null); form.resetFields() }}>Cancel</Button>
                     <Button type="primary" onClick={async () => {

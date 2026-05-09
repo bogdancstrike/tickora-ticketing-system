@@ -178,7 +178,6 @@ function AppHeader() {
         open={drawerVisible}
         styles={{ body: { padding: 0 } }}
         size="default"
-        width="280px"
       >
         <Menu
           mode="inline"

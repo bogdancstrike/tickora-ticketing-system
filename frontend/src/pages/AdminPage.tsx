@@ -268,6 +268,7 @@ function GroupsTab() {
 }
 
 function WidgetCataloguePanel() {
+  const { token } = antTheme.useToken()
   const qc = useQueryClient()
   const [editing, setEditing] = useState<AdminWidgetDefinition | null>(null)
   const widgets = useQuery({ queryKey: ['adminWidgets'], queryFn: listAdminWidgets, staleTime: 60_000 })
@@ -304,9 +305,9 @@ function WidgetCataloguePanel() {
           height: 32,
           width: 32,
           margin: '0 auto',
-          background: antTheme.useToken().token.colorFillAlter,
+          background: token.colorFillAlter,
           borderRadius: 4,
-          border: `1px solid ${antTheme.useToken().token.colorBorderSecondary}`
+          border: `1px solid ${token.colorBorderSecondary}`
         }}>
           {getIconComponent(icon)}
         </div>
@@ -351,7 +352,7 @@ function WidgetCataloguePanel() {
         open={!!editing}
         onCancel={() => setEditing(null)}
         footer={null}
-        destroyOnClose
+        destroyOnHide
       >
         <Form
           layout="vertical"

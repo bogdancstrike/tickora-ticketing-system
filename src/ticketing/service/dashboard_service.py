@@ -9,7 +9,19 @@ from sqlalchemy.orm import Session
 
 from src.core.errors import NotFoundError, PermissionDeniedError, ValidationError
 from src.iam.principal import Principal
-from src.ticketing.models import CustomDashboard, DashboardWidget, WidgetDefinition
+from src.ticketing.models import CustomDashboard, DashboardWidget, WidgetDefinition, Ticket
+from src.ticketing.service.ticket_service import _visibility_filter
+
+
+ACTIVE_STATUSES = ("pending", "assigned_to_sector", "in_progress", "reopened")
+
+
+def _visible_stmt(principal: Principal):
+    stmt = select(Ticket).where(Ticket.is_deleted.is_(False))
+    vis = _visibility_filter(principal)
+    if vis is not None:
+        stmt = stmt.where(vis)
+    return stmt
 
 
 def _check_dashboard_access(p: Principal) -> None:
@@ -168,31 +180,50 @@ def auto_configure_dashboard(db: Session, p: Principal, dashboard_id: str, mode:
         widgets_to_add.extend([
             {"type": "system_health", "x": 4, "y": 0, "w": 4, "h": 3},
             {"type": "sla_overview", "x": 8, "y": 0, "w": 4, "h": 3},
-            {"type": "stale_tickets", "x": 0, "y": 3, "w": 4, "h": 4},
-            {"type": "bottleneck_analysis", "x": 4, "y": 3, "w": 8, "h": 4},
+            {"type": "stale_tickets", "x": 0, "y": 3, "w": 4, "h": 4, "config": {"hours": 48}},
+            {"type": "bottleneck_analysis", "x": 4, "y": 3, "w": 8, "h": 4, "config": {"days": 30}},
             {"type": "audit_stream", "x": 0, "y": 7, "w": 12, "h": 4},
         ])
     elif p.chief_sectors:
         sector_code = primary_sector or list(p.chief_sectors)[0]
         widgets_to_add.extend([
-            {"type": "workload_balancer", "x": 4, "y": 0, "w": 8, "h": 3},
-            {"type": "bottleneck_analysis", "x": 0, "y": 3, "w": 12, "h": 4, "config": {"scope": "sector", "sector_code": sector_code}},
-            {"type": "ticket_list", "x": 0, "y": 7, "w": 6, "h": 4, "title": f"Sector: {sector_code}", "config": {"scope": "sector", "sector_code": sector_code}},
-            {"type": "stale_tickets", "x": 6, "y": 7, "w": 6, "h": 4, "config": {"scope": "sector", "sector_code": sector_code}},
+            {"type": "workload_balancer", "x": 4, "y": 0, "w": 8, "h": 3, "config": {"sectorCode": sector_code}},
+            {"type": "bottleneck_analysis", "x": 0, "y": 3, "w": 12, "h": 4, "config": {"scope": "sector", "sector_code": sector_code, "days": 14}},
+            {"type": "ticket_list", "x": 0, "y": 7, "w": 6, "h": 4, "title": f"Sector Queue: {sector_code}", "config": {"scope": "sector", "sector_code": sector_code}},
+            {"type": "stale_tickets", "x": 6, "y": 7, "w": 6, "h": 4, "config": {"scope": "sector", "sector_code": sector_code, "hours": 24}},
         ])
     elif p.is_internal:
         widgets_to_add.extend([
             {"type": "monitor_kpi", "x": 4, "y": 0, "w": 8, "h": 3, "config": {"scope": "personal"}},
-            {"type": "ticket_list", "x": 0, "y": 3, "w": 8, "h": 4, "title": "My Active Tickets", "config": {"scope": "personal"}},
-            {"type": "recent_comments", "x": 8, "y": 3, "w": 4, "h": 4},
+            {"type": "ticket_list", "x": 0, "y": 3, "w": 8, "h": 4, "title": "My Active Queue", "config": {"scope": "personal"}},
+            {"type": "recent_comments", "x": 8, "y": 3, "w": 4, "h": 4, "config": {"scope": "personal"}},
         ])
     else:  # Beneficiary
         widgets_to_add.extend([
             {"type": "profile_card", "x": 4, "y": 0, "w": 4, "h": 3},
             {"type": "shortcuts", "x": 8, "y": 0, "w": 4, "h": 3},
             {"type": "ticket_list", "x": 0, "y": 3, "w": 8, "h": 4, "title": "My Requests", "config": {"scope": "my_requests"}},
-            {"type": "recent_comments", "x": 8, "y": 3, "w": 4, "h": 4, "config": {"visibility": "public"}},
+            {"type": "recent_comments", "x": 8, "y": 3, "w": 4, "h": 4, "config": {"visibility": "public", "scope": "my_requests"}},
         ])
+
+    # Add 5 most recent active tickets as specific comment watchers
+    recent_tickets = db.scalars(
+        _visible_stmt(p)
+        .where(Ticket.status.in_(ACTIVE_STATUSES))
+        .order_by(Ticket.created_at.desc())
+        .limit(5)
+    ).all()
+
+    for idx, t in enumerate(recent_tickets):
+        # Place them at the end or in a dedicated row
+        widgets_to_add.append({
+            "type": "recent_comments",
+            "title": f"Comments: {t.ticket_code}",
+            "x": (idx % 3) * 4,
+            "y": 11 + (idx // 3) * 4,
+            "w": 4, "h": 4,
+            "config": {"ticketId": t.id, "limit": 5}
+        })
 
     for w_data in widgets_to_add:
         w = DashboardWidget(
