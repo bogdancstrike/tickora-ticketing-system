@@ -2,7 +2,7 @@
 
 The admin surface intentionally composes existing Tickora state instead of
 introducing new admin-only tables: users, sectors, memberships, audit, tickets,
-notifications, SLA policies, and metadata definitions are the source of truth.
+notifications, and metadata definitions are the source of truth.
 """
 from __future__ import annotations
 
@@ -34,7 +34,6 @@ from src.ticketing.models import (
     Notification,
     Sector,
     SectorMembership,
-    SlaPolicy,
     SystemSetting,
     Ticket,
     TicketMetadata,
@@ -99,7 +98,6 @@ def overview(db: Session, principal: Principal) -> dict[str, Any]:
     kpis = {
         "total_tickets": _count(db, select(Ticket).where(Ticket.is_deleted.is_(False))),
         "active_tickets": _count(db, select(Ticket).where(Ticket.is_deleted.is_(False), Ticket.status.in_(ACTIVE_STATUSES))),
-        "sla_breached": _count(db, select(Ticket).where(Ticket.is_deleted.is_(False), Ticket.sla_status == "breached")),
         "new_today": _count(db, select(Ticket).where(Ticket.is_deleted.is_(False), Ticket.created_at >= today)),
         "users": int(total_users),
         "active_users": int(active_users),
@@ -116,14 +114,12 @@ def overview(db: Session, principal: Principal) -> dict[str, Any]:
         "by_priority": priority_counts,
         "by_sector": sector_counts,
         "global_monitor": monitor_service.monitor_global(db, principal),
-        "sla": monitor_service.monitor_sla(db, principal),
         "recent_audit": [_serialize_audit(a) for a in db.scalars(
             select(AuditEvent).order_by(desc(AuditEvent.created_at), desc(AuditEvent.id)).limit(12)
         )],
         "queues": _admin_queues(db),
         "system": {
             "metadata_keys": _count(db, select(MetadataKeyDefinition)),
-            "active_sla_policies": _count(db, select(SlaPolicy).where(SlaPolicy.is_active.is_(True))),
             "inactive_sectors": _count(db, select(Sector).where(Sector.is_active.is_(False))),
         },
     }
@@ -473,58 +469,6 @@ def delete_ticket_metadata(db: Session, principal: Principal, metadata_id: str) 
     )
 
 
-def sla_policies(db: Session, principal: Principal) -> list[dict[str, Any]]:
-    require_admin(principal)
-    rows = list(db.scalars(select(SlaPolicy).order_by(SlaPolicy.priority.asc(), SlaPolicy.name.asc())))
-    return [_serialize_sla_policy(r) for r in rows]
-
-
-def upsert_sla_policy(
-    db: Session,
-    principal: Principal,
-    payload: dict[str, Any],
-    *,
-    policy_id: str | None = None,
-) -> dict[str, Any]:
-    require_admin(principal)
-    name = str(payload.get("name") or "").strip()
-    priority = str(payload.get("priority") or "").strip().lower()
-    if policy_id is None and (not name or not priority):
-        raise ValidationError("name and priority are required")
-    row = db.get(SlaPolicy, policy_id) if policy_id else None
-    old = _serialize_sla_policy(row) if row else None
-    if row is None:
-        row = SlaPolicy(
-            name=name,
-            priority=priority,
-            first_response_minutes=_positive_int(payload.get("first_response_minutes"), "first_response_minutes"),
-            resolution_minutes=_positive_int(payload.get("resolution_minutes"), "resolution_minutes"),
-        )
-        db.add(row)
-    for field in ("name", "priority", "category", "beneficiary_type"):
-        if field in payload:
-            value = payload.get(field)
-            setattr(row, field, str(value).strip().lower() if field == "priority" and value else value)
-    for field in ("first_response_minutes", "resolution_minutes"):
-        if field in payload:
-            setattr(row, field, _positive_int(payload.get(field), field))
-    if "is_active" in payload:
-        row.is_active = bool(payload["is_active"])
-    db.flush()
-    new = _serialize_sla_policy(row)
-    audit_service.record(
-        db,
-        actor=principal,
-        action=events.CONFIG_CHANGED,
-        entity_type="sla_policy",
-        entity_id=row.id,
-        old_value=old,
-        new_value=new,
-        metadata={"operation": "admin_upsert_sla_policy"},
-    )
-    return new
-
-
 def list_system_settings(db: Session, principal: Principal) -> list[dict[str, Any]]:
     require_admin(principal)
     rows = list(db.scalars(select(SystemSetting).order_by(SystemSetting.key.asc())))
@@ -569,7 +513,6 @@ def _admin_queues(db: Session) -> dict[str, int]:
     return {
         "pending_review": _count(db, select(Ticket).where(Ticket.is_deleted.is_(False), Ticket.status == "pending")),
         "unassigned_active": _count(db, select(Ticket).where(Ticket.is_deleted.is_(False), Ticket.status.in_(ACTIVE_STATUSES), Ticket.assignee_user_id.is_(None))),
-        "sla_breaches": _count(db, select(Ticket).where(Ticket.is_deleted.is_(False), Ticket.sla_status == "breached")),
         "reopened": _count(db, select(Ticket).where(Ticket.is_deleted.is_(False), Ticket.reopened_count > 0)),
     }
 
@@ -657,23 +600,6 @@ def _serialize_ticket_metadata(row: TicketMetadata | None, ticket: Ticket | None
         "key": row.key,
         "value": row.value,
         "label": row.label,
-        "created_at": _dt(row.created_at),
-        "updated_at": _dt(row.updated_at),
-    }
-
-
-def _serialize_sla_policy(row: SlaPolicy | None) -> dict[str, Any] | None:
-    if row is None:
-        return None
-    return {
-        "id": row.id,
-        "name": row.name,
-        "priority": row.priority,
-        "category": row.category,
-        "beneficiary_type": row.beneficiary_type,
-        "first_response_minutes": row.first_response_minutes,
-        "resolution_minutes": row.resolution_minutes,
-        "is_active": row.is_active,
         "created_at": _dt(row.created_at),
         "updated_at": _dt(row.updated_at),
     }
@@ -792,16 +718,6 @@ def _validate_membership_role(role: str) -> str:
     if role not in MEMBERSHIP_ROLES:
         raise ValidationError("role must be member or chief")
     return role
-
-
-def _positive_int(value: Any, field: str) -> int:
-    try:
-        parsed = int(value)
-    except (TypeError, ValueError) as exc:
-        raise ValidationError(f"{field} must be a positive integer") from exc
-    if parsed <= 0:
-        raise ValidationError(f"{field} must be a positive integer")
-    return parsed
 
 
 def _ticket_by_ref(db: Session, ticket_ref: str) -> Ticket:

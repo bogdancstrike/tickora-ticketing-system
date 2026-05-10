@@ -100,7 +100,6 @@ class Ticket(Base):
         Index("idx_tickets_updated_at",        "updated_at"),
         Index("idx_tickets_done_at",           "done_at"),
         Index("idx_tickets_closed_at",         "closed_at"),
-        Index("idx_tickets_sla_due_at",        "sla_due_at"),
         Index("idx_tickets_requester_ip",      "requester_ip"),
         Index("idx_tickets_sector_created_at", "current_sector_id", "created_at"),
         Index("idx_tickets_sector_assignee_status",
@@ -149,9 +148,6 @@ class Ticket(Base):
     reopened_at:        Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     reopened_count: Mapped[int]    = mapped_column(Integer, nullable=False, default=0)
-
-    sla_due_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    sla_status: Mapped[str | None]      = mapped_column(String(50), default="within_sla")
 
     is_deleted: Mapped[bool]     = mapped_column(Boolean, nullable=False, default=False)
 
@@ -262,7 +258,7 @@ class TicketAssignmentHistory(Base):
 from src.audit.models import AuditEvent  # noqa: F401,E402
 
 
-# ── Notifications + SLA + links ─────────────────────────────────────────────
+# ── Notifications + links ───────────────────────────────────────────────────
 
 class Notification(Base):
     __tablename__ = "notifications"
@@ -281,21 +277,6 @@ class Notification(Base):
     delivered_channels: Mapped[dict | None] = mapped_column(JSONB)
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
-
-
-class SlaPolicy(Base):
-    __tablename__ = "sla_policies"
-
-    id:       Mapped[str] = mapped_column(UUID(as_uuid=False), primary_key=True, default=_uuid)
-    name:     Mapped[str] = mapped_column(String(255), nullable=False)
-    priority: Mapped[str] = mapped_column(String(50), nullable=False)
-    category: Mapped[str | None] = mapped_column(String(100))
-    beneficiary_type: Mapped[str | None] = mapped_column(String(50))
-    first_response_minutes: Mapped[int] = mapped_column(Integer, nullable=False)
-    resolution_minutes:     Mapped[int] = mapped_column(Integer, nullable=False)
-    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
 
 
 class TicketLink(Base):

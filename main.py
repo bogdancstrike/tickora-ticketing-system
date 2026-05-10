@@ -1,7 +1,7 @@
 """Tickora — entry point.
 
 Boots the HTTP API via QF Framework's FrameworkApp. The same image is reused
-for the worker (see worker.py) and the SLA checker (see sla_checker.py).
+for the worker (see worker.py).
 """
 
 # GEVENT MONKEY PATCHING MUST BE FIRST

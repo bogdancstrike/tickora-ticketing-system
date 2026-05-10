@@ -141,25 +141,6 @@ def delete_ticket_metadata(app, operation, request, *, principal: Principal, **k
 
 
 @require_authenticated
-def sla_policies(app, operation, request, *, principal: Principal, **kwargs):
-    with get_db() as db:
-        return ({"items": admin_service.sla_policies(db, principal)}, 200)
-
-
-@require_authenticated
-def create_sla_policy(app, operation, request, *, principal: Principal, **kwargs):
-    with get_db() as db:
-        return (admin_service.upsert_sla_policy(db, principal, _payload()), 201)
-
-
-@require_authenticated
-def update_sla_policy(app, operation, request, *, principal: Principal, **kwargs):
-    policy_id = kwargs.get("policy_id") or flask_request.view_args.get("policy_id")
-    with get_db() as db:
-        return (admin_service.upsert_sla_policy(db, principal, _payload(), policy_id=policy_id), 200)
-
-
-@require_authenticated
 def system_settings(app, operation, request, *, principal: Principal, **kwargs):
     with get_db() as db:
         return ({"items": admin_service.list_system_settings(db, principal)}, 200)

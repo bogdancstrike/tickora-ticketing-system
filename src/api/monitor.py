@@ -56,12 +56,6 @@ def user_monitor(app, operation, request, *, principal: Principal, **kwargs):
 
 
 @require_authenticated
-def sla_monitor(app, operation, request, *, principal: Principal, **kwargs):
-    with get_db() as db:
-        return (monitor_service.monitor_sla(db, principal), 200)
-
-
-@require_authenticated
 def timeseries_monitor(app, operation, request, *, principal: Principal, **kwargs):
     days = int(flask_request.args.get("days", 30))
     with get_db() as db:

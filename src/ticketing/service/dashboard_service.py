@@ -243,7 +243,6 @@ def sync_widget_catalogue(db: Session) -> None:
         ("shortcuts", "Quick Links", "Customizable action shortcuts", "SendOutlined", []),
         ("clock", "Clock", "Local and UTC time display", "FieldTimeOutlined", []),
         ("system_health", "System Health", "Backend services status monitor", "DatabaseOutlined", ["tickora_admin", "tickora_auditor"]),
-        ("sla_overview", "SLA Overview", "Service level agreement compliance tracking", "CarryOutOutlined", ["tickora_admin", "tickora_auditor", "tickora_distributor", "tickora_internal_user"]),
         ("welcome_banner", "Welcome Banner", "Personalized greeting and tips", "SmileOutlined", []),
         ("not_reviewed", "Not Yet Reviewed", "Pending tickets waiting for distribution", "HourglassOutlined", ["tickora_admin", "tickora_distributor"]),
         ("reviewed_today", "Reviewed Today", "Tickets reviewed by distributors in the last 24h", "CheckCircleOutlined", ["tickora_admin", "tickora_distributor"]),
@@ -264,7 +263,6 @@ def sync_widget_catalogue(db: Session) -> None:
         ("backlog_by_sector", "Backlog by Sector", "Largest visible sector backlogs", "BarChartOutlined", ["tickora_admin", "tickora_auditor", "tickora_distributor"]),
         ("priority_mix", "Priority Mix", "Visible tickets grouped by priority", "PieChartOutlined", ["tickora_admin", "tickora_auditor", "tickora_distributor", "tickora_internal_user"]),
         ("oldest_active", "Oldest Active", "Oldest visible tickets that still need movement", "HistoryOutlined", ["tickora_admin", "tickora_auditor", "tickora_distributor", "tickora_internal_user"]),
-        ("sla_risk", "SLA Risk", "SLA breaches, reopened tickets, and average resolution", "CarryOutOutlined", ["tickora_admin", "tickora_auditor", "tickora_distributor", "tickora_internal_user"]),
         ("requester_status", "Requester Status", "Your submitted/requester tickets grouped by status", "PieChartOutlined", []),
     ]
 
@@ -358,8 +356,6 @@ def _recipe_admin() -> list[dict[str, Any]]:
         {"type": "active_sessions",    "size": "sm",  "config": {}},
         {"type": "task_health",        "size": "sm",  "config": {}},
         {"type": "system_health",      "size": "sm"},
-        {"type": "sla_overview",       "size": "sm",  "config": {}},
-        {"type": "sla_risk",           "size": "md",  "config": {}},
         {"type": "throughput_trend",    "size": "wide","config": {"days": 30}},
         {"type": "backlog_by_sector",   "size": "md",  "config": {"limit": 10}},
         {"type": "stale_tickets",      "size": "md",  "config": {"hours": 48}},
@@ -373,7 +369,6 @@ def _recipe_auditor() -> list[dict[str, Any]]:
     return [
         {"type": "welcome_banner",      "title": "Welcome", "size": "sm"},
         {"type": "global_kpi",          "size": "lg"},
-        {"type": "sla_overview",        "size": "sm"},
         {"type": "throughput_trend",     "size": "wide", "config": {"days": 30}},
         {"type": "priority_mix",         "size": "md"},
         {"type": "audit_stream",        "size": "wide", "config": {"limit": 50}},
@@ -386,7 +381,6 @@ def _recipe_distributor() -> list[dict[str, Any]]:
     return [
         {"type": "welcome_banner",   "title": "Welcome", "size": "sm"},
         {"type": "monitor_kpi",      "size": "lg",  "config": {"scope": "global"}},
-        {"type": "sla_overview",     "size": "sm"},
         {"type": "priority_mix",     "size": "md"},
         {"type": "oldest_active",    "size": "md",  "config": {"limit": 10}},
         {"type": "not_reviewed",     "size": "md"},
@@ -419,7 +413,6 @@ def _recipe_member() -> list[dict[str, Any]]:
     return [
         {"type": "welcome_banner",  "title": "My day", "size": "sm"},
         {"type": "monitor_kpi",     "size": "lg", "config": {"scope": "personal"}},
-        {"type": "sla_risk",        "size": "sm"},
         {"type": "my_assigned",     "size": "md"},
         {"type": "my_watchlist",    "size": "md"},
         {"type": "my_mentions",     "size": "md", "config": {"limit": 10}},

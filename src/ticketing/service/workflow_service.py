@@ -31,7 +31,6 @@ from src.ticketing.models import (
     TicketStatusHistory,
 )
 from src.audit import service as audit_service
-from src.ticketing.service import sla_service
 from src.ticketing.service.ticket_service import (
     _assignees_for_ticket,
     _beneficiary_user_id,
@@ -855,9 +854,7 @@ def _change_priority(db: Session, p: Principal, ticket_id: str, priority: str, *
     if _no_returned_row(res):
         raise ConcurrencyConflictError("priority changed; refresh and retry")
 
-    # Reload and evaluate SLA
     t = _load(db, ticket_id)
-    sla_service.evaluate_sla(db, t)
     db.add(t)
 
     audit_service.record(

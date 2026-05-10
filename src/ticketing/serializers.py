@@ -43,8 +43,6 @@ def serialize_ticket(t: Ticket, p: Principal, *, full: bool = True) -> dict[str,
         "closed_at":        _iso(t.closed_at),
         "reopened_at":      _iso(t.reopened_at),
         "reopened_count":   t.reopened_count,
-        "sla_due_at":       _iso(t.sla_due_at),
-        "sla_status":       t.sla_status,
         "assignee_user_id": t.assignee_user_id,
     }
 

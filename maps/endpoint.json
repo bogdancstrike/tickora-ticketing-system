@@ -472,14 +472,6 @@
         "method_name": "user_monitor"
       }
       },
-      {
-      "namespace": "tickora",
-      "operation_name": "monitor_sla",
-      "model_name": "Empty",
-      "request_method": ["GET"],
-      "api_url": "/api/monitor/sla",
-      "exec_method": { "module_name": "api.monitor", "method_name": "sla_monitor" }
-    },
     {
       "namespace": "tickora",
       "operation_name": "monitor_timeseries",
@@ -696,30 +688,6 @@
       "request_method": ["DELETE"],
       "api_url": "/api/admin/ticket-metadatas/<metadata_id>",
       "exec_method": { "module_name": "api.admin", "method_name": "delete_ticket_metadata" }
-    },
-    {
-      "namespace": "tickora",
-      "operation_name": "admin_sla_policies",
-      "model_name": "Empty",
-      "request_method": ["GET"],
-      "api_url": "/api/admin/sla-policies",
-      "exec_method": { "module_name": "api.admin", "method_name": "sla_policies" }
-    },
-    {
-      "namespace": "tickora",
-      "operation_name": "admin_sla_policies_create",
-      "model_name": "Empty",
-      "request_method": ["POST"],
-      "api_url": "/api/admin/sla-policies",
-      "exec_method": { "module_name": "api.admin", "method_name": "create_sla_policy" }
-    },
-    {
-      "namespace": "tickora",
-      "operation_name": "admin_sla_policies_update",
-      "model_name": "Empty",
-      "request_method": ["PATCH"],
-      "api_url": "/api/admin/sla-policies/<policy_id>",
-      "exec_method": { "module_name": "api.admin", "method_name": "update_sla_policy" }
     },
     {
       "namespace": "tickora",

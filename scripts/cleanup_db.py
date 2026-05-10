@@ -8,7 +8,7 @@ def cleanup():
             'widget_definitions', 'system_settings', 'metadata_key_definitions', 'ticket_metadatas',
             'ticket_comments', 'ticket_attachments', 'ticket_status_history', 'ticket_sector_history',
             'ticket_assignment_history', 'ticket_links', 'ticket_sectors', 'ticket_assignees',
-            'audit_events', 'notifications', 'sla_policies', 'tickets', 'beneficiaries',
+            'audit_events', 'notifications', 'tickets', 'beneficiaries',
             'sector_memberships', 'sectors', 'users'
         ]
         print("Truncating tables...")

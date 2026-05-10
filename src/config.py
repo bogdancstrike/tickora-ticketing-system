@@ -16,7 +16,7 @@ class Config:
     API_PORT     = int(os.getenv("API_PORT", "5100"))
     DEV_MODE     = _bool("DEV_MODE", True)
     LOG_LEVEL    = os.getenv("LOG_LEVEL", "INFO")
-    ROLE         = os.getenv("ROLE", "api")  # api | worker | sla_checker
+    ROLE         = os.getenv("ROLE", "api")  # api | worker
 
     ALLOWED_ORIGINS = [
         o.strip() for o in os.getenv("ALLOWED_ORIGINS", "http://localhost:5173").split(",")

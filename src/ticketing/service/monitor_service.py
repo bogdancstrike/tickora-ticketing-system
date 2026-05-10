@@ -254,7 +254,6 @@ def _empty_sector_kpis() -> dict[str, int | float | None]:
         "active": 0,
         "unassigned": 0,
         "done": 0,
-        "sla_breached": 0,
         "reopened": 0,
         "avg_resolution_minutes": None,
     }
@@ -275,7 +274,6 @@ def _bulk_sector_kpis(db: Session, sector_ids: list[str]) -> dict[str, dict[str,
         )
     )
     done_count = func.sum(case((Ticket.status.in_(DONE_STATUSES), 1), else_=0))
-    sla_breached = func.sum(case((Ticket.sla_status == "breached", 1), else_=0))
     reopened = func.sum(case((Ticket.reopened_count > 0, 1), else_=0))
     avg_resolution = func.avg(
         case(
@@ -286,19 +284,18 @@ def _bulk_sector_kpis(db: Session, sector_ids: list[str]) -> dict[str, dict[str,
     rows = db.execute(
         select(
             Ticket.current_sector_id,
-            active_count, unassigned, done_count, sla_breached, reopened, avg_resolution,
+            active_count, unassigned, done_count, reopened, avg_resolution,
         )
         .where(Ticket.is_deleted.is_(False), Ticket.current_sector_id.in_(sector_ids))
         .group_by(Ticket.current_sector_id)
     ).all()
     out: dict[str, dict[str, Any]] = {}
     for row in rows:
-        sid, active, unas, done, breached, reop, avg = row
+        sid, active, unas, done, reop, avg = row
         out[sid] = {
             "active": int(active or 0),
             "unassigned": int(unas or 0),
             "done": int(done or 0),
-            "sla_breached": int(breached or 0),
             "reopened": int(reop or 0),
             "avg_resolution_minutes": round(float(avg), 1) if avg is not None else None,
         }
@@ -434,17 +431,6 @@ def monitor_personal(db: Session, principal: Principal, user_id: str) -> dict[st
     }
 
 
-def monitor_sla(db: Session, principal: Principal) -> dict[str, Any]:
-    base = _visible_stmt(principal)
-    now = datetime.now(timezone.utc)
-    soon = now + timedelta(hours=24)
-    return {
-        "breached": _count(db, base.where(Ticket.sla_status == "breached")),
-        "due_24h": _count(db, base.where(Ticket.sla_due_at.is_not(None), Ticket.sla_due_at <= soon, Ticket.status.in_(ACTIVE_STATUSES))),
-        "by_status": _breakdown_visible(db, principal, Ticket.sla_status),
-    }
-
-
 def monitor_timeseries(db: Session, principal: Principal, *, days: int = 30) -> list[dict[str, Any]]:
     start = _today_start() - timedelta(days=days - 1)
     created_rows = _daily_counts(db, _visible_stmt(principal), Ticket.created_at, start)
@@ -495,7 +481,6 @@ def _global_kpis(db: Session) -> dict[str, int | float | None]:
     active_count = func.sum(case((Ticket.status.in_(ACTIVE_STATUSES), 1), else_=0))
     new_today = func.sum(case((Ticket.created_at >= today, 1), else_=0))
     closed_today = func.sum(case((closed_timestamp >= today, 1), else_=0))
-    sla_breached = func.sum(case((Ticket.sla_status == "breached", 1), else_=0))
     reopened = func.sum(case((Ticket.reopened_count > 0, 1), else_=0))
     avg_assignment = func.avg(
         case(
@@ -515,7 +500,6 @@ def _global_kpis(db: Session) -> dict[str, int | float | None]:
             active_count,
             new_today,
             closed_today,
-            sla_breached,
             reopened,
             avg_assignment,
             avg_resolution,
@@ -527,10 +511,9 @@ def _global_kpis(db: Session) -> dict[str, int | float | None]:
         "active_tickets": int(row[1] or 0),
         "new_today": int(row[2] or 0),
         "closed_today": int(row[3] or 0),
-        "sla_breached": int(row[4] or 0),
-        "reopened": int(row[5] or 0),
-        "avg_assignment_minutes": round(float(row[6]), 1) if row[6] is not None else None,
-        "avg_resolution_minutes": round(float(row[7]), 1) if row[7] is not None else None,
+        "reopened": int(row[4] or 0),
+        "avg_assignment_minutes": round(float(row[5]), 1) if row[5] is not None else None,
+        "avg_resolution_minutes": round(float(row[6]), 1) if row[6] is not None else None,
     }
 
 
@@ -546,7 +529,6 @@ def _sector_kpis(db: Session, sector_id: str) -> dict[str, int | float | None]:
         )
     )
     done_count = func.sum(case((Ticket.status.in_(DONE_STATUSES), 1), else_=0))
-    sla_breached = func.sum(case((Ticket.sla_status == "breached", 1), else_=0))
     reopened = func.sum(case((Ticket.reopened_count > 0, 1), else_=0))
     avg_resolution = func.avg(
         case(
@@ -555,7 +537,7 @@ def _sector_kpis(db: Session, sector_id: str) -> dict[str, int | float | None]:
         )
     )
     row = db.execute(
-        select(active_count, unassigned, done_count, sla_breached, reopened, avg_resolution)
+        select(active_count, unassigned, done_count, reopened, avg_resolution)
         .where(
             Ticket.is_deleted.is_(False),
             Ticket.current_sector_id == sector_id,
@@ -565,9 +547,8 @@ def _sector_kpis(db: Session, sector_id: str) -> dict[str, int | float | None]:
         "active": int(row[0] or 0),
         "unassigned": int(row[1] or 0),
         "done": int(row[2] or 0),
-        "sla_breached": int(row[3] or 0),
-        "reopened": int(row[4] or 0),
-        "avg_resolution_minutes": round(float(row[5]), 1) if row[5] is not None else None,
+        "reopened": int(row[3] or 0),
+        "avg_resolution_minutes": round(float(row[4]), 1) if row[4] is not None else None,
     }
 
 

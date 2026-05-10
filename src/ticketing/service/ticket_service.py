@@ -17,7 +17,7 @@ from src.ticketing.models import (
     Beneficiary, Sector, Ticket, TicketAssignee, TicketSectorAssignment,
 )
 from src.audit import service as audit_service
-from src.ticketing.service import beneficiary_service, sla_service
+from src.ticketing.service import beneficiary_service
 from src.tasking.producer import publish
 
 
@@ -182,7 +182,6 @@ def _create(db: Session, principal: Principal, payload: dict[str, Any]) -> Ticke
         priority   = "medium",
         status     = "pending",
     )
-    sla_service.evaluate_sla(db, ticket)
     db.add(ticket)
     db.flush()
     set_ticket_id(ticket.id)

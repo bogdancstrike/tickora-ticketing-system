@@ -348,66 +348,6 @@ def notify_unassigned(payload: Dict[str, Any]):
             )
         db.commit()
 
-@register_task("notify_sla_approaching")
-def notify_sla_approaching(payload: Dict[str, Any]):
-    """Notify relevant parties that a ticket is approaching SLA breach."""
-    ticket_id = payload.get("ticket_id")
-    with get_db() as db:
-        ticket = db.get(Ticket, ticket_id)
-        if not ticket:
-            return
-
-        # Notify assignee if present
-        if ticket.assignee_user_id:
-            _create_in_app_notification(
-                db,
-                user_id=ticket.assignee_user_id,
-                type="sla_approaching",
-                title="SLA Approaching Breach",
-                body=f"Ticket {ticket.ticket_code} is approaching SLA breach.",
-                ticket_id=ticket.id
-            )
-        
-        # Also notify sector chief
-        if ticket.current_sector_id:
-            chiefs = db.scalars(
-                select(SectorMembership.user_id)
-                .join(Sector, Sector.id == SectorMembership.sector_id)
-                .where(
-                    SectorMembership.sector_id == ticket.current_sector_id,
-                    SectorMembership.is_active.is_(True),
-                    # We assume we can identify chiefs via role or a flag if we had one.
-                    # For now, let's assume we notify everyone who is a chief in this sector.
-                    # If we don't have a flag, we might need to check roles in Keycloak.
-                    # To keep it simple, let's just create an audit event or notify admin.
-                )
-            ).all()
-            # For brevity, let's just notify assignee in this implementation.
-
-        db.commit()
-
-@register_task("notify_sla_breached")
-def notify_sla_breached(payload: Dict[str, Any]):
-    """Notify relevant parties that a ticket has breached SLA."""
-    ticket_id = payload.get("ticket_id")
-    with get_db() as db:
-        ticket = db.get(Ticket, ticket_id)
-        if not ticket:
-            return
-
-        if ticket.assignee_user_id:
-            _create_in_app_notification(
-                db,
-                user_id=ticket.assignee_user_id,
-                type="sla_breached",
-                title="SLA BREACHED",
-                body=f"Ticket {ticket.ticket_code} has breached its SLA.",
-                ticket_id=ticket.id
-            )
-        
-        # Notify distributors/admins too?
-        db.commit()
-
 @register_task("send_email_notification")
 def send_email_notification(payload: Dict[str, Any]):
     """Send an email notification if SMTP is configured."""
