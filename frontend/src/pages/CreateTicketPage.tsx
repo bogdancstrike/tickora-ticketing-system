@@ -59,7 +59,7 @@ export function CreateTicketPage() {
             showIcon
             type="info"
             style={{ marginBottom: 16 }}
-            message={<SpaceText label="Beneficiary type" value={<Tag>{beneficiaryType}</Tag>} />}
+            title={<SpaceText label="Beneficiary type" value={<Tag>{beneficiaryType}</Tag>} />}
             description="This is derived from your account role and cannot be changed while creating a ticket."
           />
 

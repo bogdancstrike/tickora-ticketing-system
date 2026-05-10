@@ -30,6 +30,7 @@ import {
 } from '@/api/admin'
 import type { MonitorBreakdown, AdminTicketMetadata } from '@/api/tickets'
 import { fmtDateTime } from '@/components/common/format'
+import { apiClient } from '@/api/client'
 
 const ICON_MAP: Record<string, React.ReactNode> = {
   UnorderedListOutlined: <UnorderedListOutlined />,
@@ -232,7 +233,7 @@ function UsersTab() {
       <Flex justify="space-between" wrap="wrap" gap={12}>
         <Space size={16}>
           <Input.Search placeholder="Search users" allowClear onSearch={setSearch} style={{ maxWidth: 360 }} />
-          <Statistic value={users.data?.total || 0} suffix="users" valueStyle={{ fontSize: 16 }} />
+          <Statistic value={users.data?.total || 0} suffix="users" styles={{ content: { fontSize: 16 } }} />
         </Space>
         <Button icon={<ReloadOutlined />} onClick={() => users.refetch()} />
       </Flex>
@@ -368,7 +369,7 @@ function TicketMetadatasPanel() {
       <Flex justify="space-between" style={{ marginBottom: 12 }}>
         <Space size={16}>
           <Input.Search placeholder="Search metadata" allowClear onSearch={setSearch} style={{ maxWidth: 360 }} />
-          <Statistic value={metadatas.data?.total || 0} suffix="entries" valueStyle={{ fontSize: 16 }} />
+          <Statistic value={metadatas.data?.total || 0} suffix="entries" styles={{ content: { fontSize: 16 } }} />
         </Space>
         <Button type="primary" icon={<PlusOutlined />} onClick={() => setEditing({})}>New metadata</Button>
       </Flex>
@@ -447,17 +448,97 @@ function ConfigTab() {
 }
 
 function SystemTab() {
+  const qc = useQueryClient()
+  const { token } = antTheme.useToken()
   const overview = useQuery({ queryKey: ['adminOverview'], queryFn: getAdminOverview, staleTime: 30_000 })
+  const health = useQuery({
+    queryKey: ['systemHealth'],
+    queryFn: async () => {
+      const { data } = await apiClient.get('/health')
+      return data as { status: string; checks: Record<string, string> }
+    },
+    refetchInterval: 30_000,
+    retry: false,
+  })
+  const settings = useQuery({
+    queryKey: ['systemSettingsSummary'],
+    queryFn: listSystemSettings,
+    staleTime: 60_000,
+  })
+  const widgets = useQuery({
+    queryKey: ['adminWidgetsSummary'],
+    queryFn: listAdminWidgets,
+    staleTime: 60_000,
+  })
   const hardening = [
     { key: 'hot_path_indexes', label: 'Hot-path indexes migration', status: 'ready', detail: '0007_phase8_hardening_indexes' },
     { key: 'phase9_indexes', label: 'Phase 9 perf indexes',         status: 'ready', detail: '9a1f3e0c2d10_phase9_perf_indexes' },
     { key: 'tasks_lifecycle', label: 'Task lifecycle table',         status: 'ready', detail: 'e7b34cd9f211_tasks_lifecycle_table' },
   ]
+  const checks = health.data?.checks || {}
+  const failedChecks = Object.entries(checks).filter(([, value]) => value !== 'ok')
+  const activeWidgets = (widgets.data?.items || []).filter((w) => w.is_active).length
+  const disabledWidgets = (widgets.data?.items || []).length - activeWidgets
+
   return (
-    <Row gutter={[16, 16]}>
+    <div style={{ display: 'grid', gap: 16 }}>
+      <Flex justify="space-between" align="center" wrap="wrap" gap={12}>
+        <div>
+          <Typography.Title level={4} style={{ margin: 0 }}>System operations</Typography.Title>
+          <Typography.Text type="secondary">Runtime health, queues, background jobs, and platform configuration.</Typography.Text>
+        </div>
+        <Button
+          icon={<ReloadOutlined />}
+          onClick={() => {
+            qc.invalidateQueries({ queryKey: ['adminOverview'] })
+            qc.invalidateQueries({ queryKey: ['systemHealth'] })
+            qc.invalidateQueries({ queryKey: ['adminTasks'] })
+            qc.invalidateQueries({ queryKey: ['systemSettingsSummary'] })
+            qc.invalidateQueries({ queryKey: ['adminWidgetsSummary'] })
+          }}
+        >
+          Refresh system
+        </Button>
+      </Flex>
+
+      <Row gutter={[12, 12]}>
+        <Col xs={12} md={6}>
+          <KpiTile label="Health" value={health.data?.status || (health.isLoading ? 'checking' : 'degraded')} />
+        </Col>
+        <Col xs={12} md={6}>
+          <KpiTile label="Failed checks" value={failedChecks.length} />
+        </Col>
+        <Col xs={12} md={6}>
+          <KpiTile label="System settings" value={settings.data?.items.length ?? '-'} />
+        </Col>
+        <Col xs={12} md={6}>
+          <KpiTile label="Active widgets" value={activeWidgets || '-'} />
+        </Col>
+      </Row>
+
+      {failedChecks.length > 0 && (
+        <Alert
+          type="warning"
+          showIcon
+          title="One or more runtime checks are degraded"
+          description={failedChecks.map(([name, value]) => `${name}: ${value}`).join(' · ')}
+        />
+      )}
+
+      <Row gutter={[16, 16]}>
       <Col xs={24} md={12}>
         <Panel title="System health" icon={<DatabaseOutlined />}>
-          <MetricPanel values={overview.data?.system || {}} />
+          <div style={{ display: 'grid', gap: 12 }}>
+            <Flex wrap="wrap" gap={8}>
+              {Object.entries(checks).map(([name, value]) => (
+                <Tag key={name} color={value === 'ok' ? 'green' : 'red'} style={{ padding: '4px 8px' }}>
+                  {name}: {value}
+                </Tag>
+              ))}
+              {!Object.keys(checks).length && <Typography.Text type="secondary">No health checks loaded yet.</Typography.Text>}
+            </Flex>
+            <MetricPanel values={overview.data?.system || {}} />
+          </div>
         </Panel>
       </Col>
       <Col xs={24} md={12}>
@@ -473,6 +554,22 @@ function SystemTab() {
           />
         </Panel>
       </Col>
+      <Col xs={24} md={12}>
+        <Panel title="Queue posture" icon={<UnorderedListOutlined />}>
+          <MetricPanel values={overview.data?.queues || {}} />
+        </Panel>
+      </Col>
+      <Col xs={24} md={12}>
+        <Panel title="Widget catalogue" icon={<AppstoreOutlined />}>
+          <Row gutter={[12, 12]}>
+            <Col xs={12}><Statistic title="Active definitions" value={activeWidgets} /></Col>
+            <Col xs={12}><Statistic title="Disabled definitions" value={disabledWidgets} /></Col>
+          </Row>
+          <Typography.Text type="secondary" style={{ display: 'block', marginTop: 8 }}>
+            Sync the catalogue from Configuration when new widget types are deployed.
+          </Typography.Text>
+        </Panel>
+      </Col>
       <Col xs={24}>
         <Panel title="SLA posture" icon={<SafetyCertificateOutlined />}>
           <MetricPanel values={{ breached: overview.data?.sla.breached, due_24h: overview.data?.sla.due_24h }} />
@@ -484,6 +581,7 @@ function SystemTab() {
         </Panel>
       </Col>
     </Row>
+    </div>
   )
 }
 
@@ -673,7 +771,7 @@ function KpiTile({ label, value }: { label: string; value: number | string }) {
         minHeight: 80,
       }}
     >
-      <Statistic title={label} value={value} valueStyle={{ fontSize: 22 }} />
+      <Statistic title={label} value={value} styles={{ content: { fontSize: 22 } }} />
     </div>
   )
 }

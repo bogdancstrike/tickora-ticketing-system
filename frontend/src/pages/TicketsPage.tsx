@@ -140,6 +140,7 @@ function WorkflowActions({ ticket }: { ticket: TicketDto }) {
   const [form] = Form.useForm()
   const [modal, setModal] = useState<string | null>(null)
   const [msg, holder] = message.useMessage()
+  const [modalApi, modalHolder] = Modal.useModal()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const user = useSessionStore((s) => s.user)
@@ -158,8 +159,8 @@ function WorkflowActions({ ticket }: { ticket: TicketDto }) {
   const isClosed = ['done', 'closed', 'cancelled'].includes(ticket.status)
 
   const finish = async () => {
-    setModal(null)
     form.resetFields()
+    setModal(null)
     await queryClient.invalidateQueries({ queryKey: ['tickets'] })
     await queryClient.invalidateQueries({ queryKey: ['ticket', ticket.id] })
     await queryClient.invalidateQueries({ queryKey: ['monitorOverview'] })
@@ -212,6 +213,7 @@ function WorkflowActions({ ticket }: { ticket: TicketDto }) {
   return (
     <>
       {holder}
+      {modalHolder}
       <Flex wrap="wrap" gap={8}>
         {assignItems.length > 0 && (
           <Dropdown
@@ -243,7 +245,7 @@ function WorkflowActions({ ticket }: { ticket: TicketDto }) {
         )}
         {user?.roles.includes('tickora_admin') && (
            <Button danger type="dashed" loading={run.isPending} onClick={() => {
-             Modal.confirm({
+             modalApi.confirm({
                title: 'Delete ticket?',
                content: 'This will soft-delete the ticket. It will not appear in lists.',
                okText: 'Yes, Delete',

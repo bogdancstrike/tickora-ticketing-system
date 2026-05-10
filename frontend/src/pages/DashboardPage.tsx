@@ -4,7 +4,7 @@ import ReactECharts from 'echarts-for-react'
 import {
   Alert, Button, Card, Col, Empty, Flex, Form, Input, List, Modal, Row, Select, Space,
   Spin, Statistic, Table, Tag, Typography, message, theme as antTheme, Avatar, Checkbox,
-  Switch, Divider, Tooltip, Radio,
+  Switch, Divider, Tooltip, Radio, App as AntApp,
 } from 'antd'
 import {
   AppstoreAddOutlined, AppstoreOutlined, DeleteOutlined, EditOutlined, PlusOutlined,
@@ -500,7 +500,7 @@ function TaskHealthWidget() {
       <Row gutter={16}>
         <Col span={8}><Statistic title="Pending" value={data?.pending ?? 0} /></Col>
         <Col span={8}><Statistic title="Running" value={data?.running ?? 0} /></Col>
-        <Col span={8}><Statistic title="Failed" value={data?.failed ?? 0} valueStyle={{ color: (data?.failed ?? 0) ? '#cf1322' : undefined }} /></Col>
+        <Col span={8}><Statistic title="Failed" value={data?.failed ?? 0} styles={{ content: { color: (data?.failed ?? 0) ? '#cf1322' : undefined } }} /></Col>
       </Row>
     </div>
   )
@@ -620,6 +620,124 @@ function NotificationFeedWidget({ config }: { config: any }) {
       {items.length === 0 && <div style={{ padding: 20 }}><Empty description="No notifications" image={Empty.PRESENTED_IMAGE_SIMPLE} /></div>}
     </div>
   )
+}
+
+function ThroughputTrendWidget({ config }: { config: any }) {
+  const { data, isLoading } = useQuery({
+    queryKey: ['throughputTrendWidget', config.days],
+    queryFn: () => getMonitorOverview(config.days || 30),
+    staleTime: 60_000,
+  })
+
+  if (isLoading) return <div style={{ textAlign: 'center', padding: 20 }}><Spin /></div>
+  const points = data?.timeseries || []
+  const option = {
+    tooltip: { trigger: 'axis' },
+    legend: { bottom: 0, data: ['Created', 'Closed'] },
+    grid: { left: 28, right: 16, top: 16, bottom: 42, containLabel: true },
+    xAxis: { type: 'category', data: points.map(p => p.date) },
+    yAxis: { type: 'value' },
+    series: [
+      { name: 'Created', type: 'line', smooth: true, data: points.map(p => p.created), itemStyle: { color: '#1677ff' } },
+      { name: 'Closed', type: 'line', smooth: true, data: points.map(p => p.closed), itemStyle: { color: '#52c41a' } },
+    ],
+  }
+  return <ReactECharts option={option} style={{ height: '100%', minHeight: 180 }} />
+}
+
+function BacklogBySectorWidget({ config }: { config: any }) {
+  const { data, isLoading } = useQuery({
+    queryKey: ['backlogBySectorWidget'],
+    queryFn: () => getMonitorOverview(),
+    staleTime: 60_000,
+  })
+
+  if (isLoading) return <div style={{ textAlign: 'center', padding: 20 }}><Spin /></div>
+  const rows = (data?.global?.top_backlog_sectors?.length
+    ? data.global.top_backlog_sectors
+    : data?.global?.by_sector || []
+  ).slice(0, config.limit || 10)
+  const chartData = rows.map(s => ({ key: s.sector_code, count: s.count }))
+  return <BreakdownChart data={chartData} title="Active backlog" height={220} color="#13a8a8" />
+}
+
+function PriorityMixWidget({ config }: { config: any }) {
+  const { data, isLoading } = useQuery<any>({
+    queryKey: ['priorityMixWidget', config.sectorCode],
+    queryFn: () => config.sectorCode ? getMonitorSector(config.sectorCode) : getMonitorOverview(),
+    staleTime: 60_000,
+  })
+
+  if (isLoading) return <div style={{ textAlign: 'center', padding: 20 }}><Spin /></div>
+  const rows = config.sectorCode
+    ? data?.by_priority || []
+    : data?.global?.by_priority || data?.distributor?.by_priority || []
+  return <BreakdownChart data={rows} title="Tickets" height={220} color="#fa8c16" />
+}
+
+function OldestActiveWidget({ config }: { config: any }) {
+  const navigate = useNavigate()
+  const { token } = antTheme.useToken()
+  const { data, isLoading } = useQuery<any>({
+    queryKey: ['oldestActiveWidget', config.sectorCode],
+    queryFn: () => config.sectorCode ? getMonitorSector(config.sectorCode) : getMonitorOverview(),
+    staleTime: 60_000,
+  })
+
+  if (isLoading) return <div style={{ textAlign: 'center', padding: 20 }}><Spin /></div>
+  const tickets = (config.sectorCode
+    ? data?.oldest
+    : data?.global?.stale_tickets || data?.distributor?.oldest || data?.personal?.oldest || []
+  ).slice(0, config.limit || 10)
+
+  return (
+    <div style={{ padding: '4px 0' }}>
+      {tickets.map((t: any) => (
+        <div key={t.id} style={{ padding: '8px 12px', cursor: 'pointer', borderBottom: `1px solid ${token.colorBorderSecondary}` }} onClick={() => navigate(`/tickets/${t.id}`)} className="tickora-row-clickable">
+          <Flex justify="space-between" align="center" gap={8}>
+            <Typography.Text strong ellipsis style={{ fontSize: 13 }}>{t.title || t.ticket_code}</Typography.Text>
+            <StatusTag status={t.status} />
+          </Flex>
+          <Space size={4} style={{ fontSize: 11 }}>
+            <PriorityTag priority={t.priority} />
+            <Typography.Text type="secondary">{t.ticket_code}</Typography.Text>
+          </Space>
+        </div>
+      ))}
+      {tickets.length === 0 && <div style={{ padding: 20 }}><Empty description="No active tickets" image={Empty.PRESENTED_IMAGE_SIMPLE} /></div>}
+    </div>
+  )
+}
+
+function SlaRiskWidget() {
+  const { data, isLoading } = useQuery({
+    queryKey: ['slaRiskWidget'],
+    queryFn: () => getMonitorOverview(),
+    staleTime: 60_000,
+  })
+
+  if (isLoading) return <div style={{ textAlign: 'center', padding: 20 }}><Spin /></div>
+  const kpis = data?.global?.kpis || data?.personal?.kpis || {}
+  return (
+    <div style={{ padding: 16 }}>
+      <Row gutter={16}>
+        <Col span={8}><Statistic title="SLA breached" value={kpis.sla_breached ?? 0} styles={{ content: { color: (kpis.sla_breached ?? 0) ? '#cf1322' : undefined } }} /></Col>
+        <Col span={8}><Statistic title="Reopened" value={kpis.reopened ?? 0} /></Col>
+        <Col span={8}><Statistic title="Avg resolution" value={kpis.avg_resolution_minutes ?? 0} suffix="min" precision={typeof kpis.avg_resolution_minutes === 'number' ? 1 : 0} /></Col>
+      </Row>
+    </div>
+  )
+}
+
+function RequesterStatusWidget() {
+  const { data, isLoading } = useQuery({
+    queryKey: ['requesterStatusWidget'],
+    queryFn: () => getMonitorOverview(),
+    staleTime: 60_000,
+  })
+
+  if (isLoading) return <div style={{ textAlign: 'center', padding: 20 }}><Spin /></div>
+  return <BreakdownChart data={data?.personal?.beneficiary_by_status || []} title="My requests" height={220} color="#52c41a" />
 }
 
 function SectorStatsWidget({ config }: { config: any }) {
@@ -886,6 +1004,12 @@ const WIDGET_TYPES = [
     { type: 'my_mentions', label: 'My Mentions', icon: <BellOutlined />, configurable: true },
     { type: 'linked_tickets', label: 'Linked Tickets', icon: <LinkOutlined />, configurable: true },
     { type: 'notification_feed', label: 'Notification Feed', icon: <BellOutlined />, configurable: true },
+    { type: 'throughput_trend', label: 'Throughput Trend', icon: <LineChartOutlined />, configurable: true },
+    { type: 'backlog_by_sector', label: 'Backlog by Sector', icon: <BarChartOutlined />, configurable: true },
+    { type: 'priority_mix', label: 'Priority Mix', icon: <PieChartOutlined />, configurable: true },
+    { type: 'oldest_active', label: 'Oldest Active', icon: <HistoryOutlined />, configurable: true },
+    { type: 'sla_risk', label: 'SLA Risk', icon: <CarryOutOutlined />, configurable: false },
+    { type: 'requester_status', label: 'Requester Status', icon: <PieChartOutlined />, configurable: false },
     { type: 'shortcuts', label: 'Quick Links', icon: <SendOutlined />, configurable: true },
     { type: 'clock', label: 'Clock', icon: <FieldTimeOutlined />, configurable: false },
     { type: 'system_health', label: 'System Health', icon: <DatabaseOutlined />, configurable: false },
@@ -928,6 +1052,12 @@ function WidgetRenderer({ widget }: { widget: DashboardWidgetDto }) {
   if (widget.type === 'my_watchlist') return <SimpleTicketListWidget config={widget.config} mode="watchlist" />
   if (widget.type === 'linked_tickets') return <SimpleTicketListWidget config={widget.config} mode="linked" />
   if (widget.type === 'notification_feed' || widget.type === 'my_mentions') return <NotificationFeedWidget config={widget.config} />
+  if (widget.type === 'throughput_trend') return <ThroughputTrendWidget config={widget.config} />
+  if (widget.type === 'backlog_by_sector') return <BacklogBySectorWidget config={widget.config} />
+  if (widget.type === 'priority_mix') return <PriorityMixWidget config={widget.config} />
+  if (widget.type === 'oldest_active') return <OldestActiveWidget config={widget.config} />
+  if (widget.type === 'sla_risk') return <SlaRiskWidget />
+  if (widget.type === 'requester_status') return <RequesterStatusWidget />
 
   return <Empty description={`Unknown widget type: ${widget.type}`} image={Empty.PRESENTED_IMAGE_SIMPLE} />
 }
@@ -939,7 +1069,8 @@ const CONFIGURABLE_TYPES = [
     'sector_stats', 'user_workload', 'workload_balancer', 'bottleneck_analysis', 
     'stale_tickets', 'recent_comments', 'not_reviewed', 'reviewed_today',
     'recent_failures', 'assignment_age', 'my_assigned', 'my_requests',
-    'my_watchlist', 'linked_tickets', 'notification_feed', 'my_mentions'
+    'my_watchlist', 'linked_tickets', 'notification_feed', 'my_mentions',
+    'throughput_trend', 'backlog_by_sector', 'priority_mix', 'oldest_active'
 ]
 
 /**
@@ -954,6 +1085,7 @@ const CONFIGURABLE_TYPES = [
 function DashboardDetail({ dashboardId, onBack }: { dashboardId: string, onBack: () => void }) {
   const { token } = antTheme.useToken()
   const { t } = useTranslation()
+  const { message: msg } = AntApp.useApp()
   const qc = useQueryClient()
   const [editingTitle, setEditingTitle] = useState(false)
   const [editingWidget, setEditingWidget] = useState<DashboardWidgetDto | null>(null)
@@ -1008,7 +1140,7 @@ function DashboardDetail({ dashboardId, onBack }: { dashboardId: string, onBack:
     onSuccess: (w) => {
       setIsAddingWidget(false)
       qc.invalidateQueries({ queryKey: ['customDashboard', dashboardId] })
-      message.success('Widget added')
+      msg.success('Widget added')
       // Auto-open config if configurable
       const typeInfo = widgetDefs.find(t => t.type === w.type)
       if (typeInfo?.configurable) {
@@ -1022,7 +1154,7 @@ function DashboardDetail({ dashboardId, onBack }: { dashboardId: string, onBack:
       onSuccess: () => {
           setEditingWidget(null)
           qc.invalidateQueries({ queryKey: ['customDashboard', dashboardId] })
-          message.success('Configuration saved')
+          msg.success('Configuration saved')
       }
   })
 
@@ -1030,7 +1162,7 @@ function DashboardDetail({ dashboardId, onBack }: { dashboardId: string, onBack:
     mutationFn: (widgetId: string) => deleteWidget(dashboardId, widgetId),
     onSuccess: () => {
         qc.invalidateQueries({ queryKey: ['customDashboard', dashboardId] })
-        message.success('Widget removed')
+        msg.success('Widget removed')
     }
   })
 
@@ -1054,7 +1186,7 @@ function DashboardDetail({ dashboardId, onBack }: { dashboardId: string, onBack:
     },
     onSuccess: () => {
         qc.invalidateQueries({ queryKey: ['customDashboard', dashboardId] })
-        message.success('Widgets rearranged')
+        msg.success('Widgets rearranged')
     }
   })
 
@@ -1072,11 +1204,11 @@ function DashboardDetail({ dashboardId, onBack }: { dashboardId: string, onBack:
     onSuccess: () => {
         setIsAddingWidget(false)
         qc.invalidateQueries({ queryKey: ['customDashboard', dashboardId] })
-        message.success(`Dashboard auto-configured (${autoConfigMode})`)
+        msg.success(`Dashboard auto-configured (${autoConfigMode})`)
     },
 
     onError: (err: any) => {
-        message.error(err.response?.data?.detail || 'Failed to auto-configure')
+        msg.error(err.response?.data?.detail || 'Failed to auto-configure')
     }
   })
 
@@ -1320,7 +1452,7 @@ function DashboardDetail({ dashboardId, onBack }: { dashboardId: string, onBack:
                     </Form.Item>
                   )
               }
-              if (type === 'sector_stats' || type === 'user_workload' || type === 'workload_balancer' || type === 'bottleneck_analysis' || type === 'not_reviewed' || type === 'reviewed_today' || type === 'assignment_age') {
+              if (type === 'sector_stats' || type === 'user_workload' || type === 'workload_balancer' || type === 'bottleneck_analysis' || type === 'not_reviewed' || type === 'reviewed_today' || type === 'assignment_age' || type === 'priority_mix' || type === 'oldest_active') {
                  return (
                     <>
                         <SectorSelect name={['config', 'sectorCode']} label="Target Sector" />
@@ -1345,6 +1477,24 @@ function DashboardDetail({ dashboardId, onBack }: { dashboardId: string, onBack:
                             <Select options={[1, 4, 8, 12, 24, 48, 72].map(v => ({ value: v, label: `${v} hours` }))} />
                         </Form.Item>
                     </>
+                  )
+              }
+              if (type === 'throughput_trend') {
+                  return (
+                    <Form.Item name={['config', 'days']} label="Time Window" initialValue={30}>
+                      <Select options={[
+                        { value: 7, label: 'Last 7 days' },
+                        { value: 30, label: 'Last 30 days' },
+                        { value: 90, label: 'Last 90 days' },
+                      ]} />
+                    </Form.Item>
+                  )
+              }
+              if (type === 'backlog_by_sector') {
+                  return (
+                    <Form.Item name={['config', 'limit']} label="Max Sectors">
+                      <Select options={[5, 10, 15, 20].map(v => ({ value: v, label: v }))} />
+                    </Form.Item>
                   )
               }
               if (type === 'recent_comments') {
