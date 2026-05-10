@@ -62,36 +62,6 @@ def test_admin_service_rejects_non_admin(db_session: Session):
         admin_service.list_sectors(db_session, principal)
 
 
-def test_admin_can_manage_sla_policy(db_session: Session):
-    admin_user = create_user(db_session, "sla-admin-service")
-    admin = principal_for(admin_user, roles={ROLE_ADMIN}, has_root_group=True)
-
-    policy = admin_service.upsert_sla_policy(db_session, admin, {
-        "name": "Critical response",
-        "priority": "critical",
-        "first_response_minutes": 15,
-        "resolution_minutes": 240,
-        "is_active": True,
-    })
-
-    assert policy["priority"] == "critical"
-    assert policy["first_response_minutes"] == 15
-    assert admin_service.sla_policies(db_session, admin)[0]["name"] == "Critical response"
-
-
-def test_sla_policy_requires_positive_minutes(db_session: Session):
-    admin_user = create_user(db_session, "sla-admin-invalid")
-    admin = principal_for(admin_user, roles={ROLE_ADMIN}, has_root_group=True)
-
-    with pytest.raises(ValidationError):
-        admin_service.upsert_sla_policy(db_session, admin, {
-            "name": "Invalid",
-            "priority": "high",
-            "first_response_minutes": 0,
-            "resolution_minutes": 120,
-        })
-
-
 def test_admin_can_crud_ticket_metadata_values(db_session: Session):
     admin_user = create_user(db_session, "metadata-admin")
     requester = create_user(db_session, "metadata-requester")

@@ -74,14 +74,13 @@ def test_sector_kpis_use_live_ticket_data(db_session: Session):
     beneficiary = create_beneficiary(db_session, requester)
     principal = principal_for(member, sectors=(SectorMembership(sector.code, "member"),))
 
-    unassigned = create_ticket(
+    create_ticket(
         db_session,
         beneficiary,
         created_by=requester,
         current_sector=sector,
         status="assigned_to_sector",
     )
-    unassigned.sla_status = "breached"
 
     create_ticket(
         db_session,
@@ -109,6 +108,5 @@ def test_sector_kpis_use_live_ticket_data(db_session: Session):
     assert kpis["active"] == 2
     assert kpis["unassigned"] == 1
     assert kpis["done"] == 1
-    assert kpis["sla_breached"] == 1
     assert kpis["reopened"] == 1
     assert kpis["avg_resolution_minutes"] == 120.0

@@ -334,10 +334,10 @@ export function ProfilePage() {
 
             <Card title="My activity">
               <Row gutter={[16, 16]}>
-                <Col xs={12} md={6}><Statistic title="Active assignments" value={personal?.kpis?.active ?? '-'} /></Col>
-                <Col xs={12} md={6}><Statistic title="Done · last 7d" value={personal?.kpis?.done_last_7d ?? '-'} /></Col>
-                <Col xs={12} md={6}><Statistic title="Avg resolution (h)" value={personal?.kpis?.avg_resolution_hours ?? '-'} /></Col>
-                <Col xs={12} md={6}><Statistic title="Reopened" value={personal?.kpis?.reopened ?? '-'} styles={{ content: { color: '#fa8c16' } }} /></Col>
+                <Col xs={12} md={6}><Statistic title="Active assignments" value={personal?.kpis?.assigned_active ?? 0} /></Col>
+                <Col xs={12} md={6}><Statistic title="Completed assignments" value={personal?.kpis?.assigned_done ?? 0} /></Col>
+                <Col xs={12} md={6}><Statistic title="Active requests" value={personal?.beneficiary_kpis?.active ?? personal?.kpis?.created_active ?? 0} /></Col>
+                <Col xs={12} md={6}><Statistic title="Reopened" value={personal?.kpis?.reopened ?? personal?.beneficiary_kpis?.reopened ?? 0} styles={{ content: { color: '#fa8c16' } }} /></Col>
               </Row>
             </Card>
           </div>

@@ -47,8 +47,8 @@ def test_auto_configure_admin(db_session: Session):
     widgets = db_session.query(DashboardWidget).filter_by(dashboard_id=dash_id).all()
     types = {w.type for w in widgets}
     
-    # Admin expected: welcome_banner (always), system_health, sla_overview, stale_tickets, bottleneck_analysis, audit_stream
-    expected = {"welcome_banner", "system_health", "sla_overview", "stale_tickets", "bottleneck_analysis", "audit_stream"}
+    # Admin expected: welcome_banner (always), system_health, operations widgets, stale tickets, bottleneck analysis, audit stream
+    expected = {"welcome_banner", "system_health", "task_health", "stale_tickets", "bottleneck_analysis", "audit_stream"}
     assert expected.issubset(types)
     
     # Verify positions

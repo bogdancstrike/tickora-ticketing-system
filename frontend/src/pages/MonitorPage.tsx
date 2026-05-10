@@ -77,9 +77,9 @@ function OldestTickets({ tickets }: { tickets: MonitorOldTicket[] }) {
   return (
     <div style={{ padding: '4px 0' }}>
       {tickets.map((ticket) => (
-        <div 
+        <div
           key={ticket.id}
-          style={{ padding: '8px 12px', cursor: 'pointer', borderBottom: `1px solid ${token.colorBorderSecondary}` }} 
+          style={{ padding: '8px 12px', cursor: 'pointer', borderBottom: `1px solid ${token.colorBorderSecondary}` }}
           onClick={() => navigate(`/tickets/${ticket.id}`)}
           className="tickora-row-clickable"
         >
@@ -102,7 +102,7 @@ function OldestTickets({ tickets }: { tickets: MonitorOldTicket[] }) {
  * Displays operational metrics and charts for a specific sector.
  * Includes status and priority breakdowns, oldest tickets list, workload analysis,
  * and bottleneck insights for the selected sector.
- * 
+ *
  * @param {Object} props - The component props.
  * @param {MonitorSector} props.sector - The sector monitoring data.
  * @param {React.ReactNode} [props.controls] - Optional UI controls (e.g., sector/user selectors).
@@ -275,6 +275,35 @@ export function MonitorPage() {
           itemStyle: { color: '#52c41a' }
         }
       ]
+    }
+  }, [overview.data])
+
+  const queuePosture = useMemo(() => {
+    const distributor = overview.data?.distributor?.kpis
+    if (distributor) {
+      return {
+        pending_review: distributor.pending_review,
+        assigned_to_sector: distributor.assigned_to_sector,
+        unrouted: distributor.unrouted,
+        critical_pending: distributor.critical_pending,
+      }
+    }
+    const global = overview.data?.global?.kpis
+    if (global) {
+      return {
+        active_tickets: global.active_tickets,
+        reopened: global.reopened,
+        new_today: global.new_today,
+        closed_today: global.closed_today,
+      }
+    }
+    const personalKpis = overview.data?.personal?.kpis
+    const requesterKpis = overview.data?.personal?.beneficiary_kpis
+    return {
+      assigned_active: personalKpis?.assigned_active,
+      reopened: personalKpis?.reopened ?? requesterKpis?.reopened,
+      requester_active: requesterKpis?.active,
+      waiting_confirmation: requesterKpis?.waiting_confirmation,
     }
   }, [overview.data])
 
@@ -477,6 +506,18 @@ export function MonitorPage() {
       {overview.error && <Alert type="error" message={overview.error.message} showIcon />}
       {selectedSector.error && <Alert type="error" message={selectedSector.error.message} showIcon />}
       {selectedUser.error && <Alert type="error" message={selectedUser.error.message} showIcon />}
+
+      <ChartPanel
+        title="Queue posture"
+        description="Queue counters for the current role scope. Admins and distributors see intake routing pressure; other users see their visible active/requester queues."
+        legend={[
+          { color: 'blue', label: 'Active', description: 'work still needing movement' },
+          { color: 'orange', label: 'Pending', description: 'items waiting for review or routing' },
+          { color: 'red', label: 'Critical', description: 'high-urgency queue pressure where available' },
+        ]}
+      >
+        <KpiGrid values={queuePosture} />
+      </ChartPanel>
 
       <div>
         <Flex justify="end" style={{ marginBottom: 8 }}>
