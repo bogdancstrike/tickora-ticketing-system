@@ -141,9 +141,6 @@ function AppSidebar() {
   if (isMobile) return null
 
   return (
-    // The sider uses a column flex so the menu fills the middle and the
-    // utility row (theme + language) anchors to the bottom. Keeps the
-    // top header free for context-specific actions (notifications, profile).
     <Sider
       collapsible
       collapsed={collapsed}
@@ -153,43 +150,56 @@ function AppSidebar() {
       style={{
         background: token.colorBgContainer,
         borderRight: `1px solid ${token.colorBorder}`,
-        display: 'flex',
-        flexDirection: 'column',
+        // AntD's Sider applies this style to the inner children wrapper
+        // (`.ant-layout-sider-children`). The flex-column lets the inner
+        // <div style={flex:1}> push the utility row to the very bottom.
+        height: '100vh',
+        position: 'sticky',
+        top: 0,
       }}
     >
-      <div style={{
-        height: 100, display: 'flex', alignItems: 'center', justifyContent: 'center',
-        padding: '10px', borderBottom: `1px solid ${token.colorBorder}`,
-      }}>
-        {collapsed ? (
-          <img src="/logo.png" alt="Tickora" style={{ width: 80, height: 80, cursor: 'pointer', objectFit: 'contain' }} onClick={() => navigate('/tickets')} />
-        ) : (
-          <img src="/logo_text.png" alt="Tickora" style={{ height: 80, maxWidth: '100%', cursor: 'pointer', objectFit: 'contain' }} onClick={() => navigate('/tickets')} />
-        )}
-      </div>
-      <div style={{ padding: '4px 8px', textAlign: 'right' }}>
-        <Button type="text" icon={collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
-                onClick={() => setCollapsed(!collapsed)} />
-      </div>
-      <Menu
-        mode="inline"
-        selectedKeys={[selectedKey]}
-        items={menuItems}
-        onClick={({ key }) => navigate(key)}
-        style={{ borderRight: 0, flex: 1, overflowY: 'auto' }}
-      />
-      <div style={{
-        borderTop: `1px solid ${token.colorBorder}`,
-        padding: 8,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: collapsed ? 'center' : 'flex-start',
-        gap: 4,
-      }}>
-        <Tooltip title={`Switch to ${mode === 'dark' ? 'light' : 'dark'} mode`}>
-          <Button type="text" icon={<BgColorsOutlined />} onClick={toggle} />
-        </Tooltip>
-        <LanguageSwitcher />
+      {/* Full-height column: header → menu (grows) → bottom utility row. */}
+      <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+        <div style={{
+          height: 100, display: 'flex', alignItems: 'center', justifyContent: 'center',
+          padding: '10px', borderBottom: `1px solid ${token.colorBorder}`,
+          flexShrink: 0,
+        }}>
+          {collapsed ? (
+            <img src="/logo.png" alt="Tickora" style={{ width: 80, height: 80, cursor: 'pointer', objectFit: 'contain' }} onClick={() => navigate('/tickets')} />
+          ) : (
+            <img src="/logo_text.png" alt="Tickora" style={{ height: 80, maxWidth: '100%', cursor: 'pointer', objectFit: 'contain' }} onClick={() => navigate('/tickets')} />
+          )}
+        </div>
+        <div style={{ padding: '4px 8px', textAlign: 'right', flexShrink: 0 }}>
+          <Button type="text" icon={collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
+                  onClick={() => setCollapsed(!collapsed)} />
+        </div>
+        <Menu
+          mode="inline"
+          selectedKeys={[selectedKey]}
+          items={menuItems}
+          onClick={({ key }) => navigate(key)}
+          style={{ borderRight: 0, flex: 1, overflowY: 'auto', minHeight: 0 }}
+        />
+        {/* `marginTop: auto` is the belt-and-braces — even if Menu's
+            `flex: 1` doesn't fully expand under some AntD theme tweak,
+            this row still gets pushed to the bottom. */}
+        <div style={{
+          marginTop: 'auto',
+          borderTop: `1px solid ${token.colorBorder}`,
+          padding: 8,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: 4,
+          flexShrink: 0,
+        }}>
+          <Tooltip title={`Switch to ${mode === 'dark' ? 'light' : 'dark'} mode`}>
+            <Button type="text" icon={<BgColorsOutlined />} onClick={toggle} />
+          </Tooltip>
+          <LanguageSwitcher />
+        </div>
       </div>
     </Sider>
   )

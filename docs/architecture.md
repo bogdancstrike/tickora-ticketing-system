@@ -102,13 +102,33 @@ The codebase is a **modulith**: one deployable, three domain modules with strict
 
 **Rules enforced by lint/import-linter:**
 
-- `ticketing` may import from `iam`, `tasking`, `core`.
-- `iam` may import from `core`, `tasking` (only for emitting events).
-- `tasking` may import from `core` only.
+- `core` imports from nothing internal.
+- `common` may import from `core` only.
+- `iam` may import from `core`, `common`.
+- `audit` may import from `core`, `common`, `iam`.
+- `tasking` may import from `core` only (handlers are registered via
+  `Config.TASK_HANDLER_MODULES`, not static imports).
+- `ticketing` may import from any of the above.
 - `api/` may import from any module — it's the composition root for HTTP.
 - Modules **never** import from `api/`.
 
-This keeps the door open for extracting `tasking` into a service later without untangling spaghetti.
+The actual graph (verified after the 2026-05-10 module split):
+
+```
+core   ─┬─ common   ─┬─ iam ─┬─ audit ─┐
+        │            │       │         │
+        │            │       └────────►├─ ticketing
+        │            └─────────────────┤
+        └─────────────────────────────►├─ tasking ──► (handlers via Config)
+                                       │
+                                  api/ (composition root)
+```
+
+Each leaf module ships with a `MICROSERVICE.md` (`src/<module>/MICROSERVICE.md`)
+describing exactly what to copy to extract it as a standalone service.
+At the time of writing, `common/`, `audit/`, and `tasking/` are
+self-contained; only `ticketing/` is genuinely modulith-only because it
+*is* the business domain.
 
 ### 4.1 `iam/` — Identity, RBAC, Keycloak interface
 

@@ -325,6 +325,32 @@ status flag here so the next session can pick up cleanly.
 - [ ] k6 perf + load tests against the 30M seed.
 - [ ] Chaos tests (Postgres restart, Redis blackout, Keycloak unreachable).
 
+### Modulith → microservice readiness (2026-05-10) ✅
+
+After the big refactors, `common/`, `audit/`, and `tasking/` are each
+self-contained. Verified dependency graph:
+
+| Module    | Imports from                                  |
+|-----------|-----------------------------------------------|
+| `core`    | (nothing internal)                            |
+| `common`  | `core`                                        |
+| `iam`     | `core`, `common.spans`                        |
+| `audit`   | `core`, `iam`                                 |
+| `tasking` | `core`, `config`                              |
+| `ticketing` | everything above (the business domain)       |
+
+Each leaf module ships with `src/<module>/MICROSERVICE.md` documenting
+the extraction recipe. Specifically:
+
+- `audit/` no longer imports `src.ticketing.models` or
+  `src.ticketing.service`. `AuditEvent` ORM lives in `src/audit/models.py`
+  (re-exported from `ticketing/models` for back-compat). Per-ticket
+  visibility uses an injectable `set_ticket_resolver()` hook;
+  `src/ticketing/__init__.py` registers the modulith resolver at boot.
+- `tasking/` no longer imports `src.ticketing.notifications`. Handler
+  modules to import are listed in `Config.TASK_HANDLER_MODULES` (env-
+  driven, comma-separated).
+
 ### Big refactors (2026-05-10) ✅
 - [x] **Extract `src/common/`** — moved `cache`, `pagination`,
       `object_storage`, `rate_limiter`, `request_metadata`,
