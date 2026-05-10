@@ -91,22 +91,33 @@ def cleanup_master_business_objects() -> None:
     """Remove Tickora application artifacts accidentally created in master.
 
     The master realm is only for Keycloak administration. Tickora roles,
-    groups, and OIDC clients belong exclusively to the configured application
-    realm.
+    groups, and OIDC clients belong exclusively to the configured
+    application realm. On a fresh KC install master is clean and every
+    branch below is a quiet no-op.
     """
-    kc = admin()
-    kc.change_current_realm("master")
+    try:
+        kc = admin()
+        kc.change_current_realm("master")
+    except Exception as exc:
+        print(f"[cleanup:master] cannot reach master realm: {exc}")
+        return
 
     for client_id in (Config.KEYCLOAK_API_CLIENT_ID, Config.KEYCLOAK_SPA_CLIENT_ID):
-        client_uuid = _client_uuid(kc, client_id)
-        if client_uuid:
-            kc.delete_client(client_uuid)
-            print(f"[cleanup:master] deleted client '{client_id}'")
+        try:
+            client_uuid = _client_uuid(kc, client_id)
+            if client_uuid:
+                kc.delete_client(client_uuid)
+                print(f"[cleanup:master] deleted client '{client_id}'")
+        except Exception:
+            pass
 
-    group = _get_group(kc, "/tickora")
-    if group:
-        kc.delete_group(group["id"])
-        print("[cleanup:master] deleted group '/tickora'")
+    try:
+        group = _get_group(kc, "/tickora")
+        if group:
+            kc.delete_group(group["id"])
+            print("[cleanup:master] deleted group '/tickora'")
+    except Exception:
+        pass
 
     for role in REALM_ROLES + DEPRECATED_REALM_ROLES:
         try:
@@ -212,21 +223,31 @@ def ensure_client(kc: KeycloakAdmin, *, client_id: str, public: bool) -> str:
 
 
 def ensure_api_service_account_access(kc: KeycloakAdmin, *, api_uuid: str) -> None:
-    """Allow the API service account to read the dynamic organization tree."""
+    """Allow the API service account to read the dynamic organization tree.
+
+    Idempotent — assigning a client role that's already assigned is a
+    no-op in Keycloak. Any role names missing from this realm version
+    are skipped with a warning so we don't break a fresh install where
+    the role names changed across Keycloak versions.
+    """
     realm_management_uuid = _client_uuid(kc, "realm-management")
     if not realm_management_uuid:
         raise RuntimeError("realm-management client not found")
     service_account = kc.get_client_service_account_user(api_uuid)
-    roles = [
-        kc.get_client_role(realm_management_uuid, role)
-        for role in ("query-groups", "query-users", "view-users", "view-realm")
-    ]
-    kc.assign_client_role(
-        user_id=service_account["id"],
-        client_id=realm_management_uuid,
-        roles=roles,
-    )
-    print("[client] tickora-api service account can read groups/users")
+    wanted = ("query-groups", "query-users", "view-users", "view-realm")
+    roles = []
+    for role in wanted:
+        try:
+            roles.append(kc.get_client_role(realm_management_uuid, role))
+        except Exception as exc:
+            print(f"[client:sa] missing realm-management role '{role}': {exc}")
+    if roles:
+        kc.assign_client_role(
+            user_id=service_account["id"],
+            client_id=realm_management_uuid,
+            roles=roles,
+        )
+        print("[client] tickora-api service account can read groups/users")
 
 
 def ensure_mapper(kc: KeycloakAdmin, *, client_uuid: str, name: str, payload: dict) -> None:
