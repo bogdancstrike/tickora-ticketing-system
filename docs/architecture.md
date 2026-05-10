@@ -176,6 +176,12 @@ The worker process imports `ticketing` to load handlers, then runs `consumer.run
 - `errors.py` — `BusinessRuleError`, `PermissionDeniedError`, `NotFoundError`, `ConcurrencyConflictError`. Mapped to HTTP codes by the API layer.
 - `pagination.py` — cursor pagination helpers (we don't use offset on big tables).
 - `correlation.py` — middleware that pulls/generates `X-Correlation-Id`, stuffs it into a contextvar.
+- `redis_client.py` — lazy Redis client, returns `None` when Redis is unreachable.
+- `cache.py` — JSON memoization helper (`cached_call`) used to wrap expensive
+  read-only aggregates (`/api/monitor/overview`).
+- `session_tracker.py` — Redis-backed presence tracker. Each authenticated
+  request bumps `tickora:session:active:<user_id>` with a 5-minute TTL; the
+  admin overview reads this to surface the `active_sessions` KPI.
 
 ### 4.5 `api/` — HTTP surface
 
@@ -275,6 +281,15 @@ OR :is_auditor
 - principal is sector chief of `ticket.current_sector_id`, **or**
 - principal is the current `assignee_user_id`, **or**
 - specific transitions allow specific roles (e.g. `close` allowed for the beneficiary regardless of assignee).
+
+**Self-assignment policy (since 2026-05-09).** Comment writes
+(`can_post_public_comment`, `can_post_private_comment`) and operator-side
+status pushes (`can_drive_status`, `can_mark_done`) are restricted to the
+**active assignee** plus admin override (and beneficiary-side close/reopen).
+Bystander chiefs and sector members can read but cannot write — to
+participate they must `assign_to_me` first. This makes every comment and
+status change attributable to a real owner. See `docs/RBAC.md` for the full
+matrix.
 
 The state machine in `ticketing.workflow_service` calls `can_modify_ticket` plus a transition-specific predicate before each action. Failing either raises `PermissionDeniedError` → 403 + `ACCESS_DENIED` audit row.
 

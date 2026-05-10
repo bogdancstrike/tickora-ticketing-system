@@ -229,5 +229,3 @@ def _serialize_widget_definition(wd: WidgetDefinition) -> dict:
         "created_at": wd.created_at.isoformat(),
         "updated_at": wd.updated_at.isoformat(),
     }
-at": wd.updated_at.isoformat(),
-    }

@@ -195,44 +195,10 @@ export function MonitorPage() {
   const activeSector = selectedSector.data || overview.data?.sectors[0]
   const personal = selectedUser.data || overview.data?.personal
 
-  if (overview.isLoading) return <div style={{ padding: 100, textAlign: 'center' }}><Spin size="large" /></div>
-
-  const sectorControls = canSelectSector ? (
-    <Space wrap>
-      <Select
-        allowClear
-        showSearch
-        placeholder="Sector"
-        value={sectorCode}
-        onChange={(value) => { setSectorCode(value); setUserId(undefined) }}
-        optionFilterProp="label"
-        style={{ width: 240 }}
-        options={sectorOptions}
-      />
-      {sectorCode && (
-        <Select
-          allowClear
-          showSearch
-          placeholder="User"
-          value={userId}
-          onChange={setUserId}
-          optionFilterProp="label"
-          loading={users.isLoading}
-          style={{ width: 260 }}
-          options={(users.data?.items || []).map((u) => ({
-            value: u.id,
-            label: `${u.username || u.email || u.id} · ${u.membership_role}`,
-          }))}
-        />
-      )}
-    </Space>
-  ) : null
-
-  /**
-   * Generates the ECharts configuration for the historical ticket volume chart.
-   * Tracks 'Created' vs 'Closed' tickets over the selected time period.
-   * Recalculates whenever the overview data changes.
-   */
+  // Hooks must be called in the same order on every render — keep all
+  // useMemo / useCallback calls above any early `return`. The loading branch
+  // below would otherwise skip subsequent hooks, triggering React's
+  // "Rendered more hooks than during the previous render" error.
   const timeseriesOption = useMemo(() => {
     if (!overview.data?.timeseries) return null
     return {
@@ -266,6 +232,39 @@ export function MonitorPage() {
       ]
     }
   }, [overview.data])
+
+  if (overview.isLoading) return <div style={{ padding: 100, textAlign: 'center' }}><Spin size="large" /></div>
+
+  const sectorControls = canSelectSector ? (
+    <Space wrap>
+      <Select
+        allowClear
+        showSearch
+        placeholder="Sector"
+        value={sectorCode}
+        onChange={(value) => { setSectorCode(value); setUserId(undefined) }}
+        optionFilterProp="label"
+        style={{ width: 240 }}
+        options={sectorOptions}
+      />
+      {sectorCode && (
+        <Select
+          allowClear
+          showSearch
+          placeholder="User"
+          value={userId}
+          onChange={setUserId}
+          optionFilterProp="label"
+          loading={users.isLoading}
+          style={{ width: 260 }}
+          options={(users.data?.items || []).map((u) => ({
+            value: u.id,
+            label: `${u.username || u.email || u.id} · ${u.membership_role}`,
+          }))}
+        />
+      )}
+    </Space>
+  ) : null
 
   const tabs = [
     overview.data?.global && {

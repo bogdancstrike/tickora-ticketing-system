@@ -157,23 +157,51 @@ Legend: `[x]` done · `[~]` partial · `[ ]` pending
       audit_events partitioning + retention
 - [x] First-pass security review (`docs/SECURITY_REVIEW.md`) — RBAC strengths,
       defence-in-depth gaps, performance hotspots, hardening backlog
+- [x] **Refresh of security review (2026-05-09)** — adds the dashboards/widgets
+      RBAC analysis (Section D), documents the self-assignment policy for
+      comments/status, and lists the perf changes below.
 - [x] `assignable_users` endpoint refuses non-admins without an explicit sector
       and rejects sectors the caller doesn't belong to
 - [x] Phase 8 hardening index migration (`0007_phase8_hardening_indexes`) adds
       hot-path indexes for admin queues, SLA breach views, audit recency,
       notifications, active memberships, metadata keys, and trigram lookup.
+- [x] **Phase 9 perf indexes** (`9a1f3e0c2d10_phase9_perf_indexes`) — partial
+      indexes on `(status|priority|creator|sector, created_at desc)` for the
+      million-row TicketsPage path, plus joins for `ticket_sectors` and
+      `ticket_assignees`.
+- [x] **`/api/monitor/overview` 60-s Redis cache** keyed by visibility class
+      (admin/auditor share, sector users keyed by sectors, others by user_id);
+      eliminates repeat-load cost on 1M+ ticket datasets.
+- [x] **`/api/tickets` reltuples fast-path** — admin/auditor with no narrowing
+      filter uses `pg_class.reltuples` instead of `COUNT(*)` over a 1M-row
+      visibility subquery.
+- [x] **Self-assignment gate** — `can_post_public_comment`,
+      `can_post_private_comment`, `can_drive_status`, `can_mark_done` now
+      require the active-assignee link (admin override + beneficiary side
+      preserved). Bystander chiefs/members must self-assign first.
+- [x] **Active-session presence** (`src/core/session_tracker`) — admin
+      overview exposes an `active_sessions` KPI driven by Redis presence
+      keys with a 5-minute TTL.
 
 ## Phase 9 - Testing
-- [ ] Unit tests for all services
-- [ ] Integration tests for all services
+- [~] Unit tests for all services — RBAC + state machine + pagination + auth
+      cache covered; ticket/workflow/comment/attachment/sla/dashboard/audit
+      service unit suites pending.
+- [~] Integration tests for all services — phase 4 services, workflow
+      acceptance, workflow concurrency, RBAC, admin, dashboard, notifications,
+      bottleneck analysis, stale tickets, system settings, monitor refinements
+      covered. Comment/attachment/SLA service-level integration still pending.
 - [x] Admin service integration coverage for admin-only access, membership grant
       and hierarchy visibility, and SLA policy validation/creation.
-- [ ] Acceptance tests for all services
-- [ ] End2End tests for all services
-- [ ] Performance tests for all services
-- [ ] Load tests for all services
-- [ ] Security tests for all services (use different users for different actions, see docs/RBAC.md and scripts/keycloak_bootstrap.py)
-- [ ] Chaos tests for all services
+- [ ] Acceptance tests for all services (only workflow today)
+- [ ] End2End tests (Playwright UI smoke) for the golden-path flows
+- [ ] Performance tests (k6) for `/api/tickets`, `/api/monitor/*`,
+      `/api/admin/overview` against the 30M seed.
+- [ ] Load tests (sustained 50 RPS, 200 concurrent)
+- [ ] Security tests using the seeded role users (admin / auditor / distributor /
+      chief.s10 / member.s10 / member.s2 / beneficiary / external.user) — assert
+      403/404 across the full role × endpoint matrix.
+- [ ] Chaos tests (Postgres restart, Redis blackout, Keycloak unreachable).
 
 
 ## Phase 10 - Internalization and Wrapping Up
@@ -183,6 +211,48 @@ Legend: `[x]` done · `[~]` partial · `[ ]` pending
 - [ ] i18n (en + ro)
 - [ ] write very comprehensive technical documentation in docs/technical_documentation.md with examples, mermaid charts, etc.
 - [ ] write very comprehensive user documentation in docs/user_documentation.md with examples, use-cases, etc.
+
+## Dead code / unused packages — survey (2026-05-09)
+
+Frontend (verified by grepping `import` lines under `frontend/src/`):
+
+- [ ] `recharts` — declared in `package.json` but never imported. Charts use
+      `echarts-for-react`. Safe to drop after a fresh `npm install` + build.
+- [ ] `@ant-design/plots` — declared but never imported. Same as above.
+
+Backend (verified by grepping `import` under `src/`):
+
+- [ ] `colorama` and `httpx` in `requirements.txt` — neither is imported in
+      `src/`. Confirm scripts/tests don't pull them transitively before
+      removal.
+
+ORM / DB:
+
+- [ ] `DashboardShare` model + table — orphan. Either implement sharing
+      end-to-end (`dashboard_service`, an HTTP endpoint, RBAC gate) or drop
+      the model + add a downgrade migration. See `SECURITY_REVIEW.md` §D.
+- [ ] Materialized views `mv_dashboard_global_kpis` /
+      `mv_dashboard_sector_kpis` — defined in `0003_dashboard_mvs` but no
+      runtime code reads them now that monitor uses live aggregates. Drop
+      in a follow-up migration.
+
+## Open refactor backlog (2026-05-09)
+
+The following are surfaced as user requests but not yet executed in this
+branch — they are large, cross-cutting refactors and should be sequenced
+carefully:
+
+- [ ] Extract `src/audit/` as its own backend module (audit service, events,
+      and api/audit endpoints currently live under `src/ticketing/`).
+- [ ] Extract `src/common/` for utilities shared between modules
+      (currently in `src/core/`).
+- [ ] Refactor `src/tasking/` to own task lifecycle + status persistence so
+      every async job has a queryable DB row. Currently `tasking/` only owns
+      Kafka producer/consumer plumbing.
+- [ ] Sweep dead code and unused dependencies on both backend and frontend
+      (e.g. orphaned `DashboardShare` model, unused materialized views).
+- [ ] Decide on `dashboard_shares` and `is_public` flag — implement sharing
+      end-to-end or drop the unused surface (see `SECURITY_REVIEW.md` Section D).
 
 ---
 
@@ -195,11 +265,23 @@ Legend: `[x]` done · `[~]` partial · `[ ]` pending
 | `tests/unit/test_pagination.py`     |  4 | ✅ |
 | `tests/unit/test_state_machine.py`  | 26 | ✅ |
 | `tests/unit/test_auth_cache.py`     |  2 | ✅ |
-| `tests/integration/test_phase4_services.py` |  3 | ✅ |
-| `tests/integration/test_workflow_acceptance.py` |  3 | ✅ |
-| `tests/integration/test_workflow_concurrency.py` |  1 | ✅ |
-| `tests/integration/test_rbac_new.py` | 11 | ✅ |
-| `tests/integration/test_admin_service.py` | 5 | ✅ |
-| `tests/integration/test_dashboard_service.py` | 2 | 🟡 added; requires `testcontainers` locally |
-| `tests/integration/test_notifications.py` | 3 | 🟡 added; requires `testcontainers` locally |
-| **Tracked total**                           | **95** | **🟡 broader local integration dependency may require Docker/testcontainers** |
+| `tests/unit/test_me_api.py`         |  — | tracked separately |
+| `tests/integration/test_phase4_services.py`        |  3 | ✅ |
+| `tests/integration/test_workflow_acceptance.py`    |  3 | ✅ |
+| `tests/integration/test_workflow_concurrency.py`   |  1 | ✅ |
+| `tests/integration/test_rbac_new.py`               | 11 | ✅ |
+| `tests/integration/test_admin_service.py`          |  5 | ✅ |
+| `tests/integration/test_dashboard_service.py`      |  2 | 🟡 requires `testcontainers` locally |
+| `tests/integration/test_notifications.py`          |  3 | 🟡 requires `testcontainers` locally |
+| `tests/integration/test_dashboard_service_auto_config.py` | — | 🟡 requires testcontainers |
+| `tests/integration/test_monitor_service_refinements.py`   | — | 🟡 requires testcontainers |
+| `tests/integration/test_bottleneck_analysis.py`           | — | 🟡 requires testcontainers |
+| `tests/integration/test_stale_tickets.py`                 | — | 🟡 requires testcontainers |
+| `tests/integration/test_system_settings.py`               | — | 🟡 requires testcontainers |
+| **Tracked total**                                          | **95+** | **🟡 broader local integration suite needs Docker/testcontainers** |
+
+⚠️ The RBAC tightening (2026-05-09) for self-assignment may regress
+acceptance tests where a chief drives status without first self-assigning.
+Re-run `tests/integration/test_workflow_acceptance.py` and
+`tests/integration/test_rbac_new.py` after the migration; update fixtures
+if any test relied on chief-as-default-actor.

@@ -215,3 +215,107 @@ class TestAdminAndDashboard:
         assert rbac.can_view_sector_dashboard(chief,    "s10") is True
         assert rbac.can_view_sector_dashboard(member,   "s10") is True
         assert rbac.can_view_sector_dashboard(outsider, "s10") is False
+
+
+# ── Self-assignment gate (added 2026-05-09) ──────────────────────────────────
+#
+# Comments and operator-side status transitions require the active-assignee
+# link. Admins keep an override; beneficiaries keep close/reopen; distributors
+# keep their narrow triage lane via private comments only.
+class TestSelfAssignmentGate:
+    def _ticket(self, *, assignee="u-other", status="in_progress",
+               creator=None, beneficiary=None, sector="s10"):
+        return FakeTicket(
+            status=status,
+            current_sector_code=sector,
+            assignee_user_id=assignee,
+            created_by_user_id=creator,
+            beneficiary_user_id=beneficiary,
+        )
+
+    # ── can_post_public_comment ────────────────────────────────────────────
+    def test_active_assignee_can_post_public(self):
+        p = make_principal(user_id="u-self")
+        t = self._ticket(assignee="u-self")
+        assert rbac.can_post_public_comment(p, t) is True
+
+    def test_admin_keeps_override_for_public_comment(self):
+        p = make_principal(roles=(ROLE_ADMIN,))
+        t = self._ticket(assignee="u-other")
+        assert rbac.can_post_public_comment(p, t) is True
+
+    def test_creator_can_post_public(self):
+        p = make_principal(user_id="u-creator")
+        t = self._ticket(assignee="u-other", creator="u-creator")
+        assert rbac.can_post_public_comment(p, t) is True
+
+    def test_beneficiary_user_can_post_public(self):
+        p = make_principal(user_id="u-ben")
+        t = self._ticket(assignee="u-other", beneficiary="u-ben")
+        assert rbac.can_post_public_comment(p, t) is True
+
+    def test_distributor_no_longer_posts_public(self):
+        p = make_principal(roles=(ROLE_DISTRIBUTOR,))
+        t = self._ticket(assignee="u-other")
+        assert rbac.can_post_public_comment(p, t) is False
+
+    def test_chief_no_longer_posts_public_without_assignment(self):
+        p = make_principal(memberships=(SectorMembership("s10", "chief"),))
+        t = self._ticket(assignee="u-other", sector="s10")
+        assert rbac.can_post_public_comment(p, t) is False
+
+    def test_member_no_longer_posts_public_without_assignment(self):
+        p = make_principal(memberships=(SectorMembership("s10", "member"),))
+        t = self._ticket(assignee="u-other", sector="s10")
+        assert rbac.can_post_public_comment(p, t) is False
+
+    # ── can_post_private_comment ───────────────────────────────────────────
+    def test_active_assignee_can_post_private(self):
+        p = make_principal(user_id="u-self")
+        t = self._ticket(assignee="u-self")
+        assert rbac.can_post_private_comment(p, t) is True
+
+    def test_distributor_keeps_private_during_triage(self):
+        p = make_principal(roles=(ROLE_DISTRIBUTOR,))
+        t = self._ticket(assignee="u-other", status="pending")
+        assert rbac.can_post_private_comment(p, t) is True
+
+    def test_admin_keeps_private(self):
+        p = make_principal(roles=(ROLE_ADMIN,))
+        t = self._ticket(assignee="u-other")
+        assert rbac.can_post_private_comment(p, t) is True
+
+    def test_unassigned_member_cannot_post_private(self):
+        p = make_principal(memberships=(SectorMembership("s10", "member"),))
+        t = self._ticket(assignee="u-other", sector="s10")
+        assert rbac.can_post_private_comment(p, t) is False
+
+    def test_unassigned_chief_cannot_post_private(self):
+        p = make_principal(memberships=(SectorMembership("s10", "chief"),))
+        t = self._ticket(assignee="u-other", sector="s10")
+        assert rbac.can_post_private_comment(p, t) is False
+
+    # ── can_drive_status / can_mark_done ───────────────────────────────────
+    def test_active_assignee_drives_status(self):
+        p = make_principal(user_id="u-self")
+        t = self._ticket(assignee="u-self")
+        assert rbac.can_drive_status(p, t) is True
+        assert rbac.can_mark_done(p, t) is True
+
+    def test_admin_keeps_status_override(self):
+        p = make_principal(roles=(ROLE_ADMIN,))
+        t = self._ticket(assignee="u-other")
+        assert rbac.can_drive_status(p, t) is True
+        assert rbac.can_mark_done(p, t) is True
+
+    def test_chief_does_not_drive_status_without_assignment(self):
+        p = make_principal(memberships=(SectorMembership("s10", "chief"),))
+        t = self._ticket(assignee="u-other", sector="s10")
+        assert rbac.can_drive_status(p, t) is False
+        assert rbac.can_mark_done(p, t) is False
+
+    def test_member_does_not_drive_status_without_assignment(self):
+        p = make_principal(memberships=(SectorMembership("s10", "member"),))
+        t = self._ticket(assignee="u-other", sector="s10")
+        assert rbac.can_drive_status(p, t) is False
+        assert rbac.can_mark_done(p, t) is False

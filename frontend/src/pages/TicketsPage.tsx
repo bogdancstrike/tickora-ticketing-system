@@ -806,6 +806,10 @@ export function TicketsPage() {
   const [pagination, setPagination] = useState({ current: 1, pageSize: 20 })
 
   const me = useSessionBootstrap()
+  // The query key fans out across every filter + sort + page combination, so
+  // TanStack Query keeps each cache entry independent and the back/forward
+  // navigation feels instant. The backend endpoint is RBAC-aware, so we
+  // never have to filter visibility client-side.
   const tickets = useQuery({
     queryKey: ['tickets', status, priority, sector, search, sortBy, sortDir, pagination],
     queryFn: () => listTickets({

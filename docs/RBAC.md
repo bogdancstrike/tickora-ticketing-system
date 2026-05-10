@@ -109,14 +109,18 @@ Backend RBAC is the source of truth. The frontend can hide buttons, but endpoint
 | Assign to self | Admin or user in current sector when ticket is unassigned and assignable |
 | Assign/reassign user | Admin, distributor, or current sector chief |
 | Review ticket metadata | Admin or distributor |
-| Mark done | Admin, current sector chief, or current assignee |
-| Close/reopen | Admin, ticket creator, or beneficiary user |
+| **Drive operator status (in_progress, mark_done, …)** | **Admin or active assignee.** Chiefs and sector members must self-assign first. |
+| Mark done | Admin or active assignee |
+| Close / reopen | Admin, ticket creator, or beneficiary user |
 | Cancel pending ticket | Admin, distributor, or current sector chief |
 | Change priority | Admin, distributor, or current sector chief |
 | See private comments/attachments | Admin, auditor, distributor, or current sector members/chiefs |
-| Post private comment | Admin, distributor, or current sector members/chiefs |
+| **Post public comment** | **Admin, active assignee, creator, or beneficiary/external requester-by-email.** Distributors and bystander members/chiefs no longer post on tickets they aren't actively working. |
+| **Post private comment** | **Admin, distributor (during triage), or active assignee.** Sector members who haven't self-assigned no longer qualify. |
 | Global audit | Admin or auditor |
 | Ticket audit | Ticket viewers; sector chiefs additionally have sector audit authority |
+
+> **Self-assignment policy (since 2026-05-09):** comment writes and operator-side status transitions require the caller to be the *active assignee* of the ticket. Sector members and chiefs who want to participate must pull the ticket onto themselves via `assign_to_me` (or be assigned by a chief/distributor). This keeps every comment and status change attributable to the operator who is on the hook for the work. Admin and beneficiary-side actions (close/reopen for the requester) are unchanged.
 
 ## Profile Visibility
 

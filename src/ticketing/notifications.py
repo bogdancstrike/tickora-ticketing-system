@@ -3,7 +3,7 @@ from typing import Any, Dict, List, Optional
 from datetime import datetime, timezone
 
 from framework.commons.logger import logger
-from sqlalchemy import select, text as sa_text
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from src.core.db import get_db
@@ -302,15 +302,6 @@ def notify_sla_breached(payload: Dict[str, Any]):
             )
         
         # Notify distributors/admins too?
-        db.commit()
-
-@register_task("refresh_dashboard_mvs")
-def refresh_dashboard_mvs(payload: Dict[str, Any]):
-    """Refresh the dashboard materialized views."""
-    with get_db() as db:
-        logger.info("refreshing dashboard materialized views")
-        db.execute(sa_text("REFRESH MATERIALIZED VIEW CONCURRENTLY mv_dashboard_global_kpis"))
-        db.execute(sa_text("REFRESH MATERIALIZED VIEW CONCURRENTLY mv_dashboard_sector_kpis"))
         db.commit()
 
 @register_task("send_email_notification")

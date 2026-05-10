@@ -122,9 +122,16 @@ def can_reassign(p: Principal, t: _TicketLike) -> bool:
 
 
 def can_mark_done(p: Principal, t: _TicketLike) -> bool:
+    """Operator-side "done" transition.
+
+    Policy: only the user(s) who pulled the ticket onto themselves (self-
+    assignment) can mark it done. Admins retain an override so support can
+    unstick an abandoned ticket. Chiefs deliberately do **not** get this
+    capability — if a chief wants to act on a ticket they must self-assign
+    first, which keeps the audit trail honest about who actually did the
+    work.
+    """
     if p.is_admin:
-        return True
-    if t.current_sector_code and p.is_chief_of(t.current_sector_code):
         return True
     if _is_assigned_to(p, t):
         return True
@@ -174,16 +181,15 @@ def can_change_priority(p: Principal, t: _TicketLike) -> bool:
 
 def can_drive_status(p: Principal, t: _TicketLike) -> bool:
     """True if `p` may push the ticket through operator-side transitions
-    (assign, in_progress, mark_done, etc.).
+    (in_progress, mark_done, etc.).
 
-    Admins and the chief of the current sector always can. Otherwise the
-    caller must be the current assignee — i.e. the operator working the
-    ticket. Distributors only get a narrow lane (cancel during triage),
-    handled by `can_cancel`/`can_assign_sector`.
+    Policy: only the active assignee can drive status. Self-assignment
+    (`can_assign_to_me` -> `assign_to_me`) is the gateway for sector members,
+    so a member who wants to work a ticket pulls it first. Admins retain an
+    override; distributors keep their narrow triage lane via `can_cancel`
+    and `can_assign_sector`.
     """
     if p.is_admin:
-        return True
-    if t.current_sector_code and p.is_chief_of(t.current_sector_code):
         return True
     if _is_assigned_to(p, t):
         return True
@@ -201,14 +207,19 @@ def can_see_private_comments(p: Principal, t: _TicketLike) -> bool:
 
 
 def can_post_public_comment(p: Principal, t: _TicketLike) -> bool:
-    """Public comments are limited to participants:
-       admin / distributor / chief of the sector / current assignee /
-       creator / requester-by-email. Other readers (auditors, sector
-       members not assigned) can read but can't post.
+    """Public comments are limited to people actually working or affected by
+    the ticket:
+
+      * the active assignee (self-assigned), and
+      * the beneficiary side — creator, internal beneficiary, or external
+        requester-by-email.
+
+    Admins keep an override for support cases. Distributors and sector
+    chiefs/members who haven't self-assigned can still read but can't post —
+    if they want to participate they self-assign first, which keeps the
+    discussion attributable to the operator on the hook.
     """
-    if p.is_admin or p.is_distributor:
-        return True
-    if t.current_sector_code and p.is_chief_of(t.current_sector_code):
+    if p.is_admin:
         return True
     if _is_assigned_to(p, t):
         return True
@@ -222,11 +233,22 @@ def can_post_public_comment(p: Principal, t: _TicketLike) -> bool:
 
 
 def can_post_private_comment(p: Principal, t: _TicketLike) -> bool:
+    """Private (staff-only) comments are restricted to:
+
+      * admins,
+      * distributors during triage (they need a place to leave routing notes
+        before any sector member touches the ticket),
+      * the active assignee — sector members who self-assigned the ticket.
+
+    Sector members who haven't self-assigned no longer qualify. This stops a
+    bystander from leaving private notes on tickets they aren't actively
+    working.
+    """
     if p.is_admin:
         return True
-    if _sector_codes(t).intersection(p.all_sectors):
-        return True
     if p.is_distributor:
+        return True
+    if _is_assigned_to(p, t):
         return True
     return False
 

@@ -447,26 +447,6 @@ class DashboardWidget(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
 
 
-class DashboardShare(Base):
-    __tablename__ = "dashboard_shares"
-    __table_args__ = (
-        Index("idx_dashboard_shares_dashboard", "dashboard_id"),
-        Index("idx_dashboard_shares_user",      "target_user_id"),
-        Index("idx_dashboard_shares_sector",    "target_sector_id"),
-        UniqueConstraint("dashboard_id", "target_user_id", name="uq_dash_share_user"),
-        UniqueConstraint("dashboard_id", "target_sector_id", name="uq_dash_share_sector"),
-    )
-
-    id:                Mapped[str] = mapped_column(UUID(as_uuid=False), primary_key=True, default=_uuid)
-    dashboard_id:      Mapped[str] = mapped_column(UUID(as_uuid=False), ForeignKey("custom_dashboards.id", ondelete="CASCADE"), nullable=False)
-    
-    target_user_id:    Mapped[str | None] = mapped_column(UUID(as_uuid=False), ForeignKey("users.id"))
-    target_sector_id:  Mapped[str | None] = mapped_column(UUID(as_uuid=False), ForeignKey("sectors.id"))
-    
-    shared_by_user_id: Mapped[str] = mapped_column(UUID(as_uuid=False), ForeignKey("users.id"), nullable=False)
-    created_at:        Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
-
-
 class UserDashboardSettings(Base):
     """User-specific settings for dashboards (favorite, default, etc)."""
     __tablename__ = "user_dashboard_settings"

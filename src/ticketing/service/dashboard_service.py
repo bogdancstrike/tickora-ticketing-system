@@ -99,8 +99,65 @@ def delete_dashboard(db: Session, p: Principal, dashboard_id: str) -> None:
     db.flush()
 
 
+_ALLOWED_WIDGET_SCOPES = {"global", "sector", "personal", "my_requests"}
+
+
+def _validate_widget_config(p: Principal, db: Session, config: Any) -> None:
+    """Reject widget configurations that target data the principal can't see.
+
+    The visibility predicates on the data endpoints already filter results
+    server-side, so a bogus `config` produces empty payloads rather than a
+    leak. But we still validate at write time so:
+
+    1. The audit log shows who tried to point a widget at a foreign sector
+       (a probe-by-config oracle is closed at the source).
+    2. The UI gets clean 400s with a useful reason instead of mysteriously
+       empty widgets.
+    3. Admins and dashboards exporters can trust that a stored `config` is
+       always referencing data the owner could see at write time.
+
+    The check is intentionally permissive on unknown keys so the widget
+    catalogue can grow without breaking older clients.
+    """
+    if not config:
+        return
+    if not isinstance(config, dict):
+        raise ValidationError("widget config must be an object")
+
+    scope = config.get("scope")
+    if scope is not None and scope not in _ALLOWED_WIDGET_SCOPES:
+        raise ValidationError(
+            f"widget scope must be one of {sorted(_ALLOWED_WIDGET_SCOPES)}"
+        )
+
+    sector_code = config.get("sector_code") or config.get("sectorCode")
+    if sector_code:
+        # Admins / auditors keep cross-sector vision; everyone else must
+        # reference a sector they actually belong to.
+        if not (p.is_admin or p.is_auditor):
+            if sector_code not in p.all_sectors:
+                raise PermissionDeniedError(
+                    f"not allowed to target sector {sector_code}"
+                )
+
+    ticket_id = config.get("ticketId") or config.get("ticket_id")
+    if ticket_id:
+        # Re-use the canonical ticket visibility check rather than
+        # duplicating the SQL here. `ticket_service.get` raises NotFound
+        # when the principal can't see the ticket, which is exactly the
+        # signal we want.
+        from src.ticketing.service import ticket_service
+        ticket_service.get(db, p, ticket_id)
+
+
 def upsert_widget(db: Session, p: Principal, dashboard_id: str, payload: dict[str, Any]) -> dict[str, Any]:
-    """Create or update a widget configuration within a dashboard."""
+    """Create or update a widget configuration within a dashboard.
+
+    The widget `config` blob is validated against the principal's visibility
+    scope: a sector-3 user can't pin a widget at sector 2, and an attempt to
+    watch a ticket the user can't see is rejected up-front. See
+    `_validate_widget_config` for the rules and the rationale.
+    """
     _check_dashboard_access(p)
     d = db.get(CustomDashboard, dashboard_id)
     if d is None or d.owner_user_id != p.user_id:
@@ -114,6 +171,9 @@ def upsert_widget(db: Session, p: Principal, dashboard_id: str, payload: dict[st
     else:
         w = DashboardWidget(dashboard_id=d.id, type=payload["type"])
         db.add(w)
+
+    if "config" in payload:
+        _validate_widget_config(p, db, payload["config"])
 
     for field in ("title", "config", "x", "y", "w", "h"):
         if field in payload:

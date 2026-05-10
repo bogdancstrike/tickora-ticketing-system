@@ -49,7 +49,25 @@ def _nextval_sql(name: str):
 # ── Visibility predicate ─────────────────────────────────────────────────────
 
 def _visibility_filter(p: Principal):
-    """SQLAlchemy filter expression encoding `rbac.can_view_ticket` for a query."""
+    """SQLAlchemy filter expression encoding `rbac.can_view_ticket` for a query.
+
+    Returns ``None`` for principals with unrestricted read scope (admin /
+    auditor) so the caller can skip adding a WHERE clause altogether — the
+    planner picks shorter paths when no visibility predicate is in the way.
+
+    For everyone else we OR together every legitimate path to a ticket:
+    creator, beneficiary by user_id, external requester by email, sector
+    membership (both `current_sector_id` and the multi-sector
+    `ticket_sectors` join), and the distributor's pending/triage queue. The
+    OR is built from a list of clauses so the SQL planner can pick the
+    cheapest branch (for example, an indexed equality on
+    ``created_by_user_id`` for "My tickets").
+
+    Bandwidth: this filter is used by the list endpoint **and** by every
+    aggregate in `monitor_service`, so any change here ripples wide. Keep it
+    in lock-step with `iam.rbac.can_view_ticket` — the python and SQL
+    versions are tested as a pair.
+    """
     if p.is_admin or p.is_auditor:
         return None  # no restriction
 

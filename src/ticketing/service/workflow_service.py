@@ -241,6 +241,19 @@ def _assign_sector(db: Session, p: Principal, ticket_id: str, sector_code: str, 
 
 
 def assign_to_me(db: Session, p: Principal, ticket_id: str) -> Ticket:
+    """Self-assign a ticket. The conditional UPDATE below is the source of
+    truth — at most one concurrent caller wins, regardless of how many
+    sector members click "Assign to me" on the same ticket.
+
+    Per BRD §10.5 / §26.4 this must never produce a double-assign. We
+    encode the precondition (`assignee_user_id IS NULL` and an assignable
+    status) in the WHERE clause; if the row was already taken, the UPDATE
+    affects zero rows and we surface a 409 to the UI so it can refresh.
+
+    All side effects (assignment history, status history, audit, Kafka
+    notification) run in the same transaction as the UPDATE — they only
+    commit if the UPDATE wins, so an aborted attempt leaves no trace.
+    """
     with span("workflow.assign_to_me", username=p.username, user_id=p.user_id, ticket_id=ticket_id) as current:
         ticket = _assign_to_me(db, p, ticket_id)
         set_attr(current, "ticket.status", ticket.status)
@@ -255,6 +268,10 @@ def _assign_to_me(db: Session, p: Principal, ticket_id: str) -> Ticket:
         _denied(sm.ACTION_ASSIGN_TO_ME, p, ticket_id, db, "not in this sector")
 
     # The atomic UPDATE is the source of truth — guards against the concurrency race.
+    # The WHERE clause encodes every precondition: same sector, not deleted,
+    # currently unassigned, and in an assignable status. If a competing
+    # transaction has already flipped any of these, RETURNING is empty and
+    # we raise ConcurrencyConflictError instead of silently overwriting.
     res = db.execute(
         update(Ticket)
         .where(

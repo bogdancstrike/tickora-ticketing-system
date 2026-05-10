@@ -42,10 +42,8 @@ def main():
                     count = sla_service.check_all_breaches(db)
                     if count > 0:
                         logger.info("sla check completed", breaches_found=count)
-                    
-                    # Also trigger dashboard refresh
-                    from src.tasking.producer import publish
-                    publish("refresh_dashboard_mvs", {})
+                    # Dashboard materialized views were dropped — monitor
+                    # endpoints now use live aggregates with a Redis cache.
             except Exception as e:
                 logger.error("sla check failed", error=str(e))
         else:
