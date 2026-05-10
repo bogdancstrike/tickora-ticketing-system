@@ -64,7 +64,6 @@ def create_dashboard(db: Session, p: Principal, payload: dict[str, Any]) -> dict
         owner_user_id=p.user_id,
         title=title,
         description=payload.get("description"),
-        is_public=bool(payload.get("is_public", False))
     )
     db.add(d)
     db.flush()
@@ -82,9 +81,7 @@ def update_dashboard(db: Session, p: Principal, dashboard_id: str, payload: dict
         d.title = str(payload["title"]).strip()
     if "description" in payload:
         d.description = payload["description"]
-    if "is_public" in payload:
-        d.is_public = bool(payload["is_public"])
-    
+
     db.flush()
     return _serialize_dashboard(d)
 
@@ -150,6 +147,30 @@ def _validate_widget_config(p: Principal, db: Session, config: Any) -> None:
         ticket_service.get(db, p, ticket_id)
 
 
+def _check_widget_required_roles(db: Session, p: Principal, widget_type: str) -> None:
+    """Reject the write if `widget_definitions.required_roles` excludes the
+    principal.
+
+    Soft cases (no catalogue row, NULL/empty `required_roles`) pass through
+    so adding a new widget type doesn't accidentally lock everyone out
+    until the gate is configured. Admins also bypass — they own the
+    catalogue and need to be able to demo every widget. Auditors get the
+    same treatment for read-only inspection workflows.
+    """
+    if p.is_admin or p.is_auditor:
+        return
+    wd = db.get(WidgetDefinition, widget_type)
+    if wd is None:
+        return  # Unknown widget type — let the rest of the system reject it.
+    required = wd.required_roles or []
+    if not required:
+        return
+    if not any(p.has_role(role) for role in required):
+        raise PermissionDeniedError(
+            f"widget '{widget_type}' requires one of: {', '.join(sorted(required))}"
+        )
+
+
 def upsert_widget(db: Session, p: Principal, dashboard_id: str, payload: dict[str, Any]) -> dict[str, Any]:
     """Create or update a widget configuration within a dashboard.
 
@@ -168,9 +189,16 @@ def upsert_widget(db: Session, p: Principal, dashboard_id: str, payload: dict[st
         w = db.get(DashboardWidget, widget_id)
         if w is None or w.dashboard_id != d.id:
             raise NotFoundError("widget not found")
+        widget_type = w.type
     else:
-        w = DashboardWidget(dashboard_id=d.id, type=payload["type"])
+        widget_type = payload["type"]
+        w = DashboardWidget(dashboard_id=d.id, type=widget_type)
         db.add(w)
+
+    # Required-roles gate: if the widget catalogue declares a role list,
+    # the principal must hold at least one of those roles. Admins always
+    # pass — they manage the catalogue itself.
+    _check_widget_required_roles(db, p, widget_type)
 
     if "config" in payload:
         _validate_widget_config(p, db, payload["config"])
@@ -232,19 +260,32 @@ def sync_widget_catalogue(db: Session) -> None:
     db.flush()
 
 
+_AUTO_CONFIGURE_WATCHER_HARD_CAP = 50
+
+
 def auto_configure_dashboard(db: Session, p: Principal, dashboard_id: str, mode: str = "append", primary_sector: str | None = None) -> None:
-    """Heuristic logic to build a role-appropriate dashboard."""
+    """Heuristic logic to build a role-appropriate dashboard.
+
+    Note on the watcher cap: the per-dashboard watcher count is taken from
+    the system setting `autopilot_max_ticket_watchers`, which an
+    administrator can edit at runtime. We *also* enforce a hard cap
+    (`_AUTO_CONFIGURE_WATCHER_HARD_CAP`) so a typo or a malicious script
+    that bumps the setting to a huge number can't paste hundreds of widgets
+    onto a dashboard in a single call. The hard cap floors at 0 so a
+    negative setting can't trigger an unbounded read.
+    """
     d = db.get(CustomDashboard, dashboard_id)
     if d is None or d.owner_user_id != p.user_id:
         raise NotFoundError("dashboard not found")
-    
+
     if mode == "replace":
         db.execute(delete(DashboardWidget).where(DashboardWidget.dashboard_id == d.id))
         db.flush()
         db.refresh(d)
-    
-    # Load limits
-    max_watchers = int(get_setting(db, "autopilot_max_ticket_watchers", 5))
+
+    # Load limits — hard-capped regardless of system-setting value.
+    raw_max = int(get_setting(db, "autopilot_max_ticket_watchers", 5))
+    max_watchers = max(0, min(raw_max, _AUTO_CONFIGURE_WATCHER_HARD_CAP))
 
     # Heuristics
     widgets_to_add = []
@@ -329,7 +370,6 @@ def _serialize_dashboard(d: CustomDashboard, full: bool = False) -> dict[str, An
         "title": d.title,
         "description": d.description,
         "widget_count": len(d.widgets),
-        "is_public": d.is_public,
         "created_at": d.created_at.isoformat(),
         "updated_at": d.updated_at.isoformat(),
     }

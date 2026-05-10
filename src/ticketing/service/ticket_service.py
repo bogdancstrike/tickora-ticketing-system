@@ -2,7 +2,6 @@
 from datetime import datetime, timezone
 from typing import Any, Iterable
 
-from flask import request as flask_request
 from sqlalchemy import and_, asc, desc, exists, func, or_, select
 from sqlalchemy.orm import Session
 
@@ -490,12 +489,10 @@ def _list(
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
 def _request_metadata() -> tuple[str | None, str | None]:
-    try:
-        ip = flask_request.headers.get("X-Forwarded-For", flask_request.remote_addr) or None
-        ua = flask_request.headers.get("User-Agent")
-        return ip, ua
-    except Exception:
-        return None, None
+    # Single source of truth for "what's the client IP?" — trusted-proxy
+    # aware so a direct caller cannot forge `X-Forwarded-For`.
+    from src.core.request_metadata import request_metadata
+    return request_metadata()
 
 
 def _ticket_audit_snapshot(t: Ticket) -> dict[str, Any]:

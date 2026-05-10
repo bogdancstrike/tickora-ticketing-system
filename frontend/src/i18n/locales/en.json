@@ -1,0 +1,126 @@
+{
+  "common": {
+    "loading": "Loading…",
+    "save": "Save",
+    "cancel": "Cancel",
+    "create": "Create",
+    "edit": "Edit",
+    "delete": "Delete",
+    "confirm": "Confirm",
+    "search": "Search",
+    "clear_filters": "Clear filters",
+    "refresh": "Refresh",
+    "yes": "Yes",
+    "no": "No",
+    "unassigned": "Unassigned",
+    "back": "Back"
+  },
+  "nav": {
+    "dashboard": "Dashboard",
+    "tickets": "Tickets",
+    "monitor": "Monitor",
+    "review": "Review",
+    "admin": "Administration",
+    "profile": "Profile",
+    "audit": "Audit",
+    "create_ticket": "Create Ticket"
+  },
+  "language": {
+    "label": "Language",
+    "en": "English",
+    "ro": "Română"
+  },
+  "tickets": {
+    "title": "Tickets",
+    "subtitle": "Operational queue with workflow actions",
+    "create": "Create Ticket",
+    "search_placeholder": "Search title, body or code",
+    "total_suffix": "tickets",
+    "total_count": "Total {{count}} tickets",
+    "empty": "No tickets match the current filters",
+    "columns": {
+      "code": "Code",
+      "title": "Title",
+      "status": "Status",
+      "priority": "Priority",
+      "sector": "Sector",
+      "assignee": "Assignee",
+      "created": "Created",
+      "updated": "Updated"
+    }
+  },
+  "review": {
+    "title": "Review Tickets",
+    "pending_queue": "Pending review",
+    "reviewed_queue": "Already routed",
+    "open": "Open",
+    "empty_pending": "No tickets are waiting for review.",
+    "empty_reviewed": "No tickets have been routed yet."
+  },
+  "admin": {
+    "title": "Administration",
+    "tabs": {
+      "users": "Users & roles",
+      "sectors": "Sectors & groups",
+      "config": "Configuration",
+      "system": "System"
+    },
+    "kpis": {
+      "active_sessions": "Active sessions",
+      "total_users": "Total users",
+      "enabled_users": "Enabled users",
+      "active_tickets": "Active tickets",
+      "sla_breached": "SLA breached",
+      "new_today": "New today"
+    }
+  },
+  "monitor": {
+    "title": "Monitor",
+    "tabs": {
+      "global": "Global · all sectors",
+      "distribution": "Distribution",
+      "sector": "Sector",
+      "personal": "User · {{name}}"
+    },
+    "charts": {
+      "status": "Status",
+      "priority": "Priority",
+      "categories": "Categories",
+      "by_sector": "Total tickets by sector",
+      "bottleneck": "Bottleneck Analysis",
+      "stale_tickets": "Stale Tickets",
+      "oldest_active": "Oldest Active",
+      "workload_chart": "Workload Chart",
+      "workload_details": "Workload Details"
+    }
+  },
+  "tour": {
+    "buttons": {
+      "next": "Next",
+      "back": "Back",
+      "skip": "Skip tour",
+      "last": "Got it",
+      "close": "Close"
+    },
+    "tickets": {
+      "search": "Search by code, title, or body. Filter and sort apply on top.",
+      "filters": "Filter by status, priority, or sector. Visibility is enforced server-side — you only ever see tickets you're allowed to.",
+      "create": "Create a new ticket. Internal users get an internal beneficiary; externals fill out the requester form."
+    },
+    "monitor": {
+      "tabs": "Switch between global, distribution, sector, and personal views. Each tab is a different cut of the same data.",
+      "cache": "Aggregates are memoised for 60 seconds — the second visit is instant."
+    },
+    "admin": {
+      "kpis": "Active sessions counts users currently signed in (5-minute presence window).",
+      "tabs": "Manage users, sectors, configuration, and system health from the tabs below."
+    },
+    "language": "Switch between English and Romanian here. Your choice is remembered."
+  },
+  "errors": {
+    "generic": "Something went wrong.",
+    "rate_limited": "Too many requests, please slow down.",
+    "permission_denied": "You don't have permission to do that.",
+    "not_found": "Not found."
+  }
+}

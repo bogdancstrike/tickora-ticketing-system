@@ -1,4 +1,6 @@
 import { useMemo, useState } from 'react'
+import { useTranslation } from 'react-i18next'
+import { ProductTour } from '@/components/common/ProductTour'
 import { useQuery } from '@tanstack/react-query'
 import ReactECharts from 'echarts-for-react'
 import {
@@ -147,6 +149,7 @@ function SectorPanel({ sector, controls }: { sector: MonitorSector; controls?: R
  * supervisors and operators a high-level view of system health and performance.
  */
 export function MonitorPage() {
+  const { t } = useTranslation()
   const { token } = antTheme.useToken()
   const user = useSessionStore((s) => s.user)
   const [sectorCode, setSectorCode] = useState<string | undefined>()
@@ -398,7 +401,9 @@ export function MonitorPage() {
       {selectedSector.error && <Alert type="error" message={selectedSector.error.message} showIcon />}
       {selectedUser.error && <Alert type="error" message={selectedUser.error.message} showIcon />}
 
-      <Tabs items={tabs as any} />
+      <div data-tour-id="monitor-tabs">
+        <Tabs items={tabs as any} />
+      </div>
 
       {timeseriesOption && (
         <div style={{ background: token.colorBgContainer, border: `1px solid ${token.colorBorderSecondary}`, borderRadius: 8, padding: 16, minHeight: 280, boxShadow: token.boxShadowTertiary, marginTop: 16 }}>
@@ -421,9 +426,16 @@ export function MonitorPage() {
               ]}
             />
           </Flex>
-          <ReactECharts option={timeseriesOption} style={{ height: 260 }} />
+          <ReactECharts option={timeseriesOption} style={{ height: 260 }} data-tour-id="monitor-timeseries" />
         </div>
       )}
+      <ProductTour
+        pageKey="monitor"
+        steps={[
+          { target: '[data-tour-id="monitor-tabs"]', content: t('tour.monitor.tabs'), disableBeacon: true },
+          { target: '[data-tour-id="monitor-timeseries"]', content: t('tour.monitor.cache') },
+        ]}
+      />
     </div>
   )
 }

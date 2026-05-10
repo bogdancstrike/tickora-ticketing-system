@@ -98,18 +98,19 @@ def monitor_distributor(db: Session, principal: Principal) -> dict[str, Any]:
 
     threshold_24h = datetime.now(timezone.utc) - timedelta(hours=24)
 
-    # Tickets transitioned out of pending today
-    reviewed_today_sub = (
+    # Tickets transitioned out of pending in the last 24 h. Build the inner
+    # query as a `select()` (not `.subquery()`) so SQLAlchemy can inline it
+    # as a proper IN-list and we don't get the
+    # "Coercing Subquery into a select() for use in IN()" warning.
+    reviewed_today_select = (
         select(TicketStatusHistory.ticket_id)
         .where(
             TicketStatusHistory.old_status == "pending",
-            TicketStatusHistory.created_at >= threshold_24h
+            TicketStatusHistory.created_at >= threshold_24h,
         )
         .distinct()
-        .subquery()
     )
-
-    reviewed_today_stmt = _ticket_stmt().where(Ticket.id.in_(reviewed_today_sub))
+    reviewed_today_stmt = _ticket_stmt().where(Ticket.id.in_(reviewed_today_select))
 
     return {
         "kpis": {
@@ -137,14 +138,133 @@ def monitor_distributor(db: Session, principal: Principal) -> dict[str, Any]:
 
 
 def monitor_sectors(db: Session, principal: Principal) -> list[dict[str, Any]]:
+    """List per-sector KPIs and breakdowns.
+
+    Used to be O(sectors × 7) queries — every visible sector triggered
+    `monitor_sector`, which in turn issued ~7 separate aggregates. We now
+    answer the headline KPIs and the by-status / by-priority / by-category
+    breakdowns with **three** total grouped queries (KPI sums, status
+    breakdown, priority breakdown), then hydrate per-sector workload
+    individually because that join is sector-scoped by nature.
+
+    The expensive bottleneck-analysis + stale-tickets queries used to run
+    per sector; now they're computed only when an explicit
+    `monitor_sector(code)` call requests them. The aggregate response keeps
+    the same shape so existing frontend code doesn't break.
+    """
     allowed_codes: set[str] | None = None
     if not rbac.can_view_global_dashboard(principal):
         allowed_codes = principal.all_sectors
     stmt = select(Sector).where(Sector.is_active.is_(True)).order_by(Sector.code.asc())
     if allowed_codes is not None:
         stmt = stmt.where(Sector.code.in_(allowed_codes))
-    rows = list(db.scalars(stmt))
-    return [monitor_sector(db, principal, s.code) for s in rows]
+    sectors = list(db.scalars(stmt))
+    if not sectors:
+        return []
+
+    sector_ids = [s.id for s in sectors]
+    kpis_by_sector = _bulk_sector_kpis(db, sector_ids)
+    by_status_by_sector = _bulk_sector_breakdown(db, sector_ids, Ticket.status)
+    by_priority_by_sector = _bulk_sector_breakdown(db, sector_ids, Ticket.priority)
+    by_category_by_sector = _bulk_sector_breakdown(db, sector_ids, Ticket.category)
+
+    out: list[dict[str, Any]] = []
+    for s in sectors:
+        out.append({
+            "sector_code": s.code,
+            "sector_name": s.name,
+            "kpis": kpis_by_sector.get(s.id, _empty_sector_kpis()),
+            "by_status":   by_status_by_sector.get(s.id, []),
+            "by_priority": by_priority_by_sector.get(s.id, []),
+            "by_category": by_category_by_sector.get(s.id, []),
+            # `workload` is sector-local; the bulk path doesn't help much.
+            # `oldest`/`stale_tickets`/`bottleneck_analysis` are deferred
+            # until the user picks a specific sector — they were the most
+            # expensive part of the per-sector loop.
+            "workload": _workload(db, s.id),
+            "oldest": [],
+            "stale_tickets": [],
+            "bottleneck_analysis": [],
+        })
+    return out
+
+
+def _empty_sector_kpis() -> dict[str, int | float | None]:
+    return {
+        "active": 0,
+        "unassigned": 0,
+        "done": 0,
+        "sla_breached": 0,
+        "reopened": 0,
+        "avg_resolution_minutes": None,
+    }
+
+
+def _bulk_sector_kpis(db: Session, sector_ids: list[str]) -> dict[str, dict[str, Any]]:
+    """One grouped query producing every sector's KPIs at once."""
+    if not sector_ids:
+        return {}
+    active_count = func.sum(case((Ticket.status.in_(ACTIVE_STATUSES), 1), else_=0))
+    unassigned = func.sum(
+        case(
+            (
+                Ticket.assignee_user_id.is_(None) & Ticket.status.in_(ACTIVE_STATUSES),
+                1,
+            ),
+            else_=0,
+        )
+    )
+    done_count = func.sum(case((Ticket.status.in_(DONE_STATUSES), 1), else_=0))
+    sla_breached = func.sum(case((Ticket.sla_status == "breached", 1), else_=0))
+    reopened = func.sum(case((Ticket.reopened_count > 0, 1), else_=0))
+    avg_resolution = func.avg(
+        case(
+            (Ticket.done_at.is_not(None), func.extract("epoch", Ticket.done_at - Ticket.created_at) / 60),
+            else_=None,
+        )
+    )
+    rows = db.execute(
+        select(
+            Ticket.current_sector_id,
+            active_count, unassigned, done_count, sla_breached, reopened, avg_resolution,
+        )
+        .where(Ticket.is_deleted.is_(False), Ticket.current_sector_id.in_(sector_ids))
+        .group_by(Ticket.current_sector_id)
+    ).all()
+    out: dict[str, dict[str, Any]] = {}
+    for row in rows:
+        sid, active, unas, done, breached, reop, avg = row
+        out[sid] = {
+            "active": int(active or 0),
+            "unassigned": int(unas or 0),
+            "done": int(done or 0),
+            "sla_breached": int(breached or 0),
+            "reopened": int(reop or 0),
+            "avg_resolution_minutes": round(float(avg), 1) if avg is not None else None,
+        }
+    return out
+
+
+def _bulk_sector_breakdown(
+    db: Session,
+    sector_ids: list[str],
+    column,
+) -> dict[str, list[dict[str, Any]]]:
+    """One grouped query producing `column` breakdowns for every sector."""
+    if not sector_ids:
+        return {}
+    rows = db.execute(
+        select(Ticket.current_sector_id, column, func.count(Ticket.id))
+        .where(Ticket.is_deleted.is_(False), Ticket.current_sector_id.in_(sector_ids))
+        .group_by(Ticket.current_sector_id, column)
+    ).all()
+    out: dict[str, list[dict[str, Any]]] = {}
+    for sid, key, count in rows:
+        out.setdefault(sid, []).append({"key": key or "unset", "count": int(count)})
+    # Sort each sector's breakdown by count desc to match the per-sector helper.
+    for sid in out:
+        out[sid].sort(key=lambda r: r["count"], reverse=True)
+    return out
 
 
 def monitor_sector(db: Session, principal: Principal, sector_code: str) -> dict[str, Any]:
@@ -169,37 +289,84 @@ def monitor_sector(db: Session, principal: Principal, sector_code: str) -> dict[
 
 
 def monitor_personal(db: Session, principal: Principal, user_id: str) -> dict[str, Any]:
+    """Per-user monitor payload.
+
+    Used to issue 9 separate `COUNT(*)` queries (5 operator-side, 4
+    beneficiary-side). We now collapse each side into a single
+    `SUM(CASE WHEN …)` query, dropping 9 round-trips to 2 plus the two
+    breakdowns. On the 1M-row dataset this is the difference between
+    "noticeable" and "instant" for the personal panel.
+    """
     if not _can_view_user_dashboard(db, principal, user_id):
         raise PermissionDeniedError("not allowed to view this user monitor")
     user = db.get(User, user_id)
     if user is None:
         raise NotFoundError("user not found")
 
-    # Requester-side: tickets where user is creator or beneficiary
-    user_beneficiary_ids = select(Beneficiary.id).where(Beneficiary.user_id == user_id)
-    req_base = _visible_stmt(principal).where(
-        or_(Ticket.created_by_user_id == user_id, Ticket.beneficiary_id.in_(user_beneficiary_ids))
+    # ── Operator-side KPIs (one query) ─────────────────────────────────────
+    op_base = _visible_stmt(principal).with_only_columns(Ticket.id).where(
+        or_(Ticket.assignee_user_id == user_id, Ticket.created_by_user_id == user_id),
+    ).subquery()
+    # We re-query the underlying ticket rows to evaluate the SUM(CASE)s.
+    op_stmt = (
+        select(
+            func.sum(case((
+                (Ticket.assignee_user_id == user_id) & Ticket.status.in_(ACTIVE_STATUSES), 1
+            ), else_=0)),
+            func.sum(case((
+                (Ticket.assignee_user_id == user_id) & Ticket.status.in_(DONE_STATUSES), 1
+            ), else_=0)),
+            func.sum(case((
+                (Ticket.created_by_user_id == user_id) & Ticket.status.in_(ACTIVE_STATUSES), 1
+            ), else_=0)),
+            func.sum(case((
+                (Ticket.created_by_user_id == user_id) & (Ticket.status == "closed"), 1
+            ), else_=0)),
+            func.sum(case((
+                (
+                    (Ticket.assignee_user_id == user_id)
+                    | (Ticket.created_by_user_id == user_id)
+                )
+                & (Ticket.reopened_count > 0),
+                1,
+            ), else_=0)),
+        )
+        .where(Ticket.id.in_(select(op_base.c.id)))
     )
+    op_row = db.execute(op_stmt).one()
+
+    # ── Requester-side KPIs (one query) ────────────────────────────────────
+    user_beneficiary_ids = select(Beneficiary.id).where(Beneficiary.user_id == user_id)
+    req_base_stmt = _visible_stmt(principal).with_only_columns(Ticket.id).where(
+        or_(Ticket.created_by_user_id == user_id, Ticket.beneficiary_id.in_(user_beneficiary_ids))
+    ).subquery()
+    req_stmt = (
+        select(
+            func.sum(case((Ticket.status.in_(ACTIVE_STATUSES), 1), else_=0)),
+            func.sum(case((Ticket.status == "closed", 1), else_=0)),
+            func.sum(case((Ticket.status == "done", 1), else_=0)),
+            func.sum(case((Ticket.reopened_count > 0, 1), else_=0)),
+        )
+        .where(Ticket.id.in_(select(req_base_stmt.c.id)))
+    )
+    req_row = db.execute(req_stmt).one()
 
     return {
         "user_id": user_id,
         "username": user.username,
         "email": user.email,
         "kpis": {
-            "assigned_active": _count(db, _visible_stmt(principal).where(Ticket.assignee_user_id == user_id, Ticket.status.in_(ACTIVE_STATUSES))),
-            "assigned_done": _count(db, _visible_stmt(principal).where(Ticket.assignee_user_id == user_id, Ticket.status.in_(DONE_STATUSES))),
-            "created_active": _count(db, _visible_stmt(principal).where(Ticket.created_by_user_id == user_id, Ticket.status.in_(ACTIVE_STATUSES))),
-            "created_closed": _count(db, _visible_stmt(principal).where(Ticket.created_by_user_id == user_id, Ticket.status == "closed")),
-            "reopened": _count(db, _visible_stmt(principal).where(
-                or_(Ticket.assignee_user_id == user_id, Ticket.created_by_user_id == user_id),
-                Ticket.reopened_count > 0,
-            )),
+            "assigned_active": int(op_row[0] or 0),
+            "assigned_done":   int(op_row[1] or 0),
+            "created_active":  int(op_row[2] or 0),
+            "created_closed":  int(op_row[3] or 0),
+            "reopened":        int(op_row[4] or 0),
         },
         "beneficiary_kpis": {
-            "active": _count(db, req_base.where(Ticket.status.in_(ACTIVE_STATUSES))),
-            "closed": _count(db, req_base.where(Ticket.status == "closed")),
-            "waiting_confirmation": _count(db, req_base.where(Ticket.status == "done")),
-            "reopened": _count(db, req_base.where(Ticket.reopened_count > 0)),
+            "active":               int(req_row[0] or 0),
+            "closed":               int(req_row[1] or 0),
+            "waiting_confirmation": int(req_row[2] or 0),
+            "reopened":             int(req_row[3] or 0),
         },
         "by_status": _breakdown_visible(db, principal, Ticket.status, user_id=user_id),
         "beneficiary_by_status": _breakdown_visible(db, principal, Ticket.status, requester_user_id=user_id),

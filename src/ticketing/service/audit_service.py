@@ -1,7 +1,6 @@
 """Audit ledger — single entry point for writing immutable audit events."""
 from typing import Any
 
-from flask import request as flask_request
 from sqlalchemy import asc, desc, select
 from sqlalchemy.orm import Session
 
@@ -13,12 +12,10 @@ from src.ticketing.models import AuditEvent
 
 
 def _request_metadata() -> tuple[str | None, str | None]:
-    try:
-        ip = flask_request.headers.get("X-Forwarded-For", flask_request.remote_addr) or None
-        ua = flask_request.headers.get("User-Agent")
-        return ip, ua
-    except Exception:
-        return None, None
+    # Delegate to the shared helper so X-Forwarded-For trust is consistent
+    # everywhere (audit + ticket creation). See `src/core/request_metadata`.
+    from src.core.request_metadata import request_metadata
+    return request_metadata()
 
 
 def record(

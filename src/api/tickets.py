@@ -2,6 +2,8 @@
 from flask import request as flask_request
 from pydantic import ValidationError as PydValidationError
 
+from src.config import Config
+from src.core import rate_limiter
 from src.core.db import get_db
 from src.core.errors import ValidationError
 from src.iam.decorators import require_authenticated
@@ -22,6 +24,16 @@ def _qs() -> dict:
 
 @require_authenticated
 def create(app, operation, request, *, principal: Principal, **kwargs):
+    # Throttle ticket creation to keep noisy clients (and abusive externals)
+    # from drowning the triage queue. Authenticated users are bucketed by
+    # their stable `user_id`; the limiter is fail-open if Redis is down so
+    # that a Redis blackout never converts into a write outage.
+    rate_limiter.check(
+        bucket="ticket_create",
+        identity=principal.user_id or "anon",
+        limit=Config.RATE_LIMIT_TICKET_CREATE_PER_MIN,
+        window_s=60,
+    )
     raw = _payload()
     raw.setdefault(
         "beneficiary_type",

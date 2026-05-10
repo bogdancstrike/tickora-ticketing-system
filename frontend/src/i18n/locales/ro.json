@@ -1,0 +1,126 @@
+{
+  "common": {
+    "loading": "Se încarcă…",
+    "save": "Salvează",
+    "cancel": "Anulează",
+    "create": "Creează",
+    "edit": "Editează",
+    "delete": "Șterge",
+    "confirm": "Confirmă",
+    "search": "Caută",
+    "clear_filters": "Resetează filtrele",
+    "refresh": "Reîmprospătează",
+    "yes": "Da",
+    "no": "Nu",
+    "unassigned": "Neasignat",
+    "back": "Înapoi"
+  },
+  "nav": {
+    "dashboard": "Tablou de bord",
+    "tickets": "Tichete",
+    "monitor": "Monitorizare",
+    "review": "Triere",
+    "admin": "Administrare",
+    "profile": "Profil",
+    "audit": "Audit",
+    "create_ticket": "Tichet nou"
+  },
+  "language": {
+    "label": "Limbă",
+    "en": "English",
+    "ro": "Română"
+  },
+  "tickets": {
+    "title": "Tichete",
+    "subtitle": "Coadă operațională cu acțiuni de flux",
+    "create": "Tichet nou",
+    "search_placeholder": "Caută în titlu, conținut sau cod",
+    "total_suffix": "tichete",
+    "total_count": "Total {{count}} tichete",
+    "empty": "Niciun tichet nu corespunde filtrelor curente",
+    "columns": {
+      "code": "Cod",
+      "title": "Titlu",
+      "status": "Stare",
+      "priority": "Prioritate",
+      "sector": "Sector",
+      "assignee": "Responsabil",
+      "created": "Creat",
+      "updated": "Actualizat"
+    }
+  },
+  "review": {
+    "title": "Triere tichete",
+    "pending_queue": "În așteptarea trierii",
+    "reviewed_queue": "Direcționate",
+    "open": "Deschide",
+    "empty_pending": "Nu există tichete care așteaptă triere.",
+    "empty_reviewed": "Niciun tichet nu a fost direcționat încă."
+  },
+  "admin": {
+    "title": "Administrare",
+    "tabs": {
+      "users": "Utilizatori & roluri",
+      "sectors": "Sectoare & grupuri",
+      "config": "Configurări",
+      "system": "Sistem"
+    },
+    "kpis": {
+      "active_sessions": "Sesiuni active",
+      "total_users": "Utilizatori (total)",
+      "enabled_users": "Utilizatori activi",
+      "active_tickets": "Tichete active",
+      "sla_breached": "SLA depășit",
+      "new_today": "Tichete noi azi"
+    }
+  },
+  "monitor": {
+    "title": "Monitorizare",
+    "tabs": {
+      "global": "Global · toate sectoarele",
+      "distribution": "Distribuție",
+      "sector": "Sector",
+      "personal": "Utilizator · {{name}}"
+    },
+    "charts": {
+      "status": "Stare",
+      "priority": "Prioritate",
+      "categories": "Categorii",
+      "by_sector": "Total tichete pe sector",
+      "bottleneck": "Analiză blocaje",
+      "stale_tickets": "Tichete blocate",
+      "oldest_active": "Cele mai vechi active",
+      "workload_chart": "Grafic încărcare",
+      "workload_details": "Detalii încărcare"
+    }
+  },
+  "tour": {
+    "buttons": {
+      "next": "Următorul",
+      "back": "Înapoi",
+      "skip": "Sari peste",
+      "last": "Am înțeles",
+      "close": "Închide"
+    },
+    "tickets": {
+      "search": "Caută după cod, titlu sau conținut. Filtrele și sortarea se aplică suplimentar.",
+      "filters": "Filtrează după stare, prioritate sau sector. Vizibilitatea e impusă pe server — vezi doar tichetele permise.",
+      "create": "Creează un tichet nou. Utilizatorii interni au beneficiar intern; cei externi completează formularul de solicitant."
+    },
+    "monitor": {
+      "tabs": "Comută între vizualizările global, distribuție, sector și personal. Fiecare e o secțiune diferită a acelorași date.",
+      "cache": "Agregările sunt memorate 60 de secunde — a doua vizită e instant."
+    },
+    "admin": {
+      "kpis": "Sesiuni active arată utilizatorii autentificați acum (fereastră de prezență de 5 minute).",
+      "tabs": "Gestionează utilizatori, sectoare, configurare și sănătatea sistemului din taburile de mai jos."
+    },
+    "language": "Comută între engleză și română de aici. Alegerea ta e reținută."
+  },
+  "errors": {
+    "generic": "Ceva nu a mers bine.",
+    "rate_limited": "Prea multe solicitări, te rog mai încet.",
+    "permission_denied": "Nu ai permisiunea pentru această acțiune.",
+    "not_found": "Nu a fost găsit."
+  }
+}

@@ -25,6 +25,8 @@ import { ProfilePage } from '@/pages/ProfilePage'
 import { AdminPage } from '@/pages/AdminPage'
 import { RequireRole } from '@/auth/RequireRole'
 import { NotificationDropdown } from '@/components/common/NotificationDropdown'
+import { LanguageSwitcher } from '@/components/common/LanguageSwitcher'
+import { useTranslation } from 'react-i18next'
 import { getMe } from '@/api/tickets'
 
 const { Header, Sider, Content } = Layout
@@ -38,32 +40,37 @@ const ROLE_ADMIN = 'tickora_admin'
 const ROLE_AUDITOR = 'tickora_auditor'
 const ROLE_DISTRIBUTOR = 'tickora_distributor'
 
+/**
+ * `labelKey` references a translation in `frontend/src/i18n/locales/*.json`.
+ * Resolved via the `t` callback in `useNavigationItems` so the menu
+ * re-renders when the user toggles the language.
+ */
 const NAV_ITEMS = [
   // Ticketing section
-  { key: '/tickets', label: 'Tickets', icon: <UnorderedListOutlined />, section: 'ticketing' },
+  { key: '/tickets', labelKey: 'nav.tickets', icon: <UnorderedListOutlined />, section: 'ticketing' },
   {
     key: '/review',
-    label: 'Review Tickets',
+    labelKey: 'nav.review',
     icon: <CheckSquareOutlined />,
     roles: [ROLE_ADMIN, ROLE_DISTRIBUTOR],
     section: 'ticketing',
   },
-  
+
   // Monitoring section
-  { key: '/monitor', label: 'Monitor', icon: <LineChartOutlined />, section: 'monitoring' },
-  { key: '/dashboard', label: 'Dashboard', icon: <AppstoreOutlined />, section: 'monitoring' },
+  { key: '/monitor', labelKey: 'nav.monitor', icon: <LineChartOutlined />, section: 'monitoring' },
+  { key: '/dashboard', labelKey: 'nav.dashboard', icon: <AppstoreOutlined />, section: 'monitoring' },
 
   // Administration section
   {
     key: '/audit',
-    label: 'Audit',
+    labelKey: 'nav.audit',
     icon: <AuditOutlined />,
     roles: [ROLE_ADMIN, ROLE_AUDITOR],
     section: 'admin',
   },
   {
     key: '/admin',
-    label: 'Admin',
+    labelKey: 'nav.admin',
     icon: <SettingOutlined />,
     rootOnly: true,
     section: 'admin',
@@ -73,7 +80,8 @@ const NAV_ITEMS = [
 function useNavigationItems() {
   const hasAny = useSessionStore((s) => s.hasAny)
   const user = useSessionStore((s) => s.user)
-  
+  const { t, i18n } = useTranslation()
+
   const visibleItems = useMemo(() => {
     return NAV_ITEMS.filter((item) => {
       if ('rootOnly' in item && item.rootOnly) return !!user?.hasRootGroup
@@ -86,28 +94,34 @@ function useNavigationItems() {
   }, [user, hasAny])
 
   const menuItems = useMemo(() => {
+    const toMenuEntry = ({ section: _s, roles: _r, rootOnly: _ro, labelKey, ...rest }: any) => ({
+      ...rest,
+      label: t(labelKey),
+    })
     const ticketing = visibleItems.filter(i => i.section === 'ticketing')
     const monitoring = visibleItems.filter(i => i.section === 'monitoring')
     const admin = visibleItems.filter(i => i.section === 'admin')
-    
+
     const items: any[] = []
     if (ticketing.length) {
-      items.push(...ticketing.map(({ section: _, roles: __, rootOnly: ___, ...rest }) => rest))
+      items.push(...ticketing.map(toMenuEntry))
     }
     if (ticketing.length && (monitoring.length || admin.length)) {
       items.push({ type: 'divider', key: 'div-1' })
     }
     if (monitoring.length) {
-      items.push(...monitoring.map(({ section: _, roles: __, rootOnly: ___, ...rest }) => rest))
+      items.push(...monitoring.map(toMenuEntry))
     }
     if (monitoring.length && admin.length) {
       items.push({ type: 'divider', key: 'div-2' })
     }
     if (admin.length) {
-      items.push(...admin.map(({ section: _, roles: __, rootOnly: ___, ...rest }) => rest))
+      items.push(...admin.map(toMenuEntry))
     }
     return items
-  }, [visibleItems])
+    // `i18n.language` is in the dep list so the menu rebuilds on locale switch.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visibleItems, t, i18n.language])
 
   return { visibleItems, menuItems }
 }
@@ -226,6 +240,7 @@ function AppHeader() {
 
       <Space>
         <NotificationDropdown />
+        <LanguageSwitcher />
         <Tooltip title={`Switch to ${mode === 'dark' ? 'light' : 'dark'} mode`}>
           <Button type="text" icon={<BgColorsOutlined />} onClick={toggle} />
         </Tooltip>

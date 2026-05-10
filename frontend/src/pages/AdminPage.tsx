@@ -1,5 +1,7 @@
 import { useMemo, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { ProductTour } from '@/components/common/ProductTour'
 import ReactECharts from 'echarts-for-react'
 import {
   Alert, Button, Col, Empty, Flex, Form, Input, List, Modal, Row, Select, Space,
@@ -546,6 +548,7 @@ function SystemTab() {
 }
 
 export function AdminPage() {
+  const { t } = useTranslation()
   const overview = useQuery({
     queryKey: ['adminOverview'],
     queryFn: getAdminOverview,
@@ -561,31 +564,40 @@ export function AdminPage() {
   // the new `active_sessions` (users currently signed in, presence-tracked).
   const kpis = overview.data?.kpis || {}
   const headlineKpis: Array<[string, number | null | undefined]> = [
-    ['Active sessions', kpis.active_sessions],
-    ['Total users', kpis.users],
-    ['Enabled users', kpis.active_users],
-    ['Active tickets', kpis.active_tickets],
-    ['SLA breached', kpis.sla_breached],
-    ['New today', kpis.new_today],
+    [t('admin.kpis.active_sessions'), kpis.active_sessions],
+    [t('admin.kpis.total_users'),     kpis.users],
+    [t('admin.kpis.enabled_users'),   kpis.active_users],
+    [t('admin.kpis.active_tickets'),  kpis.active_tickets],
+    [t('admin.kpis.sla_breached'),    kpis.sla_breached],
+    [t('admin.kpis.new_today'),       kpis.new_today],
   ]
 
   return (
     <div style={{ padding: 24 }}>
-      <Typography.Title level={2}>Administration</Typography.Title>
-      <Row gutter={[12, 12]} style={{ marginBottom: 16 }}>
+      <Typography.Title level={2}>{t('admin.title')}</Typography.Title>
+      <Row gutter={[12, 12]} style={{ marginBottom: 16 }} data-tour-id="admin-kpis">
         {headlineKpis.map(([label, value]) => (
           <Col key={label} xs={12} md={4}>
             <KpiTile label={label} value={value ?? '-'} />
           </Col>
         ))}
       </Row>
-      <Tabs
-        defaultActiveKey="users"
-        items={[
-          { key: 'users', label: <Space><TeamOutlined />Users & roles</Space>, children: <UsersTab /> },
-          { key: 'sectors', label: <Space><ApartmentOutlined />Sectors & groups</Space>, children: <SectorsTab /> },
-          { key: 'config', label: <Space><DatabaseOutlined />Configuration</Space>, children: <ConfigTab /> },
-          { key: 'system', label: <Space><SafetyCertificateOutlined />System</Space>, children: <SystemTab /> },
+      <div data-tour-id="admin-tabs">
+        <Tabs
+          defaultActiveKey="users"
+          items={[
+            { key: 'users', label: <Space><TeamOutlined />Users & roles</Space>, children: <UsersTab /> },
+            { key: 'sectors', label: <Space><ApartmentOutlined />Sectors & groups</Space>, children: <SectorsTab /> },
+            { key: 'config', label: <Space><DatabaseOutlined />Configuration</Space>, children: <ConfigTab /> },
+            { key: 'system', label: <Space><SafetyCertificateOutlined />System</Space>, children: <SystemTab /> },
+          ]}
+        />
+      </div>
+      <ProductTour
+        pageKey="admin"
+        steps={[
+          { target: '[data-tour-id="admin-kpis"]', content: t('tour.admin.kpis'), disableBeacon: true },
+          { target: '[data-tour-id="admin-tabs"]', content: t('tour.admin.tabs') },
         ]}
       />
     </div>

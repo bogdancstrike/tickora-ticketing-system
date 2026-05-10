@@ -207,8 +207,15 @@ Legend: `[x]` done · `[~]` partial · `[ ]` pending
 ## Phase 10 - Internalization and Wrapping Up
 
 - [x] add useful indices on often used columns from tables and generate seed.sql in scripts/ to create (with indices) tables and populate the DB
-- [ ] add useful React Joyride info points that explain all functionalities of the module
-- [ ] i18n (en + ro)
+- [x] React Joyride product tour — `frontend/src/components/common/ProductTour.tsx`
+      mounts on Tickets, Monitor, Admin pages. localStorage flag per page
+      so the tour shows once; `showTour(pageKey)` re-triggers on demand.
+      Strings live in the i18n catalogues (`tour.*`).
+- [x] i18n (en + ro) — `frontend/src/i18n/` with `react-i18next`,
+      browser-language detection, `localStorage:tickora.lang` persistence,
+      en + ro JSON catalogues, `<LanguageSwitcher />` in the app header.
+      Initial coverage: navigation menu, Admin KPI strip, common buttons,
+      tour copy. Page-specific labels migrate as pages are touched.
 - [ ] write very comprehensive technical documentation in docs/technical_documentation.md with examples, mermaid charts, etc.
 - [ ] write very comprehensive user documentation in docs/user_documentation.md with examples, use-cases, etc.
 
@@ -216,32 +223,108 @@ Legend: `[x]` done · `[~]` partial · `[ ]` pending
 
 Frontend (verified by grepping `import` lines under `frontend/src/`):
 
-- [ ] `recharts` — declared in `package.json` but never imported. Charts use
-      `echarts-for-react`. Safe to drop after a fresh `npm install` + build.
-- [ ] `@ant-design/plots` — declared but never imported. Same as above.
+- [x] `recharts` — dropped from `package.json` (2026-05-10). Run
+      `npm install` to refresh the lockfile.
+- [x] `@ant-design/plots` — dropped from `package.json` (2026-05-10).
 
 Backend (verified by grepping `import` under `src/`):
 
-- [ ] `colorama` and `httpx` in `requirements.txt` — neither is imported in
-      `src/`. Confirm scripts/tests don't pull them transitively before
-      removal.
+- [x] `colorama` and `httpx` removed from `requirements.txt` (2026-05-10).
 
 ORM / DB:
 
-- [ ] `DashboardShare` model + table — orphan. Either implement sharing
-      end-to-end (`dashboard_service`, an HTTP endpoint, RBAC gate) or drop
-      the model + add a downgrade migration. See `SECURITY_REVIEW.md` §D.
-- [ ] Materialized views `mv_dashboard_global_kpis` /
-      `mv_dashboard_sector_kpis` — defined in `0003_dashboard_mvs` but no
-      runtime code reads them now that monitor uses live aggregates. Drop
-      in a follow-up migration.
+- [x] `DashboardShare` model + table — dropped (model + migration
+      `c4d8a72e1f5b_drop_orphan_tables`).
+- [x] Materialized views `mv_dashboard_global_kpis` /
+      `mv_dashboard_sector_kpis` — dropped in
+      `c4d8a72e1f5b_drop_orphan_tables`. The matching `refresh_dashboard_mvs`
+      task handler and `sla_checker.py` publish call were removed.
 
-## Open refactor backlog (2026-05-09)
+## Continued work tracker (2026-05-10)
 
-The following are surfaced as user requests but not yet executed in this
-branch — they are large, cross-cutting refactors and should be sequenced
-carefully:
+Working through what's still open in priority order. Each item gets a
+status flag here so the next session can pick up cleanly.
 
+### Small, high-value
+- [x] Cap `auto_configure_dashboard` watcher count server-side — hard cap
+      `_AUTO_CONFIGURE_WATCHER_HARD_CAP = 50` enforced inside the function
+      regardless of `autopilot_max_ticket_watchers`.
+- [x] Gate `WidgetDefinition.required_roles` in `upsert_widget` — admins
+      and auditors bypass; missing catalogue rows pass through; principals
+      lacking required roles get `PermissionDeniedError`. 7 unit tests.
+- [x] Decide on `is_public` on `custom_dashboards` — column dropped in
+      `d5e9b1207f08_drop_is_public_dashboards`. Service no longer reads
+      or writes the flag; serializer no longer surfaces it.
+
+### Hardening (SECURITY_REVIEW §E)
+- [x] Rate-limit `POST /api/tickets`
+      (`RATE_LIMIT_TICKET_CREATE_PER_MIN`, default 20/min).
+- [x] Rate-limit `POST /api/tickets/<id>/review`
+      (`RATE_LIMIT_TICKET_REVIEW_PER_MIN`, default 60/min).
+      Both use the new `src/core/rate_limiter` Redis sliding-window
+      limiter (fail-open on Redis outage).
+- [x] Trust `X-Forwarded-For` only behind known proxies — new
+      `src/core/request_metadata` helper honours XFF only when the peer
+      is in `Config.TRUSTED_PROXIES` (IP or CIDR). Both `audit_service`
+      and `ticket_service` route through it. 9 unit tests cover the
+      forging, CIDR, fallback, and missing-context paths.
+- [ ] CORS lockdown for prod — env-only change, not a code task.
+- [ ] Move `SUPER_ADMIN_SUBJECTS` to a Keycloak group lookup.
+- [ ] Soft-delete audit policy (who can read history after hide).
+- [ ] Replace email-based external requester identity with a pinned token.
+
+### Phase 9 testing
+- [x] Role-matrix RBAC test (`tests/unit/test_role_matrix.py`) — 104
+      parameterised cases over the 8 seeded personas × the major
+      capabilities (`view`, `post_public_comment`, `post_private_comment`,
+      `drive_status`, `mark_done`, `close`, `reopen`, `assign_sector`,
+      `assign_to_user`, `administer`, `view_global_audit`). Locks in the
+      self-assignment policy and prevents silent drift.
+- [x] HTTP-level role-matrix integration test
+      (`tests/integration/test_http_role_matrix.py`, 40 cases) — Flask
+      request context + monkey-patched principal + patched `get_db` per
+      handler. Covers admin overview, list users, ticket create/list, and
+      the review endpoint across every persona.
+- [x] Comment service integration coverage
+      (`tests/integration/test_comment_service.py`, 18 cases) —
+      validation, RBAC under self-assignment policy, visibility filtering,
+      edit-window enforcement.
+- [x] Attachment service integration coverage
+      (`tests/integration/test_attachment_service.py`, 11 cases) —
+      validation, presign + register handshake, visibility filtering,
+      foreign-storage-key rejection. Object storage mocked at the
+      module boundary.
+- [x] SLA service integration coverage
+      (`tests/integration/test_sla_service.py`, 14 cases) — policy
+      matching, terminal-status skip, status assignment, bulk breach scan.
+- [x] Dashboard service integration coverage
+      (`tests/integration/test_dashboard_service_rbac.py`, 11 cases) —
+      owner-only access, widget config validation against foreign sectors
+      and invisible tickets, required-roles gate, watcher hard cap.
+- [x] Acceptance tests beyond workflow
+      (`features/comments_and_review.feature` + step defs in
+      `tests/integration/test_comments_and_review_acceptance.py`, 4
+      scenarios) — self-assignment policy, distributor route, visibility.
+- [x] k6 performance scripts (`tests/perf/*.js`) — `tickets_list`,
+      `monitor_overview`, `admin_overview`, `ticket_create` against the
+      30M seed.
+- [x] Chaos test scaffold (`tests/integration/test_chaos_resilience.py`,
+      8 cases) — Redis blackout / errors, Keycloak cache path, Postgres
+      reconnect via `pool_pre_ping`, compound outage doesn't cascade.
+- [x] Playwright E2E smoke (`tests/e2e/`) — auth setup + golden paths for
+      tickets, ticket detail, admin overview, monitor (no hooks-order
+      regression). Run after `npm install` in `tests/e2e/`.
+- [ ] Comment / attachment / SLA service-level integration **execution**
+      requires `make` integration target with testcontainers.
+- [ ] Production-grade chaos drills (real Postgres restart, Kafka kill)
+      remain a staging exercise.
+- [ ] Comment / attachment / SLA service-level integration tests.
+- [ ] Acceptance tests beyond workflow.
+- [ ] E2E (Playwright) smoke for the golden paths.
+- [ ] k6 perf + load tests against the 30M seed.
+- [ ] Chaos tests (Postgres restart, Redis blackout, Keycloak unreachable).
+
+### Big refactors (deferred — multi-day each)
 - [ ] Extract `src/audit/` as its own backend module (audit service, events,
       and api/audit endpoints currently live under `src/ticketing/`).
 - [ ] Extract `src/common/` for utilities shared between modules
@@ -249,8 +332,9 @@ carefully:
 - [ ] Refactor `src/tasking/` to own task lifecycle + status persistence so
       every async job has a queryable DB row. Currently `tasking/` only owns
       Kafka producer/consumer plumbing.
-- [ ] Sweep dead code and unused dependencies on both backend and frontend
-      (e.g. orphaned `DashboardShare` model, unused materialized views).
+
+## Original refactor backlog (2026-05-09)
+
 - [ ] Decide on `dashboard_shares` and `is_public` flag — implement sharing
       end-to-end or drop the unused surface (see `SECURITY_REVIEW.md` Section D).
 

@@ -835,4 +835,3 @@ def _today_start() -> datetime:
 
 def _dt(value) -> str | None:
     return value.isoformat() if value else None
-value.isoformat() if value else None

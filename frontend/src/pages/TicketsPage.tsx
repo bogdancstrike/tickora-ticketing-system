@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { ProductTour } from '@/components/common/ProductTour'
 import {
   Alert, Button, Card, Checkbox, Col, Descriptions, Empty, Flex, Form, Input, Modal, Row, Select,
   Space, Table, Tag, Typography, message, theme as antTheme, Upload, Statistic, Spin,
@@ -793,6 +795,7 @@ export function TicketDetailPage() {
  */
 export function TicketsPage() {
   const navigate = useNavigate()
+  const { t } = useTranslation()
   const { token } = antTheme.useToken()
   const [msg, holder] = message.useMessage()
   const [status, setStatus] = useState<string | undefined>()
@@ -947,14 +950,16 @@ export function TicketsPage() {
         </div>
         <Space wrap>
           <Statistic value={tickets.data?.total || 0} suffix="tickets" styles={{ content: { fontSize: 18 } }} style={{ marginRight: 16 }} />
-          <Button type="primary" icon={<PlusOutlined />} onClick={() => navigate('/create')}>
+          <Button type="primary" icon={<PlusOutlined />} onClick={() => navigate('/create')} data-tour-id="tickets-create">
             Create Ticket
           </Button>
-          <Input.Search allowClear placeholder="Search title, body or code"
-                  value={search} onChange={(e) => setSearch(e.target.value)}
-                  onSearch={setSearch} style={{ width: 280 }} />
+          <span data-tour-id="tickets-search">
+            <Input.Search allowClear placeholder="Search title, body or code"
+                    value={search} onChange={(e) => setSearch(e.target.value)}
+                    onSearch={setSearch} style={{ width: 280 }} />
+          </span>
           {(status || priority || sector) && (
-            <Button onClick={() => { setStatus(undefined); setPriority(undefined); setSector(undefined) }}>
+            <Button data-tour-id="tickets-filters" onClick={() => { setStatus(undefined); setPriority(undefined); setSector(undefined) }}>
               Clear filters
             </Button>
           )}
@@ -1019,6 +1024,20 @@ export function TicketsPage() {
           ))}
         </div>
       </Modal>
+      <ProductTour
+        pageKey="tickets"
+        steps={[
+          {
+            target: '[data-tour-id="tickets-search"]',
+            content: t('tour.tickets.search'),
+            disableBeacon: true,
+          },
+          {
+            target: '[data-tour-id="tickets-create"]',
+            content: t('tour.tickets.create'),
+          },
+        ]}
+      />
     </div>
   )
 }

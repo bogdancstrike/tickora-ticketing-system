@@ -80,8 +80,20 @@ class Config:
     OTLP_ENDPOINT  = os.getenv("OTLP_ENDPOINT", "http://localhost:4317")
 
     # ── Rate limiting (Redis-backed) ───────────────────────────────────────
-    RATE_LIMIT_COMMENTS_PER_MIN    = int(os.getenv("RATE_LIMIT_COMMENTS_PER_MIN", "30"))
-    RATE_LIMIT_ATTACHMENTS_PER_MIN = int(os.getenv("RATE_LIMIT_ATTACHMENTS_PER_MIN", "10"))
+    RATE_LIMIT_COMMENTS_PER_MIN       = int(os.getenv("RATE_LIMIT_COMMENTS_PER_MIN",       "30"))
+    RATE_LIMIT_ATTACHMENTS_PER_MIN    = int(os.getenv("RATE_LIMIT_ATTACHMENTS_PER_MIN",    "10"))
+    RATE_LIMIT_TICKET_CREATE_PER_MIN  = int(os.getenv("RATE_LIMIT_TICKET_CREATE_PER_MIN",  "20"))
+    RATE_LIMIT_TICKET_REVIEW_PER_MIN  = int(os.getenv("RATE_LIMIT_TICKET_REVIEW_PER_MIN",  "60"))
+
+    # ── Trusted proxies ────────────────────────────────────────────────────
+    # Comma-separated list of proxy IPs (or CIDR blocks) whose
+    # `X-Forwarded-For` header we trust. When the request arrives directly
+    # from a non-listed peer, we ignore the header and fall back to
+    # `remote_addr`. Default: empty (no proxies trusted) — set this in prod
+    # to your ingress / reverse-proxy IPs.
+    TRUSTED_PROXIES = tuple(
+        p.strip() for p in os.getenv("TRUSTED_PROXIES", "").split(",") if p.strip()
+    )
 
     # ── Super-admin guardrail ──────────────────────────────────────────────
     # Subjects (Keycloak `sub`) listed here bypass everything; sensitive ops

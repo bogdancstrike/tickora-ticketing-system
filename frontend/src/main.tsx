@@ -5,6 +5,7 @@ import { keycloak, initOptions } from './auth/keycloak'
 import { setTokenProvider } from './api/client'
 import { useSessionStore } from './stores/sessionStore'
 import { TickoraApp } from './TickoraApp'
+import './i18n'  // Side-effect import: bootstraps i18next before any render.
 import './index.css'
 
 setTokenProvider(() => keycloak.token)

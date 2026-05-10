@@ -2,6 +2,8 @@
 from flask import request as flask_request
 from pydantic import BaseModel, ConfigDict, Field, ValidationError as PydValidationError
 
+from src.config import Config
+from src.core import rate_limiter
 from src.core.db import get_db
 from src.core.errors import ValidationError
 from src.iam.decorators import require_authenticated
@@ -36,6 +38,15 @@ def _ticket_id(kwargs: dict) -> str:
 
 @require_authenticated
 def review_ticket(app, operation, request, *, principal: Principal, **kwargs):
+    # Distributors do this constantly during peak triage, so the limit is
+    # generous; the goal here is to defend against runaway scripts, not slow
+    # down a real reviewer.
+    rate_limiter.check(
+        bucket="ticket_review",
+        identity=principal.user_id or "anon",
+        limit=Config.RATE_LIMIT_TICKET_REVIEW_PER_MIN,
+        window_s=60,
+    )
     try:
         body = _ReviewTicketIn(**_payload())
     except PydValidationError as e:

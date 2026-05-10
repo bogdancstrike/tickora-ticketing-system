@@ -99,3 +99,55 @@ class TestValidateWidgetConfig:
             dashboard_service._validate_widget_config(p, MagicMock(), {"ticketId": "t-x"})
         assert called["args"][1] == "u-self"
         assert called["args"][2] == "t-x"
+
+
+class TestCheckWidgetRequiredRoles:
+    """Gate widget writes by `widget_definitions.required_roles`."""
+
+    def _db_with_widget(self, *, required_roles):
+        wd = MagicMock()
+        wd.required_roles = required_roles
+        db = MagicMock()
+        db.get.return_value = wd
+        return db
+
+    def test_admin_bypasses_required_roles(self):
+        db = self._db_with_widget(required_roles=["tickora_distributor"])
+        p = _principal(roles=(ROLE_ADMIN,))
+        # Must not raise.
+        dashboard_service._check_widget_required_roles(db, p, "audit_stream")
+
+    def test_auditor_bypasses_required_roles(self):
+        db = self._db_with_widget(required_roles=["tickora_distributor"])
+        p = _principal(roles=(ROLE_AUDITOR,))
+        dashboard_service._check_widget_required_roles(db, p, "audit_stream")
+
+    def test_unknown_widget_passes_through(self):
+        db = MagicMock()
+        db.get.return_value = None
+        p = _principal()
+        # No catalogue row → don't reject; the rest of the system handles it.
+        dashboard_service._check_widget_required_roles(db, p, "novel_type")
+
+    def test_empty_required_roles_passes(self):
+        db = self._db_with_widget(required_roles=[])
+        p = _principal()
+        dashboard_service._check_widget_required_roles(db, p, "monitor_kpi")
+
+    def test_null_required_roles_passes(self):
+        db = self._db_with_widget(required_roles=None)
+        p = _principal()
+        dashboard_service._check_widget_required_roles(db, p, "monitor_kpi")
+
+    def test_principal_with_required_role_passes(self):
+        from src.iam.principal import ROLE_DISTRIBUTOR
+        db = self._db_with_widget(required_roles=[ROLE_DISTRIBUTOR])
+        p = _principal(roles=(ROLE_DISTRIBUTOR,))
+        dashboard_service._check_widget_required_roles(db, p, "audit_stream")
+
+    def test_principal_missing_required_role_rejected(self):
+        from src.iam.principal import ROLE_DISTRIBUTOR
+        db = self._db_with_widget(required_roles=[ROLE_DISTRIBUTOR])
+        p = _principal(roles=())
+        with pytest.raises(PermissionDeniedError):
+            dashboard_service._check_widget_required_roles(db, p, "audit_stream")
