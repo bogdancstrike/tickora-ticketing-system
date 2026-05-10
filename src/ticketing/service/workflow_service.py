@@ -15,7 +15,7 @@ from src.core.errors import (
     NotFoundError,
     PermissionDeniedError,
 )
-from src.core.spans import set_attr, span
+from src.common.spans import set_attr, span
 from src.iam import rbac
 from src.iam.principal import Principal
 from src.ticketing import events as audit_events

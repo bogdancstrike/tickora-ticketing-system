@@ -11,7 +11,7 @@ from flask import request as flask_request
 
 from src.core.correlation import set_user_id
 from src.core.errors import AuthenticationError, PermissionDeniedError, TickoraError
-from src.core.spans import set_attr, span
+from src.common.spans import set_attr, span
 from src.iam.principal import Principal
 from src.iam.service import principal_from_claims
 from src.iam.token_verifier import verify_token
@@ -51,7 +51,7 @@ def _build_principal() -> Principal:
         set_user_id(principal.user_id)
         # Presence ping — failure-tolerant, fire-and-forget.
         try:
-            from src.core.session_tracker import mark_active
+            from src.common.session_tracker import mark_active
             mark_active(principal.user_id)
         except Exception:
             pass

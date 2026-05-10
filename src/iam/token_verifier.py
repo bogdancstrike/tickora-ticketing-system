@@ -11,7 +11,7 @@ from jose.exceptions import JWTError
 from src.config import Config
 from src.core.errors import AuthenticationError
 from src.core.redis_client import get_redis
-from src.core.spans import set_attr, span
+from src.common.spans import set_attr, span
 from framework.commons.logger import logger as log
 
 

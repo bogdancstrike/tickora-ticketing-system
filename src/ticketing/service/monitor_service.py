@@ -13,7 +13,7 @@ from sqlalchemy import case, func, or_, select, cast as sa_cast, Text as sa_Text
 from sqlalchemy.orm import Session
 
 from src.core.errors import NotFoundError, PermissionDeniedError, ValidationError
-from src.core.spans import set_attr, span
+from src.common.spans import set_attr, span
 from src.iam import rbac
 from src.iam.principal import Principal
 from src.iam.models import User
@@ -65,7 +65,7 @@ def monitor_overview(db: Session, principal: Principal, *, days: int = 30) -> di
             set_attr(current, "monitor.sector_count", len(payload["sectors"]))
             return payload
 
-    from src.core.cache import cached_call
+    from src.common.cache import cached_call
     return cached_call(
         namespace="monitor.overview",
         key_parts=cache_parts,

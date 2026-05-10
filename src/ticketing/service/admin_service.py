@@ -90,7 +90,7 @@ def overview(db: Session, principal: Principal) -> dict[str, Any]:
     # Active sessions = users currently signed in (presence-tracked in Redis,
     # 5-minute window). Falls back to 0 when Redis is unreachable so the
     # overview doesn't break — Redis is a soft dependency for this widget.
-    from src.core.session_tracker import active_user_count
+    from src.common.session_tracker import active_user_count
     try:
         active_sessions = active_user_count()
     except Exception:

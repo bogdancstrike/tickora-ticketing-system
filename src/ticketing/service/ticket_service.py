@@ -7,8 +7,8 @@ from sqlalchemy.orm import Session
 
 from src.core.correlation import get_correlation_id, set_ticket_id
 from src.core.errors import NotFoundError, PermissionDeniedError, ValidationError
-from src.core.pagination import Cursor, clamp_limit
-from src.core.spans import set_attr, span
+from src.common.pagination import Cursor, clamp_limit
+from src.common.spans import set_attr, span
 from src.iam.principal import Principal
 from src.iam import rbac
 from src.iam.models import User
@@ -491,7 +491,7 @@ def _list(
 def _request_metadata() -> tuple[str | None, str | None]:
     # Single source of truth for "what's the client IP?" — trusted-proxy
     # aware so a direct caller cannot forge `X-Forwarded-For`.
-    from src.core.request_metadata import request_metadata
+    from src.common.request_metadata import request_metadata
     return request_metadata()
 
 

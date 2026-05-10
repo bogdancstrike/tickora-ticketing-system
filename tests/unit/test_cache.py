@@ -4,7 +4,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from src.core import cache
+from src.common import cache
 
 
 @pytest.fixture

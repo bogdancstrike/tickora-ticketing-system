@@ -3,7 +3,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from src.core import session_tracker
+from src.common import session_tracker
 
 
 @pytest.fixture

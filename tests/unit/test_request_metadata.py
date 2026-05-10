@@ -9,7 +9,7 @@ from unittest.mock import patch
 import pytest
 from flask import Flask
 
-from src.core import request_metadata
+from src.common import request_metadata
 
 
 @pytest.fixture

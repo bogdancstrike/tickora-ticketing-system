@@ -10,7 +10,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from src.core import rate_limiter
+from src.common import rate_limiter
 from src.core.errors import RateLimitError
 
 
