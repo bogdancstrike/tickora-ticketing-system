@@ -30,43 +30,75 @@ def _get_producer() -> KafkaProducer:
 
 
 def publish(task_name: str, payload: Dict[str, Any], topic: Optional[str] = None):
-    """Publish a task to Kafka."""
+    """Publish a task.
+
+    Two paths:
+      * **inline (DEV)** — run the handler in-process after the current DB
+        transaction commits. Mostly for local development; the lifecycle
+        row is still written so `tasks` looks identical regardless of mode.
+      * **kafka** — write the lifecycle row, then send the envelope. The
+        `task_id` travels in the envelope so the consumer can look up and
+        flip the same row.
+
+    The lifecycle row is best-effort: if it fails to insert we still
+    publish the message and the handler still runs. Operator visibility is
+    nice-to-have but the system must keep working when the DB is degraded.
+    """
     topic = topic or Config.KAFKA_TOPIC_FAST
-    
-    # Inject correlation ID for end-to-end tracing
+    correlation_id = get_correlation_id()
+
+    # Lifecycle: register a `pending` row, get back its id.
+    from src.tasking import lifecycle
+    task_id = lifecycle.create(
+        task_name=task_name, payload=payload,
+        correlation_id=correlation_id, topic=topic,
+    )
+
     envelope = {
         "task": task_name,
+        "task_id": task_id,
         "payload": payload,
-        "correlation_id": get_correlation_id(),
+        "correlation_id": correlation_id,
     }
 
     if Config.INLINE_TASKS_IN_DEV:
         def run_inline() -> None:
+            from src.tasking.registry import get_handler
             try:
                 _ensure_local_handlers_registered()
-                from src.tasking.registry import get_handler
-                logger.info("executing task inline", extra={"task_name": task_name})
+                lifecycle.mark_running(task_id)
+                logger.info("executing task inline", extra={
+                    "task_name": task_name, "task_id": task_id,
+                })
                 get_handler(task_name)(payload)
+                lifecycle.mark_completed(task_id)
             except Exception as exc:
-                logger.error("inline task failed", extra={"task_name": task_name, "error": str(exc)})
+                lifecycle.mark_failed(task_id, str(exc))
+                logger.error("inline task failed", extra={
+                    "task_name": task_name, "task_id": task_id, "error": str(exc),
+                })
 
         enqueue_after_commit(run_inline)
-        logger.debug("task queued for inline execution", extra={"task_name": task_name})
-        return
-    
+        logger.debug("task queued for inline execution", extra={"task_name": task_name, "task_id": task_id})
+        return task_id
+
     try:
         producer = _get_producer()
         future = producer.send(topic, envelope)
-        
+
         # In DEV_MODE we might want to wait for the message to be sent
         if Config.DEV_MODE:
             future.get(timeout=10)
-            
-        logger.debug("task published", extra={"task_name": task_name, "topic": topic})
+
+        logger.debug("task published", extra={"task_name": task_name, "task_id": task_id, "topic": topic})
+        return task_id
     except Exception as e:
-        logger.error("failed to publish task", extra={"task_name": task_name, "topic": topic, "error": str(e)})
-        # Depending on criticality, we might want to raise here
-        # or rely on recovery.py for retry logic if we persisted it.
+        # Couldn't ship the message — flip the row to failed so it doesn't
+        # sit at `pending` forever, then propagate.
+        lifecycle.mark_failed(task_id, f"publish_failed: {e}")
+        logger.error("failed to publish task", extra={
+            "task_name": task_name, "task_id": task_id, "topic": topic, "error": str(e),
+        })
         raise
 
 

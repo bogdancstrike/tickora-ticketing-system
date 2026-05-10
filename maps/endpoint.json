@@ -442,6 +442,22 @@
     },
     {
       "namespace": "tickora",
+      "operation_name": "tasks_list",
+      "model_name": "Empty",
+      "request_method": ["GET"],
+      "api_url": "/api/tasks",
+      "exec_method": { "module_name": "api.tasks", "method_name": "list_tasks" }
+    },
+    {
+      "namespace": "tickora",
+      "operation_name": "tasks_get",
+      "model_name": "Empty",
+      "request_method": ["GET"],
+      "api_url": "/api/tasks/<task_id>",
+      "exec_method": { "module_name": "api.tasks", "method_name": "get_task" }
+    },
+    {
+      "namespace": "tickora",
       "operation_name": "dashboards_list",
       "model_name": "Empty",
       "request_method": ["GET"],
