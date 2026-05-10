@@ -65,6 +65,18 @@ class Config:
     KAFKA_COMMIT_TICK_SEC         = float(os.getenv("KAFKA_COMMIT_TICK_SEC", "0.2"))
     KAFKA_MAX_JOBS_PER_TP_PER_TICK = int(os.getenv("KAFKA_MAX_JOBS_PER_TP_PER_TICK", "20"))
     INLINE_TASKS_IN_DEV            = _bool("INLINE_TASKS_IN_DEV", DEV_MODE)
+    # Comma-separated dotted module paths whose import side-effects
+    # register task handlers (via `@register_task` from
+    # `src.tasking.registry`). Read once at process startup. Keeping this
+    # config-driven means `src/tasking/` itself never has to know which
+    # modules implement handlers — extracting tasking as its own
+    # microservice just needs a different value here.
+    TASK_HANDLER_MODULES = tuple(
+        m.strip() for m in os.getenv(
+            "TASK_HANDLER_MODULES",
+            "src.ticketing.notifications",
+        ).split(",") if m.strip()
+    )
 
     # ── MinIO / S3 ─────────────────────────────────────────────────────────
     S3_ENDPOINT_URL   = os.getenv("S3_ENDPOINT_URL", "http://localhost:9000")

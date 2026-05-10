@@ -256,38 +256,10 @@ class TicketAssignmentHistory(Base):
 
 # ── Audit ───────────────────────────────────────────────────────────────────
 
-class AuditEvent(Base):
-    __tablename__ = "audit_events"
-    __table_args__ = (
-        Index("idx_audit_events_ticket",        "ticket_id", "created_at"),
-        Index("idx_audit_events_actor",         "actor_user_id", "created_at"),
-        Index("idx_audit_events_action",        "action", "created_at"),
-        Index("idx_audit_events_entity",        "entity_type", "entity_id", "created_at"),
-        Index("idx_audit_events_created_at",    "created_at"),
-        Index("idx_audit_events_correlation",   "correlation_id"),
-    )
-
-    id:        Mapped[str] = mapped_column(UUID(as_uuid=False), primary_key=True, default=_uuid)
-
-    actor_user_id:           Mapped[str | None] = mapped_column(UUID(as_uuid=False), ForeignKey("users.id"))
-    actor_keycloak_subject:  Mapped[str | None] = mapped_column(String(255))
-    actor_username:          Mapped[str | None] = mapped_column(String(255))
-
-    action:      Mapped[str] = mapped_column(String(100), nullable=False)
-    entity_type: Mapped[str] = mapped_column(String(100), nullable=False)
-    entity_id:   Mapped[str | None] = mapped_column(UUID(as_uuid=False))
-
-    ticket_id:   Mapped[str | None] = mapped_column(UUID(as_uuid=False), ForeignKey("tickets.id"))
-
-    old_value:  Mapped[dict | None] = mapped_column(JSONB)
-    new_value:  Mapped[dict | None] = mapped_column(JSONB)
-    audit_metadata: Mapped[dict | None] = mapped_column("metadata", JSONB)
-
-    request_ip:     Mapped[str | None] = mapped_column(INET)
-    user_agent:     Mapped[str | None] = mapped_column(Text)
-    correlation_id: Mapped[str | None] = mapped_column(UUID(as_uuid=False))
-
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+# `AuditEvent` lives in `src.audit.models` since 2026-05-10. Keep a
+# re-export here so existing `from src.ticketing.models import AuditEvent`
+# imports keep working until callers migrate.
+from src.audit.models import AuditEvent  # noqa: F401,E402
 
 
 # ── Notifications + SLA + links ─────────────────────────────────────────────

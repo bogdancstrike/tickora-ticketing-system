@@ -103,7 +103,25 @@ def publish(task_name: str, payload: Dict[str, Any], topic: Optional[str] = None
 
 
 def _ensure_local_handlers_registered() -> None:
-    # Import task modules for API/dev inline execution. The worker does this at
-    # process startup; API-only dev runs need the same registration before a
-    # queued task can be executed without Kafka.
-    import src.ticketing.notifications  # noqa: F401
+    """Import every module listed in `Config.TASK_HANDLER_MODULES`.
+
+    Each listed module is expected to declare its task handlers via the
+    `@register_task` decorator from `src.tasking.registry`. The import
+    side-effect populates the registry; the consumer (and the DEV-mode
+    inline runner) look up handlers by name from there.
+
+    Tasking has zero static knowledge of which package owns the handlers
+    — that's intentional. A microservice extraction can copy `src/tasking/`
+    plus `src/core/` and point `TASK_HANDLER_MODULES` at its own handler
+    package without touching tasking code.
+    """
+    import importlib
+    from src.config import Config
+    for module_path in Config.TASK_HANDLER_MODULES:
+        try:
+            importlib.import_module(module_path)
+        except Exception as exc:
+            logger.warning(
+                "task handler module failed to import",
+                extra={"module": module_path, "error": str(exc)},
+            )
