@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ProductTour } from '@/components/common/ProductTour'
+import { ProductTour, TourInfoButton } from '@/components/common/ProductTour'
 import {
   Alert, Button, Card, Checkbox, Col, Descriptions, Empty, Flex, Form, Input, Modal, Row, Select,
   Space, Table, Tag, Typography, message, theme as antTheme, Upload, Statistic, Spin,
@@ -964,6 +964,7 @@ export function TicketsPage() {
             </Button>
           )}
           <Button icon={<ReloadOutlined />} onClick={() => tickets.refetch()} />
+          <TourInfoButton pageKey="tickets" />
         </Space>
       </Flex>
 

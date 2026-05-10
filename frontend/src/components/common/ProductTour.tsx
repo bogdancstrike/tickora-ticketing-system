@@ -1,52 +1,51 @@
 /**
  * Page-scoped product tour built on react-joyride.
  *
- * Pages opt in by rendering `<ProductTour pageKey="tickets" steps={[…]} />`
- * once. The component decides whether to show the tour:
- *   - `localStorage[tour:<pageKey>]` already set → hidden.
- *   - User clicked the help button (we expose `showTour(pageKey)` for that).
+ * The tour is **opt-in**: it never auto-pops on page load. Pages render
+ * a `<TourInfoButton pageKey="…" />` next to their refresh control; the
+ * matching `<ProductTour pageKey="…" steps={[…]} />` listens for the
+ * `tickora:show-tour` event the button fires and starts the walkthrough.
  *
- * Steps reference DOM nodes by data-tour-id rather than CSS selectors so a
- * style refactor doesn't silently break the tour.
+ * Steps reference DOM nodes by `data-tour-id` rather than CSS selectors
+ * so a style refactor doesn't silently break the tour.
  */
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Joyride, STATUS, type EventData, type Step } from 'react-joyride'
-import { theme as antTheme } from 'antd'
+import { Button, Tooltip, theme as antTheme } from 'antd'
+import { InfoCircleOutlined } from '@ant-design/icons'
 
-const STORAGE_PREFIX = 'tour:'
 
-function isSeen(pageKey: string): boolean {
-  try {
-    return !!localStorage.getItem(STORAGE_PREFIX + pageKey)
-  } catch {
-    return true
-  }
-}
-
-function markSeen(pageKey: string): void {
-  try {
-    localStorage.setItem(STORAGE_PREFIX + pageKey, '1')
-  } catch {
-    // ignore — tour will simply replay next visit
-  }
-}
-
-/** Imperative trigger: useful for a "Show tour" button in the page header. */
+/** Imperative trigger: page header buttons call this to start the tour. */
 export function showTour(pageKey: string): void {
-  try {
-    localStorage.removeItem(STORAGE_PREFIX + pageKey)
-    // Force a re-render of any mounted ProductTour by dispatching a
-    // storage event manually (react-joyride listens to its `run` prop, so
-    // we use a global event the component listens to).
-    window.dispatchEvent(new CustomEvent('tickora:show-tour', { detail: pageKey }))
-  } catch {
-    // ignore
-  }
+  window.dispatchEvent(new CustomEvent('tickora:show-tour', { detail: pageKey }))
 }
+
+
+interface TourInfoButtonProps {
+  pageKey: string
+  /** Tooltip override; defaults to the i18n `tour.info_button` string. */
+  tooltip?: string
+}
+
+/** Static info button that pages drop into their toolbar. */
+export function TourInfoButton({ pageKey, tooltip }: TourInfoButtonProps) {
+  const { t } = useTranslation()
+  return (
+    <Tooltip title={tooltip ?? t('tour.info_button')}>
+      <Button
+        type="text"
+        icon={<InfoCircleOutlined />}
+        onClick={() => showTour(pageKey)}
+        aria-label={t('tour.info_button')}
+      />
+    </Tooltip>
+  )
+}
+
 
 interface ProductTourProps {
-  /** Stable identifier — used as the localStorage key. */
+  /** Stable identifier — matches the `<TourInfoButton pageKey>`. */
   pageKey: string
   /** Steps to walk through. `target` should reference `[data-tour-id="…"]`. */
   steps: Step[]
@@ -55,7 +54,7 @@ interface ProductTourProps {
 export function ProductTour({ pageKey, steps }: ProductTourProps) {
   const { t } = useTranslation()
   const { token } = antTheme.useToken()
-  const [run, setRun] = useState<boolean>(() => !isSeen(pageKey))
+  const [run, setRun] = useState(false)
 
   useEffect(() => {
     function onShow(e: Event) {
@@ -68,10 +67,7 @@ export function ProductTour({ pageKey, steps }: ProductTourProps) {
 
   function onCallback(data: EventData) {
     const finished = ([STATUS.FINISHED, STATUS.SKIPPED] as string[]).includes(data.status as string)
-    if (finished) {
-      markSeen(pageKey)
-      setRun(false)
-    }
+    if (finished) setRun(false)
   }
 
   return (

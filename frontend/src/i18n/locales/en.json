@@ -115,7 +115,8 @@
       "kpis": "Active sessions counts users currently signed in (5-minute presence window).",
       "tabs": "Manage users, sectors, configuration, and system health from the tabs below."
     },
-    "language": "Switch between English and Romanian here. Your choice is remembered."
+    "language": "Switch between English and Romanian here. Your choice is remembered.",
+    "info_button": "Show page tour"
   },
   "errors": {
     "generic": "Something went wrong.",

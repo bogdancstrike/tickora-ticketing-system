@@ -115,7 +115,8 @@
       "kpis": "Sesiuni active arată utilizatorii autentificați acum (fereastră de prezență de 5 minute).",
       "tabs": "Gestionează utilizatori, sectoare, configurare și sănătatea sistemului din taburile de mai jos."
     },
-    "language": "Comută între engleză și română de aici. Alegerea ta e reținută."
+    "language": "Comută între engleză și română de aici. Alegerea ta e reținută.",
+    "info_button": "Arată tutorialul paginii"
   },
   "errors": {
     "generic": "Ceva nu a mers bine.",

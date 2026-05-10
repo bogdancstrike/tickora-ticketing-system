@@ -208,9 +208,10 @@ Legend: `[x]` done · `[~]` partial · `[ ]` pending
 
 - [x] add useful indices on often used columns from tables and generate seed.sql in scripts/ to create (with indices) tables and populate the DB
 - [x] React Joyride product tour — `frontend/src/components/common/ProductTour.tsx`
-      mounts on Tickets, Monitor, Admin pages. localStorage flag per page
-      so the tour shows once; `showTour(pageKey)` re-triggers on demand.
-      Strings live in the i18n catalogues (`tour.*`).
+      with explicit `<TourInfoButton pageKey="…" />` next to each page's
+      Refresh control. The tour never auto-pops; users click the info
+      icon to launch it. Mounted on Tickets, Monitor, Admin. Strings
+      live in the i18n catalogues (`tour.*`).
 - [x] i18n (en + ro) — `frontend/src/i18n/` with `react-i18next`,
       browser-language detection, `localStorage:tickora.lang` persistence,
       en + ro JSON catalogues, `<LanguageSwitcher />` in the app header.
@@ -324,14 +325,27 @@ status flag here so the next session can pick up cleanly.
 - [ ] k6 perf + load tests against the 30M seed.
 - [ ] Chaos tests (Postgres restart, Redis blackout, Keycloak unreachable).
 
-### Big refactors (deferred — multi-day each)
-- [ ] Extract `src/audit/` as its own backend module (audit service, events,
-      and api/audit endpoints currently live under `src/ticketing/`).
-- [ ] Extract `src/common/` for utilities shared between modules
-      (currently in `src/core/`).
-- [ ] Refactor `src/tasking/` to own task lifecycle + status persistence so
-      every async job has a queryable DB row. Currently `tasking/` only owns
-      Kafka producer/consumer plumbing.
+### Big refactors (2026-05-10) ✅
+- [x] **Extract `src/common/`** — moved `cache`, `pagination`,
+      `object_storage`, `rate_limiter`, `request_metadata`,
+      `session_tracker`, `spans` from `src/core/`. Old paths kept as
+      back-compat shims in `src/core/<name>.py`. Tests + every API/
+      service module migrated to `src.common.*` directly.
+- [x] **Extract `src/audit/`** — `audit_service` → `src/audit/service.py`,
+      audit constants → `src/audit/events.py`. Shims at
+      `src/ticketing/service/audit_service.py` and
+      `src/ticketing/events.py` re-export. Bundle imports across services
+      cleaned up (no more `from src.audit import service as audit_service,
+      ticket_service`).
+- [x] **Refactor `src/tasking/`** — new `tasks` table
+      (`migrations/e7b34cd9f211_tasks_lifecycle_table`),
+      `src/tasking/models.py` ORM, `src/tasking/lifecycle.py` with
+      `create / mark_running / mark_completed / mark_failed / heartbeat /
+      recover_orphans / list_tasks / get_task`. `producer.publish` now
+      writes a `pending` row + sends the `task_id` in the envelope; the
+      consumer (and DEV-mode inline runner) flip it through the lifecycle.
+      Worker `run_consumer` calls `recover_orphans` on startup. New admin
+      endpoints `GET /api/tasks` and `GET /api/tasks/<id>`.
 
 ## Original refactor backlog (2026-05-09)
 

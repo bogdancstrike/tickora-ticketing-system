@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { ProductTour } from '@/components/common/ProductTour'
+import { ProductTour, TourInfoButton } from '@/components/common/ProductTour'
 import { useQuery } from '@tanstack/react-query'
 import ReactECharts from 'echarts-for-react'
 import {
@@ -395,6 +395,7 @@ export function MonitorPage() {
           <Typography.Text type="secondary">Role-scoped operational metrics</Typography.Text>
         </div>
         <Button icon={<ReloadOutlined />} onClick={() => overview.refetch()} />
+        <TourInfoButton pageKey="monitor" />
       </Flex>
 
       {overview.error && <Alert type="error" message={overview.error.message} showIcon />}

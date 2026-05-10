@@ -133,20 +133,29 @@ function AppSidebar() {
   const [collapsed, setCollapsed] = useState(false)
   const screens = Grid.useBreakpoint()
   const { visibleItems, menuItems } = useNavigationItems()
-  
+  const { mode, toggle } = useThemeStore()
+
   const isMobile = !screens.md
   const selectedKey = visibleItems.find((n) => location.pathname.startsWith(n.key))?.key || '/tickets'
 
   if (isMobile) return null
 
   return (
+    // The sider uses a column flex so the menu fills the middle and the
+    // utility row (theme + language) anchors to the bottom. Keeps the
+    // top header free for context-specific actions (notifications, profile).
     <Sider
       collapsible
       collapsed={collapsed}
       onCollapse={setCollapsed}
       trigger={null}
       width={220}
-      style={{ background: token.colorBgContainer, borderRight: `1px solid ${token.colorBorder}` }}
+      style={{
+        background: token.colorBgContainer,
+        borderRight: `1px solid ${token.colorBorder}`,
+        display: 'flex',
+        flexDirection: 'column',
+      }}
     >
       <div style={{
         height: 100, display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -167,8 +176,21 @@ function AppSidebar() {
         selectedKeys={[selectedKey]}
         items={menuItems}
         onClick={({ key }) => navigate(key)}
-        style={{ borderRight: 0 }}
+        style={{ borderRight: 0, flex: 1, overflowY: 'auto' }}
       />
+      <div style={{
+        borderTop: `1px solid ${token.colorBorder}`,
+        padding: 8,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: collapsed ? 'center' : 'flex-start',
+        gap: 4,
+      }}>
+        <Tooltip title={`Switch to ${mode === 'dark' ? 'light' : 'dark'} mode`}>
+          <Button type="text" icon={<BgColorsOutlined />} onClick={toggle} />
+        </Tooltip>
+        <LanguageSwitcher />
+      </div>
     </Sider>
   )
 }
@@ -183,7 +205,6 @@ function RequireRootGroup({ children }: { children: ReactNode }) {
 
 function AppHeader() {
   const { token }   = antTheme.useToken()
-  const { mode, toggle } = useThemeStore()
   const { keycloak } = useKeycloak()
   const user = useSessionStore((s) => s.user)
   const navigate = useNavigate()
@@ -240,10 +261,6 @@ function AppHeader() {
 
       <Space>
         <NotificationDropdown />
-        <LanguageSwitcher />
-        <Tooltip title={`Switch to ${mode === 'dark' ? 'light' : 'dark'} mode`}>
-          <Button type="text" icon={<BgColorsOutlined />} onClick={toggle} />
-        </Tooltip>
         <Dropdown
           menu={{
             items: [

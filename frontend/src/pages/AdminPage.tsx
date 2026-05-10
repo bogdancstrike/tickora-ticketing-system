@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ProductTour } from '@/components/common/ProductTour'
+import { ProductTour, TourInfoButton } from '@/components/common/ProductTour'
 import ReactECharts from 'echarts-for-react'
 import {
   Alert, Button, Col, Empty, Flex, Form, Input, List, Modal, Row, Select, Space,
@@ -574,7 +574,10 @@ export function AdminPage() {
 
   return (
     <div style={{ padding: 24 }}>
-      <Typography.Title level={2}>{t('admin.title')}</Typography.Title>
+      <Flex align="center" gap={8} style={{ marginBottom: 8 }}>
+        <Typography.Title level={2} style={{ margin: 0 }}>{t('admin.title')}</Typography.Title>
+        <TourInfoButton pageKey="admin" />
+      </Flex>
       <Row gutter={[12, 12]} style={{ marginBottom: 16 }} data-tour-id="admin-kpis">
         {headlineKpis.map(([label, value]) => (
           <Col key={label} xs={12} md={4}>

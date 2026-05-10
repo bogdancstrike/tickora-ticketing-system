@@ -167,21 +167,62 @@ Components:
 
 The worker process imports `ticketing` to load handlers, then runs `consumer.run()`. The API process imports the producer only.
 
-### 4.4 `core/` — Shared infra
+### 4.4 `core/` — Bare infrastructure
 
-- `config.py` — single `Config` class, all env vars in one place (mirrors `rag-poc/src/config.py`).
+The smallest-possible base layer: things the framework boot depends on
+directly. Reusable utilities (caching, pagination, etc.) live in
+`src/common/` instead — see §4.5.
+
+- `config.py` — single `Config` class, all env vars in one place.
 - `db.py` — SQLAlchemy engine, session factory, `get_db()` context manager, declarative `Base`.
-- `logging.py` — JSON logger with `correlation_id`, `user_id`, `ticket_id` injected via `contextvars`.
 - `tracing.py` — re-exports QF tracer.
 - `errors.py` — `BusinessRuleError`, `PermissionDeniedError`, `NotFoundError`, `ConcurrencyConflictError`. Mapped to HTTP codes by the API layer.
-- `pagination.py` — cursor pagination helpers (we don't use offset on big tables).
 - `correlation.py` — middleware that pulls/generates `X-Correlation-Id`, stuffs it into a contextvar.
 - `redis_client.py` — lazy Redis client, returns `None` when Redis is unreachable.
-- `cache.py` — JSON memoization helper (`cached_call`) used to wrap expensive
-  read-only aggregates (`/api/monitor/overview`).
-- `session_tracker.py` — Redis-backed presence tracker. Each authenticated
-  request bumps `tickora:session:active:<user_id>` with a 5-minute TTL; the
-  admin overview reads this to surface the `active_sessions` KPI.
+
+> **Back-compat:** `src/core/cache`, `pagination`, `object_storage`,
+> `rate_limiter`, `request_metadata`, `session_tracker`, `spans` still
+> exist as one-line shims that re-export from `src/common`. Existing
+> imports keep working; new code imports from `src.common.*` directly.
+
+### 4.5 `common/` — Cross-module utilities
+
+Reusable building blocks any module can pick up. None of these participate
+in the framework boot sequence — they layer on top of `core`.
+
+- `pagination.py` — cursor pagination helpers (we don't use offset on big tables).
+- `cache.py` — JSON memoization (`cached_call`) wrapping expensive read-only aggregates.
+- `rate_limiter.py` — Redis sliding-window limiter (`check`). Fail-open.
+- `request_metadata.py` — trusted-proxy-aware `client_ip()` and audit metadata helper.
+- `session_tracker.py` — Redis presence keys (`mark_active` / `active_user_count`). 5-minute TTL; powers the admin Active Sessions KPI.
+- `object_storage.py` — boto3-backed S3/MinIO helpers (`presigned_put_url`, `object_exists`, `ensure_bucket`).
+- `spans.py` — thin `with span(...)` wrapper around the QF tracer.
+
+### 4.6 `audit/` — Immutable ledger
+
+Single entry point for writing audit events plus the typed event constants
+that go in them. Used by `ticketing`, `iam`, and `tasking` whenever a
+domain action needs an attributable trail.
+
+- `service.py` — `record(...)`, `list_(...)`, `get_for_ticket(...)`, `get_for_user(...)`. Every write shares the caller's DB session so audit and the originating change commit together.
+- `events.py` — `TICKET_CREATED`, `COMMENT_CREATED`, `ACCESS_DENIED`, … (one name → one immutable string).
+
+> Back-compat: `src/ticketing/service/audit_service.py` and
+> `src/ticketing/events.py` re-export from here.
+
+### 4.7 `tasking/` — Async lifecycle
+
+Was Kafka producer/consumer plumbing only; now also owns durable task
+state via the `tasks` table.
+
+- `models.py` — `Task` ORM with status (`pending`/`running`/`completed`/`failed`), payload, correlation_id, attempts, timestamps, heartbeat.
+- `lifecycle.py` — `create()` (writes a `pending` row), `mark_running()`/`mark_completed()`/`mark_failed()`/`heartbeat()`, `recover_orphans()` (run on worker startup), and read helpers (`list_tasks`, `get_task`).
+- `producer.py` — `publish(task_name, payload)` writes a lifecycle row, then sends the envelope (incl. `task_id`) to Kafka. DEV inline mode follows the same path.
+- `consumer.py` — flips the matching row through the lifecycle around the handler call. Calls `lifecycle.recover_orphans()` once at consumer startup.
+- `registry.py` — `register_task(name)` decorator; handlers register at module import.
+
+Operator surface: `GET /api/tasks` (admin) lists recent rows;
+`GET /api/tasks/<id>` fetches one. See `src/api/tasks.py`.
 
 ### 4.5 `api/` — HTTP surface
 
