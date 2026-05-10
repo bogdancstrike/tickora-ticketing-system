@@ -71,19 +71,6 @@ export interface AdminTicketMetadata {
   updated_at?: string | null
 }
 
-export interface AdminSlaPolicy {
-  id?: string
-  name: string
-  priority: 'low' | 'medium' | 'high' | 'critical'
-  category?: string | null
-  beneficiary_type?: 'internal' | 'external' | null
-  first_response_minutes: number
-  resolution_minutes: number
-  is_active: boolean
-  created_at?: string | null
-  updated_at?: string | null
-}
-
 export interface AdminOverview {
   generated_at: string
   kpis: Record<string, number | null>
@@ -93,11 +80,6 @@ export interface AdminOverview {
   global_dashboard: {
     by_category: DashboardBreakdown[]
     top_backlog_sectors: Array<{ sector_code: string; sector_name: string; count: number }>
-  }
-  sla: {
-    breached: number
-    due_24h: number
-    by_status: DashboardBreakdown[]
   }
   queues: Record<string, number>
   system: Record<string, number>
@@ -203,21 +185,6 @@ export const upsertAdminTicketMetadata = async (
 
 export const deleteAdminTicketMetadata = async (metadataId: string): Promise<void> => {
   await apiClient.delete(`/api/admin/ticket-metadatas/${metadataId}`)
-}
-
-export const listAdminSlaPolicies = async (): Promise<{ items: AdminSlaPolicy[] }> => {
-  const { data } = await apiClient.get('/api/admin/sla-policies')
-  return data
-}
-
-export const createAdminSlaPolicy = async (payload: AdminSlaPolicy): Promise<AdminSlaPolicy> => {
-  const { data } = await apiClient.post('/api/admin/sla-policies', payload)
-  return data
-}
-
-export const updateAdminSlaPolicy = async (policyId: string, payload: AdminSlaPolicy): Promise<AdminSlaPolicy> => {
-  const { data } = await apiClient.patch(`/api/admin/sla-policies/${policyId}`, payload)
-  return data
 }
 
 export interface SystemSetting {

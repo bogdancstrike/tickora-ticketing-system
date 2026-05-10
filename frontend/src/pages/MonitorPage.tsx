@@ -33,7 +33,29 @@ function KpiGrid({ values }: { values: Record<string, number | null | undefined>
   )
 }
 
-function ChartPanel({ title, description, children }: { title: string; description?: string; children: React.ReactNode }) {
+function ChartLegend({ items }: { items: Array<{ color: string; label: string; description: string }> }) {
+  return (
+    <Flex wrap="wrap" gap={8} style={{ marginBottom: 8 }}>
+      {items.map((item) => (
+        <Tag key={item.label} color={item.color} style={{ marginInlineEnd: 0 }}>
+          {item.label}: {item.description}
+        </Tag>
+      ))}
+    </Flex>
+  )
+}
+
+function ChartPanel({
+  title,
+  description,
+  legend,
+  children,
+}: {
+  title: string
+  description?: string
+  legend?: Array<{ color: string; label: string; description: string }>
+  children: React.ReactNode
+}) {
   const { token } = antTheme.useToken()
   return (
     <div style={{ background: token.colorBgContainer, border: `1px solid ${token.colorBorderSecondary}`, borderRadius: 8, padding: 16, minHeight: 286, boxShadow: token.boxShadowTertiary }}>
@@ -43,6 +65,7 @@ function ChartPanel({ title, description, children }: { title: string; descripti
           {description}
         </Typography.Text>
       )}
+      {legend?.length ? <ChartLegend items={legend} /> : null}
       {children}
     </div>
   )
@@ -95,19 +118,27 @@ function SectorPanel({ sector, controls }: { sector: MonitorSector; controls?: R
       <Flex justify="space-between" align="start" wrap="wrap" gap={12}>
         <div>
           <Typography.Title level={4} style={{ margin: 0 }}>{sector.sector_code} · {sector.sector_name}</Typography.Title>
-          <Typography.Text type="secondary">Sector queue, SLA, and workload</Typography.Text>
+          <Typography.Text type="secondary">Sector queue and workload</Typography.Text>
         </div>
         {controls}
       </Flex>
       <div data-tour-id="monitor-sector-kpis"><KpiGrid values={sector.kpis} /></div>
       <Row gutter={[16, 16]}>
         <Col xs={24} xl={8}>
-          <ChartPanel title="Status" description="Tickets currently routed to this sector, grouped by workflow status.">
+          <ChartPanel
+            title="Status"
+            description="Tickets currently routed to this sector, grouped by workflow status."
+            legend={[{ color: 'blue', label: 'Bars', description: 'ticket count per workflow status' }]}
+          >
             <BreakdownChart data={sector.by_status} title="Tickets" />
           </ChartPanel>
         </Col>
         <Col xs={24} xl={8}>
-          <ChartPanel title="Priority" description="Tickets currently routed to this sector, grouped by priority.">
+          <ChartPanel
+            title="Priority"
+            description="Tickets currently routed to this sector, grouped by priority."
+            legend={[{ color: 'orange', label: 'Bars', description: 'ticket count per priority' }]}
+          >
             <BreakdownChart data={sector.by_priority} title="Tickets" color="#fa8c16" />
           </ChartPanel>
         </Col>
@@ -118,7 +149,11 @@ function SectorPanel({ sector, controls }: { sector: MonitorSector; controls?: R
         </Col>
         {sector.bottleneck_analysis?.length ? (
           <Col xs={24} xl={12}>
-            <ChartPanel title="Bottleneck Analysis" description="Average time spent in each status (minutes).">
+            <ChartPanel
+              title="Bottleneck Analysis"
+              description="Average time spent in each status (minutes)."
+              legend={[{ color: 'magenta', label: 'Bars', description: 'average minutes spent in each workflow status' }]}
+            >
               <BreakdownChart
                 data={sector.bottleneck_analysis.map((b) => ({ key: b.status, count: b.avg_minutes }))}
                 title="Avg Minutes"
@@ -128,7 +163,14 @@ function SectorPanel({ sector, controls }: { sector: MonitorSector; controls?: R
           </Col>
         ) : null}
         <Col xs={24} lg={12}>
-          <ChartPanel title="Workload Chart" description="Visual breakdown of active vs done tickets per user.">
+          <ChartPanel
+            title="Workload Chart"
+            description="Visual breakdown of active vs done tickets per user."
+            legend={[
+              { color: 'blue', label: 'Active', description: 'tickets still in progress' },
+              { color: 'green', label: 'Done', description: 'tickets completed by the assignee' },
+            ]}
+          >
             <WorkloadChart data={sector.workload} height={300} />
           </ChartPanel>
         </Col>
@@ -278,23 +320,39 @@ export function MonitorPage() {
           <KpiGrid values={overview.data.global.kpis} />
           <Row gutter={[16, 16]}>
             <Col xs={24} xl={8}>
-              <ChartPanel title="Status" description="All non-deleted tickets grouped by workflow status.">
+              <ChartPanel
+                title="Status"
+                description="All non-deleted tickets grouped by workflow status."
+                legend={[{ color: 'blue', label: 'Bars', description: 'total visible tickets per workflow status' }]}
+              >
                 <BreakdownChart data={overview.data.global.by_status} title="Tickets" />
               </ChartPanel>
             </Col>
             <Col xs={24} xl={8}>
-              <ChartPanel title="Priority" description="All non-deleted tickets grouped by priority.">
+              <ChartPanel
+                title="Priority"
+                description="All non-deleted tickets grouped by priority."
+                legend={[{ color: 'orange', label: 'Bars', description: 'total visible tickets per priority' }]}
+              >
                 <BreakdownChart data={overview.data.global.by_priority} title="Tickets" color="#fa8c16" />
               </ChartPanel>
             </Col>
             <Col xs={24} xl={8}>
-              <ChartPanel title="Beneficiary Type" description="All non-deleted tickets grouped by requester type.">
+              <ChartPanel
+                title="Beneficiary Type"
+                description="All non-deleted tickets grouped by requester type."
+                legend={[{ color: 'green', label: 'Bars', description: 'internal vs external requester tickets' }]}
+              >
                 <BreakdownChart data={overview.data.global.by_beneficiary_type} title="Tickets" color="#52c41a" />
               </ChartPanel>
             </Col>
             {overview.data.global.bottleneck_analysis?.length ? (
               <Col xs={24} xl={12}>
-                <ChartPanel title="Bottleneck Analysis" description="Average time spent in each status across all sectors (minutes).">
+                <ChartPanel
+                  title="Bottleneck Analysis"
+                  description="Average time spent in each status across all sectors (minutes)."
+                  legend={[{ color: 'magenta', label: 'Bars', description: 'average minutes spent in each workflow status' }]}
+                >
                   <BreakdownChart
                     data={overview.data.global.bottleneck_analysis.map((b) => ({ key: b.status, count: b.avg_minutes }))}
                     title="Avg Minutes"
@@ -305,14 +363,22 @@ export function MonitorPage() {
             ) : null}
             {overview.data.global.by_category?.length ? (
               <Col xs={24} xl={12}>
-                <ChartPanel title="Categories" description="All non-deleted tickets grouped by category.">
+                <ChartPanel
+                  title="Categories"
+                  description="All non-deleted tickets grouped by category."
+                  legend={[{ color: 'purple', label: 'Slices', description: 'share of visible tickets per category' }]}
+                >
                   <DoughnutChart data={overview.data.global.by_category} title="Tickets" />
                 </ChartPanel>
               </Col>
             ) : null}
             {overview.data.global.by_sector?.length ? (
               <Col xs={24} xl={12}>
-                <ChartPanel title="Total tickets by sector" description="All non-deleted tickets grouped by current sector, including open and closed tickets.">
+                <ChartPanel
+                  title="Total tickets by sector"
+                  description="All non-deleted tickets grouped by current sector, including open and closed tickets."
+                  legend={[{ color: 'cyan', label: 'Bars', description: 'total visible tickets in each current sector' }]}
+                >
                   <BreakdownChart
                     data={overview.data.global.by_sector.map((s) => ({ key: s.sector_code, count: s.count }))}
                     title="Tickets"
@@ -333,7 +399,11 @@ export function MonitorPage() {
           <KpiGrid values={overview.data.distributor.kpis} />
           <Row gutter={[16, 16]}>
             <Col xs={24} xl={12}>
-              <ChartPanel title="Pending Priority" description="Tickets waiting for distribution or sector assignment, grouped by priority.">
+              <ChartPanel
+                title="Pending Priority"
+                description="Tickets waiting for distribution or sector assignment, grouped by priority."
+                legend={[{ color: 'orange', label: 'Bars', description: 'pending distribution tickets per priority' }]}
+              >
                 <BreakdownChart data={overview.data.distributor.by_priority} title="Tickets" color="#fa8c16" />
               </ChartPanel>
             </Col>
@@ -361,7 +431,11 @@ export function MonitorPage() {
             <KpiGrid values={personal.kpis} />
             <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
               <Col xs={24} xl={12}>
-                <ChartPanel title="Operator Status" description="Tickets where this user is an assignee or primary sector responder.">
+                <ChartPanel
+                  title="Operator Status"
+                  description="Tickets where this user is an assignee or primary sector responder."
+                  legend={[{ color: 'blue', label: 'Bars', description: 'assigned/operator tickets per workflow status' }]}
+                >
                   <BreakdownChart data={personal.by_status} title="Tickets" />
                 </ChartPanel>
               </Col>
@@ -377,7 +451,11 @@ export function MonitorPage() {
             <Typography.Title level={5} style={{ fontSize: 14, marginBottom: 12 }}>Requester Role</Typography.Title>
             <KpiGrid values={personal.beneficiary_kpis} />
             <div style={{ marginTop: 16 }}>
-              <ChartPanel title="Requester Status" description="Tickets created by or linked to this user as beneficiary.">
+              <ChartPanel
+                title="Requester Status"
+                description="Tickets created by or linked to this user as beneficiary."
+                legend={[{ color: 'green', label: 'Bars', description: 'requester tickets per workflow status' }]}
+              >
                 <BreakdownChart data={personal.beneficiary_by_status} title="Tickets" color="#52c41a" />
               </ChartPanel>
             </div>
@@ -394,9 +472,6 @@ export function MonitorPage() {
           <Typography.Title level={3} style={{ margin: 0 }}>Monitor</Typography.Title>
           <Typography.Text type="secondary">Role-scoped operational metrics</Typography.Text>
         </div>
-        <Space>
-          <TourInfoButton pageKey="monitor" />
-        </Space>
       </Flex>
 
       {overview.error && <Alert type="error" message={overview.error.message} showIcon />}
@@ -405,9 +480,12 @@ export function MonitorPage() {
 
       <div>
         <Flex justify="end" style={{ marginBottom: 8 }}>
+          <Space>
+          <TourInfoButton pageKey="monitor" />
           <Button icon={<ReloadOutlined />} onClick={() => overview.refetch()} data-tour-id="monitor-refresh">
             {t('common.refresh')}
           </Button>
+          </Space>
         </Flex>
         <div data-tour-id="monitor-tabs">
           <Tabs items={tabs as any} />
@@ -436,6 +514,12 @@ export function MonitorPage() {
               ]}
             />
           </Flex>
+          <ChartLegend
+            items={[
+              { color: 'blue', label: 'Created', description: 'tickets opened on each day' },
+              { color: 'green', label: 'Closed', description: 'tickets finished or closed on each day' },
+            ]}
+          />
           <ReactECharts option={timeseriesOption} style={{ height: 260 }} data-tour-id="monitor-timeseries" />
         </div>
       )}

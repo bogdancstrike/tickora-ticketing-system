@@ -12,7 +12,7 @@ import {
   AuditOutlined, UnorderedListOutlined,
   SendOutlined, ThunderboltOutlined, BarChartOutlined, PieChartOutlined,
   MessageOutlined, FieldTimeOutlined, DatabaseOutlined,
-  CarryOutOutlined, SmileOutlined, TeamOutlined, HistoryOutlined, LineChartOutlined,
+  SmileOutlined, TeamOutlined, HistoryOutlined, LineChartOutlined,
   ClockCircleOutlined, CheckCircleOutlined, SearchOutlined, DashboardOutlined, InfoCircleOutlined,
   HourglassOutlined, ExclamationCircleOutlined, BellOutlined, EyeOutlined, LinkOutlined,
 } from '@ant-design/icons'
@@ -398,26 +398,6 @@ function WelcomeWidget() {
   )
 }
 
-function SlaOverviewWidget() {
-  const { data } = useQuery({
-    queryKey: ['monitorOverview'],
-    queryFn: () => getMonitorOverview(),
-  })
-  
-  return (
-    <div style={{ padding: 16 }}>
-      <Row gutter={16}>
-        <Col span={12}>
-           <Statistic title="Breached" value={data?.global?.kpis.sla_breached ?? 0} styles={{ content: { color: '#cf1322' } }} />
-        </Col>
-        <Col span={12}>
-           <Statistic title="Critical" value={data?.distributor?.kpis.critical_pending ?? 0} styles={{ content: { color: '#d46b08' } }} />
-        </Col>
-      </Row>
-    </div>
-  )
-}
-
 function GlobalKpiWidget() {
   const { data, isLoading } = useQuery({
     queryKey: ['monitorOverview'],
@@ -709,26 +689,6 @@ function OldestActiveWidget({ config }: { config: any }) {
   )
 }
 
-function SlaRiskWidget() {
-  const { data, isLoading } = useQuery({
-    queryKey: ['slaRiskWidget'],
-    queryFn: () => getMonitorOverview(),
-    staleTime: 60_000,
-  })
-
-  if (isLoading) return <div style={{ textAlign: 'center', padding: 20 }}><Spin /></div>
-  const kpis = data?.global?.kpis || data?.personal?.kpis || {}
-  return (
-    <div style={{ padding: 16 }}>
-      <Row gutter={16}>
-        <Col span={8}><Statistic title="SLA breached" value={kpis.sla_breached ?? 0} styles={{ content: { color: (kpis.sla_breached ?? 0) ? '#cf1322' : undefined } }} /></Col>
-        <Col span={8}><Statistic title="Reopened" value={kpis.reopened ?? 0} /></Col>
-        <Col span={8}><Statistic title="Avg resolution" value={kpis.avg_resolution_minutes ?? 0} suffix="min" precision={typeof kpis.avg_resolution_minutes === 'number' ? 1 : 0} /></Col>
-      </Row>
-    </div>
-  )
-}
-
 function RequesterStatusWidget() {
   const { data, isLoading } = useQuery({
     queryKey: ['requesterStatusWidget'],
@@ -962,7 +922,6 @@ const ICON_MAP: Record<string, React.ReactNode> = {
     SendOutlined: <SendOutlined />,
     FieldTimeOutlined: <FieldTimeOutlined />,
     DatabaseOutlined: <DatabaseOutlined />,
-    CarryOutOutlined: <CarryOutOutlined />,
     SmileOutlined: <SmileOutlined />,
     ClockCircleOutlined: <ClockCircleOutlined />,
     DashboardOutlined: <DashboardOutlined />,
@@ -1008,12 +967,10 @@ const WIDGET_TYPES = [
     { type: 'backlog_by_sector', label: 'Backlog by Sector', icon: <BarChartOutlined />, configurable: true },
     { type: 'priority_mix', label: 'Priority Mix', icon: <PieChartOutlined />, configurable: true },
     { type: 'oldest_active', label: 'Oldest Active', icon: <HistoryOutlined />, configurable: true },
-    { type: 'sla_risk', label: 'SLA Risk', icon: <CarryOutOutlined />, configurable: false },
     { type: 'requester_status', label: 'Requester Status', icon: <PieChartOutlined />, configurable: false },
     { type: 'shortcuts', label: 'Quick Links', icon: <SendOutlined />, configurable: true },
     { type: 'clock', label: 'Clock', icon: <FieldTimeOutlined />, configurable: false },
     { type: 'system_health', label: 'System Health', icon: <DatabaseOutlined />, configurable: false },
-    { type: 'sla_overview', label: 'SLA Overview', icon: <CarryOutOutlined />, configurable: false },
     { type: 'welcome_banner', label: 'Welcome Banner', icon: <SmileOutlined />, configurable: false },
 ]
 
@@ -1033,7 +990,6 @@ function WidgetRenderer({ widget }: { widget: DashboardWidgetDto }) {
   if (widget.type === 'clock') return <ClockWidget />
   if (widget.type === 'system_health') return <SystemHealthWidget />
   if (widget.type === 'welcome_banner') return <WelcomeWidget />
-  if (widget.type === 'sla_overview') return <SlaOverviewWidget />
   if (widget.type === 'sector_stats') return <SectorStatsWidget config={widget.config} />
   if (widget.type === 'user_workload') return <UserWorkloadWidget config={widget.config} />
   if (widget.type === 'recent_comments') return <RecentCommentsWidget config={widget.config} />
@@ -1056,7 +1012,6 @@ function WidgetRenderer({ widget }: { widget: DashboardWidgetDto }) {
   if (widget.type === 'backlog_by_sector') return <BacklogBySectorWidget config={widget.config} />
   if (widget.type === 'priority_mix') return <PriorityMixWidget config={widget.config} />
   if (widget.type === 'oldest_active') return <OldestActiveWidget config={widget.config} />
-  if (widget.type === 'sla_risk') return <SlaRiskWidget />
   if (widget.type === 'requester_status') return <RequesterStatusWidget />
 
   return <Empty description={`Unknown widget type: ${widget.type}`} image={Empty.PRESENTED_IMAGE_SIMPLE} />
@@ -1404,7 +1359,6 @@ function DashboardDetail({ dashboardId, onBack }: { dashboardId: string, onBack:
                             { value: 'personal.beneficiary_kpis.active', label: 'Personal: My Active Requests' },
                             { value: 'global.kpis.total_tickets', label: 'Global: Total Tickets (System)' },
                             { value: 'global.kpis.active_tickets', label: 'Global: Active Total' },
-                            { value: 'global.kpis.sla_breached', label: 'Global: SLA Breaches' },
                             { value: 'distributor.kpis.pending_review', label: 'Distribution: Pending Review' },
                         ]} />
                       </Form.Item>

@@ -127,8 +127,7 @@
       "assigned": "Asignat",
       "first_response": "Primul răspuns",
       "done": "Finalizat",
-      "closed": "Închis",
-      "sla_due": "Termen SLA"
+      "closed": "Închis"
     },
     "comments": {
       "post": "Trimite",
@@ -224,13 +223,11 @@
       "total_users": "Utilizatori (total)",
       "enabled_users": "Utilizatori activi",
       "active_tickets": "Tichete active",
-      "sla_breached": "SLA depășit",
       "new_today": "Tichete noi azi"
     },
     "system": {
       "system_health":     "Sănătatea sistemului",
       "infra_posture":     "Stare infrastructură",
-      "sla_posture":       "Stare SLA",
       "background_tasks":  "Sarcini de fundal",
       "failed_recent":     "Eșuate (recent)",
       "running":           "În execuție",
@@ -269,14 +266,14 @@
     "monitor": {
       "tabs": "Comută între vizualizările disponibile rolului tău: operațional global, distribuție, volum pe sector și activitatea personală/ca solicitant. Fiecare tab este filtrat pe server.",
       "refresh": "Reîmprospătarea este lângă controalele raportului, ca să actualizeze datele operaționale fără să aglomereze titlul paginii.",
-      "kpis": "Aceste carduri KPI rezumă zona selectată: lucru activ, finalizat, risc SLA, tichete stagnante și alte contoare permise rolului curent.",
+      "kpis": "Aceste carduri KPI rezumă zona selectată: lucru activ, finalizat, tichete stagnante, redeschideri și alte contoare permise rolului curent.",
       "workload": "Detaliile de volum compară tichetele active și finalizate pe utilizator. Șefii și administratorii văd rapid supraîncărcarea, lucrul nealocat și dezechilibrele.",
       "range": "Schimbă intervalul graficului de tendință. Ferestrele scurte ajută în incidente; cele lungi arată dacă randamentul se îmbunătățește.",
       "cache": "Graficul creat-vs-închis arată tendința de intrare și rezolvare pe intervalul ales. Agregările monitorului sunt memorate scurt pentru viteză."
     },
     "admin": {
       "kpis": "Aceste carduri rezumă administrarea sistemului: utilizatori, sesiuni active din fereastra de 5 minute, sectoare, tichete și contoare operaționale.",
-      "tabs": "Folosește taburile pentru utilizatori, apartenențe la sectoare, SLA, metadate, catalogul de widgeturi și sănătatea sistemului. API-ul verifică în continuare permisiunile."
+      "tabs": "Folosește taburile pentru utilizatori, apartenențe la sectoare, metadate, catalogul de widgeturi și sănătatea sistemului. API-ul verifică în continuare permisiunile."
     },
     "create": {
       "beneficiary": "Tipul beneficiarului este derivat din rolul contului. Utilizatorii interni trimit solicitări interne; cei externi completează datele de contact.",

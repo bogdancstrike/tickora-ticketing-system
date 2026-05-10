@@ -44,8 +44,6 @@ export interface TicketDto {
   reopened_at?: string | null
   assigned_at?: string | null
   first_response_at?: string | null
-  sla_status?: string | null
-  sla_due_at?: string | null
   assignee_user_id?: string | null
   created_by_user_id?: string | null
   requester_first_name?: string | null

@@ -89,6 +89,28 @@ function Panel({ title, icon, children }: { title: string; icon?: React.ReactNod
   )
 }
 
+function AdminChartLegend({ items }: { items: Array<{ color: string; label: string; description: string }> }) {
+  return (
+    <Flex wrap="wrap" gap={8} style={{ marginBottom: 8 }}>
+      {items.map((item) => (
+        <Tag key={item.label} color={item.color} style={{ marginInlineEnd: 0 }}>
+          {item.label}: {item.description}
+        </Tag>
+      ))}
+    </Flex>
+  )
+}
+
+function adminBarOption(data: Array<{ key: string; count: number }>, color: string) {
+  return {
+    tooltip: { trigger: 'axis' },
+    grid: { left: 8, right: 8, bottom: 8, top: 18, containLabel: true },
+    xAxis: { type: 'category', data: data.map((item) => labelize(item.key)) },
+    yAxis: { type: 'value' },
+    series: [{ name: 'Tickets', type: 'bar', data: data.map((item) => item.count), itemStyle: { color } }],
+  }
+}
+
 function WidgetCataloguePanel() {
   const { token } = antTheme.useToken()
   const qc = useQueryClient()
@@ -470,15 +492,16 @@ function SystemTab() {
     queryFn: listAdminWidgets,
     staleTime: 60_000,
   })
-  const hardening = [
-    { key: 'hot_path_indexes', label: 'Hot-path indexes migration', status: 'ready', detail: '0007_phase8_hardening_indexes' },
-    { key: 'phase9_indexes', label: 'Phase 9 perf indexes',         status: 'ready', detail: '9a1f3e0c2d10_phase9_perf_indexes' },
-    { key: 'tasks_lifecycle', label: 'Task lifecycle table',         status: 'ready', detail: 'e7b34cd9f211_tasks_lifecycle_table' },
-  ]
   const checks = health.data?.checks || {}
   const failedChecks = Object.entries(checks).filter(([, value]) => value !== 'ok')
   const activeWidgets = (widgets.data?.items || []).filter((w) => w.is_active).length
   const disabledWidgets = (widgets.data?.items || []).length - activeWidgets
+  const statusChart = adminBarOption(overview.data?.by_status || [], token.colorPrimary)
+  const priorityChart = adminBarOption(overview.data?.by_priority || [], token.colorWarning)
+  const sectorChart = adminBarOption(
+    (overview.data?.by_sector || []).map((item) => ({ key: item.sector_code, count: item.count })),
+    token.colorSuccess,
+  )
 
   return (
     <div style={{ display: 'grid', gap: 16 }}>
@@ -526,6 +549,36 @@ function SystemTab() {
       )}
 
       <Row gutter={[16, 16]}>
+        <Col xs={24} lg={8}>
+          <Panel title="Ticket status" icon={<BarChartOutlined />}>
+            <Typography.Text type="secondary" style={{ display: 'block', marginBottom: 8, fontSize: 12 }}>
+              Current workflow distribution for all non-deleted tickets.
+            </Typography.Text>
+            <AdminChartLegend items={[{ color: 'blue', label: 'Bars', description: 'ticket count per workflow status' }]} />
+            <ReactECharts option={statusChart} style={{ height: 220 }} />
+          </Panel>
+        </Col>
+        <Col xs={24} lg={8}>
+          <Panel title="Ticket priority" icon={<PieChartOutlined />}>
+            <Typography.Text type="secondary" style={{ display: 'block', marginBottom: 8, fontSize: 12 }}>
+              Priority mix across all non-deleted tickets.
+            </Typography.Text>
+            <AdminChartLegend items={[{ color: 'orange', label: 'Bars', description: 'ticket count per priority' }]} />
+            <ReactECharts option={priorityChart} style={{ height: 220 }} />
+          </Panel>
+        </Col>
+        <Col xs={24} lg={8}>
+          <Panel title="Sector backlog" icon={<ApartmentOutlined />}>
+            <Typography.Text type="secondary" style={{ display: 'block', marginBottom: 8, fontSize: 12 }}>
+              Current sector ownership by ticket count.
+            </Typography.Text>
+            <AdminChartLegend items={[{ color: 'green', label: 'Bars', description: 'tickets grouped by current sector' }]} />
+            <ReactECharts option={sectorChart} style={{ height: 220 }} />
+          </Panel>
+        </Col>
+      </Row>
+
+      <Row gutter={[16, 16]}>
       <Col xs={24} md={12}>
         <Panel title="System health" icon={<DatabaseOutlined />}>
           <div style={{ display: 'grid', gap: 12 }}>
@@ -542,19 +595,6 @@ function SystemTab() {
         </Panel>
       </Col>
       <Col xs={24} md={12}>
-        <Panel title="Infrastructure posture" icon={<SafetyCertificateOutlined />}>
-          <List
-            size="small"
-            dataSource={hardening}
-            renderItem={(item) => (
-              <List.Item extra={<Tag color="green">{item.status}</Tag>}>
-                <List.Item.Meta title={item.label} description={item.detail} />
-              </List.Item>
-            )}
-          />
-        </Panel>
-      </Col>
-      <Col xs={24} md={12}>
         <Panel title="Queue posture" icon={<UnorderedListOutlined />}>
           <MetricPanel values={overview.data?.queues || {}} />
         </Panel>
@@ -568,11 +608,6 @@ function SystemTab() {
           <Typography.Text type="secondary" style={{ display: 'block', marginTop: 8 }}>
             Sync the catalogue from Configuration when new widget types are deployed.
           </Typography.Text>
-        </Panel>
-      </Col>
-      <Col xs={24}>
-        <Panel title="SLA posture" icon={<SafetyCertificateOutlined />}>
-          <MetricPanel values={{ breached: overview.data?.sla.breached, due_24h: overview.data?.sla.due_24h }} />
         </Panel>
       </Col>
       <Col xs={24}>
@@ -720,7 +755,6 @@ export function AdminPage() {
     [t('admin.kpis.total_users'),     kpis.users],
     [t('admin.kpis.enabled_users'),   kpis.active_users],
     [t('admin.kpis.active_tickets'),  kpis.active_tickets],
-    [t('admin.kpis.sla_breached'),    kpis.sla_breached],
     [t('admin.kpis.new_today'),       kpis.new_today],
   ]
 

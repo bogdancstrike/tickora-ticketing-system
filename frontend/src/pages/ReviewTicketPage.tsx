@@ -32,7 +32,7 @@ interface MetadataKeyDef {
 /**
  * Compact metadata editor used in the right-side sidebar. Lets a
  * distributor capture the few extra fields that don't fit the structured
- * sector/priority/category/type form (e.g. SLA tier, customer tier).
+ * sector/priority/category/type form (e.g. customer tier or routing flags).
  */
 function MetadataPanel({
   ticketId, metadataKeys,

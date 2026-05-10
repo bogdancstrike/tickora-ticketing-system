@@ -337,7 +337,7 @@ export function ProfilePage() {
                 <Col xs={12} md={6}><Statistic title="Active assignments" value={personal?.kpis?.active ?? '-'} /></Col>
                 <Col xs={12} md={6}><Statistic title="Done · last 7d" value={personal?.kpis?.done_last_7d ?? '-'} /></Col>
                 <Col xs={12} md={6}><Statistic title="Avg resolution (h)" value={personal?.kpis?.avg_resolution_hours ?? '-'} /></Col>
-                <Col xs={12} md={6}><Statistic title="At-risk SLA" value={personal?.kpis?.sla_at_risk ?? '-'} styles={{ content: { color: '#fa8c16' } }} /></Col>
+                <Col xs={12} md={6}><Statistic title="Reopened" value={personal?.kpis?.reopened ?? '-'} styles={{ content: { color: '#fa8c16' } }} /></Col>
               </Row>
             </Card>
           </div>

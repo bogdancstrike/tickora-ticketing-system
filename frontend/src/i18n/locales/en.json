@@ -127,8 +127,7 @@
       "assigned": "Assigned",
       "first_response": "First response",
       "done": "Done",
-      "closed": "Closed",
-      "sla_due": "SLA due"
+      "closed": "Closed"
     },
     "comments": {
       "post": "Post",
@@ -224,13 +223,11 @@
       "total_users": "Total users",
       "enabled_users": "Enabled users",
       "active_tickets": "Active tickets",
-      "sla_breached": "SLA breached",
       "new_today": "New today"
     },
     "system": {
       "system_health":     "System health",
       "infra_posture":     "Infrastructure posture",
-      "sla_posture":       "SLA posture",
       "background_tasks":  "Background tasks",
       "failed_recent":     "Failed (recent)",
       "running":           "Running",
@@ -269,14 +266,14 @@
     "monitor": {
       "tabs": "Switch between the views available to your role: global operations, distribution queues, sector workload, and your personal/requester workload. Each tab is server-filtered for your permissions.",
       "refresh": "Refresh is placed with the report controls so it updates the operational data without competing with the page title or tutorial button.",
-      "kpis": "These KPI tiles summarize the selected scope: active work, done work, SLA risk, stale tickets, and other counts the current role is allowed to inspect.",
+      "kpis": "These KPI tiles summarize the selected scope: active work, completed work, stale tickets, reopened items, and other counts the current role is allowed to inspect.",
       "workload": "Workload details compare active and completed tickets per assignee. Chiefs and admins use this to spot overload, unassigned work, and distribution imbalance.",
       "range": "Change the time window for the trend chart. Short windows are useful during incidents; longer windows show whether throughput is improving.",
       "cache": "The created-vs-closed chart shows ticket intake and closure trends for the selected window. Monitor aggregates are cached briefly, so repeated reads stay fast."
     },
     "admin": {
       "kpis": "These cards summarize system administration: total users, active sessions from the 5-minute presence window, sectors, tickets, and current operational counters.",
-      "tabs": "Use the tabs to manage users, sector membership, SLA and metadata configuration, widget catalogue entries, and system health. Each change is still permission-checked on the API."
+      "tabs": "Use the tabs to manage users, sector membership, metadata configuration, widget catalogue entries, and system health. Each change is still permission-checked on the API."
     },
     "create": {
       "beneficiary": "The beneficiary type is derived from your account role. Internal users file requests for internal beneficiaries; external users provide requester contact details.",

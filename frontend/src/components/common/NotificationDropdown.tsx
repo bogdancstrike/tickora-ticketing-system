@@ -22,8 +22,6 @@ const TYPE_COLOR: Record<string, string> = {
   ticket_unassigned: 'orange',
   status_changed:    'green',
   comment_created:   'geekblue',
-  sla_approaching:   'orange',
-  sla_breached:      'red',
 }
 
 function destinationFor(item: NotificationItem, roles: string[]): string | null {

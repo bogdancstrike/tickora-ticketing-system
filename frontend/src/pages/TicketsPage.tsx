@@ -688,11 +688,6 @@ function TicketSidebar({ ticket }: { ticket: TicketDto }) {
               {!ticket.assignee_usernames?.length && 'Unassigned'}
             </Space>
           </Descriptions.Item>
-          <Descriptions.Item label="SLA">
-            {ticket.sla_status
-              ? <Tag color={ticket.sla_status === 'breached' ? 'red' : ticket.sla_status === 'at_risk' ? 'orange' : 'green'}>{ticket.sla_status}</Tag>
-            : '—'}
-          </Descriptions.Item>
         </Descriptions>
       </Card>
       <Card size="small" title="Requester">
@@ -712,7 +707,6 @@ function TicketSidebar({ ticket }: { ticket: TicketDto }) {
           <Descriptions.Item label="First response">{fmt(ticket.first_response_at)}</Descriptions.Item>
           <Descriptions.Item label="Done">{fmt(ticket.done_at)}</Descriptions.Item>
           <Descriptions.Item label="Closed">{fmt(ticket.closed_at)}</Descriptions.Item>
-          <Descriptions.Item label="SLA due">{fmt(ticket.sla_due_at)}</Descriptions.Item>
         </Descriptions>
       </Card>
       <TicketLinksPanel ticketId={ticket.id} />
