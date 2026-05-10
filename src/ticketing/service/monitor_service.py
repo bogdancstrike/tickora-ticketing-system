@@ -75,27 +75,65 @@ def monitor_overview(db: Session, principal: Principal, *, days: int = 30) -> di
 
 
 def monitor_global(db: Session, principal: Principal) -> dict[str, Any]:
+    """Global aggregate payload (admin / auditor only).
+
+    The 9 sub-queries below each scan the full `tickets` table, so on
+    1M+ rows this takes seconds when nothing is cached. We memoise the
+    *entire* payload for 5 minutes — admins rarely need second-by-second
+    freshness on a "total tickets" headline, and the cache is shared
+    across every admin/auditor (no per-user variation).
+
+    The `monitor.overview` outer cache (60 s) sits on top of this; with
+    both warm, an overview hit is two Redis GETs.
+    """
     if not rbac.can_view_global_dashboard(principal):
         raise PermissionDeniedError("not allowed to view global monitor")
     logger.info("monitor global requested", extra={"username": principal.username})
 
-    return {
-        "kpis": _global_kpis(db),
-        "by_status": _breakdown(db, Ticket.status),
-        "by_priority": _breakdown(db, Ticket.priority),
-        "by_beneficiary_type": _breakdown(db, Ticket.beneficiary_type),
-        "by_category": _breakdown(db, Ticket.category),
-        "by_sector": _sector_breakdown(db),
-        "top_backlog_sectors": _sector_breakdown(db, active_only=True, limit=5),
-        "stale_tickets": _stale_tickets(db, principal, hours=24, limit=10),
-        "bottleneck_analysis": _bottleneck_analysis(db, days=30),
-    }
+    def _produce() -> dict[str, Any]:
+        return {
+            "kpis": _global_kpis(db),
+            "by_status": _breakdown(db, Ticket.status),
+            "by_priority": _breakdown(db, Ticket.priority),
+            "by_beneficiary_type": _breakdown(db, Ticket.beneficiary_type),
+            "by_category": _breakdown(db, Ticket.category),
+            "by_sector": _sector_breakdown(db),
+            "top_backlog_sectors": _sector_breakdown(db, active_only=True, limit=5),
+            "stale_tickets": _stale_tickets(db, principal, hours=24, limit=10),
+            "bottleneck_analysis": _bottleneck_analysis(db, days=30),
+        }
+
+    from src.common.cache import cached_call
+    return cached_call(
+        namespace="monitor.global",
+        key_parts=("v1",),  # global → single bucket
+        ttl=300,
+        producer=_produce,
+    )
 
 
 def monitor_distributor(db: Session, principal: Principal) -> dict[str, Any]:
+    """Distributor triage view. Cached for 2 minutes globally — every
+    distributor sees the same data (no per-user filter), and a 2-minute
+    staleness window beats paying ~6 full-scan queries per overview.
+    """
     if not (principal.is_admin or principal.is_distributor):
         raise PermissionDeniedError("not allowed to view distributor monitor")
 
+    from src.common.cache import cached_call
+
+    def _produce() -> dict[str, Any]:
+        return _build_monitor_distributor(db)
+
+    return cached_call(
+        namespace="monitor.distributor",
+        key_parts=("v1",),
+        ttl=120,
+        producer=_produce,
+    )
+
+
+def _build_monitor_distributor(db: Session) -> dict[str, Any]:
     threshold_24h = datetime.now(timezone.utc) - timedelta(hours=24)
 
     # Tickets transitioned out of pending in the last 24 h. Build the inner
@@ -138,6 +176,28 @@ def monitor_distributor(db: Session, principal: Principal) -> dict[str, Any]:
 
 
 def monitor_sectors(db: Session, principal: Principal) -> list[dict[str, Any]]:
+    """Cached entry to the per-sector aggregates (2-minute TTL).
+
+    Cache key partitions on the principal's allowed sector set so admin
+    (sees all) and a chief (sees their sectors only) get different
+    payloads. The `_build_monitor_sectors` helper underneath does the
+    grouped-aggregate work.
+    """
+    from src.common.cache import cached_call
+    if rbac.can_view_global_dashboard(principal):
+        scope_key = "global"
+    else:
+        scope_key = "sectors:" + ",".join(sorted(principal.all_sectors))
+
+    return cached_call(
+        namespace="monitor.sectors",
+        key_parts=("v1", scope_key),
+        ttl=120,
+        producer=lambda: _build_monitor_sectors(db, principal),
+    )
+
+
+def _build_monitor_sectors(db: Session, principal: Principal) -> list[dict[str, Any]]:
     """List per-sector KPIs and breakdowns.
 
     Used to be O(sectors × 7) queries — every visible sector triggered
