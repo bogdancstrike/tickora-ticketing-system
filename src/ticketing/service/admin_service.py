@@ -27,7 +27,7 @@ from src.iam.principal import (
     ROLE_SERVICE,
     Principal,
 )
-from src.ticketing import events
+from src.audit import events
 from src.ticketing.models import (
     AuditEvent,
     MetadataKeyDefinition,
@@ -39,7 +39,8 @@ from src.ticketing.models import (
     Ticket,
     TicketMetadata,
 )
-from src.ticketing.service import audit_service, monitor_service
+from src.audit import service as audit_service
+from src.ticketing.service import monitor_service
 from src.ticketing.state_machine import ACTIVE_STATUSES
 
 ADMIN_ROLES = {

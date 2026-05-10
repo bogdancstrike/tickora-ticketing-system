@@ -18,7 +18,7 @@ from src.core.errors import (
 from src.common.spans import set_attr, span
 from src.iam import rbac
 from src.iam.principal import Principal
-from src.ticketing import events as audit_events
+from src.audit import events as audit_events
 from src.ticketing import state_machine as sm
 from src.ticketing.models import (
     Sector,
@@ -30,7 +30,8 @@ from src.ticketing.models import (
     TicketSectorHistory,
     TicketStatusHistory,
 )
-from src.ticketing.service import audit_service, sla_service
+from src.audit import service as audit_service
+from src.ticketing.service import sla_service
 from src.ticketing.service.ticket_service import (
     _assignees_for_ticket,
     _beneficiary_user_id,

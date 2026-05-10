@@ -8,8 +8,9 @@ from src.core.errors import PermissionDeniedError
 from src.iam import rbac
 from src.iam.principal import Principal
 from src.ticketing.models import Ticket, TicketMetadata
-from src.ticketing.service import audit_service, ticket_service
-from src.ticketing import events
+from src.audit import service as audit_service
+from src.ticketing.service import ticket_service
+from src.audit import events
 
 def list_by_ticket(db: Session, principal: Principal, ticket_id: str) -> List[TicketMetadata]:
     """List all metadata for a specific ticket."""

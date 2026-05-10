@@ -5,7 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from src.iam.principal import SectorMembership
-from src.ticketing import events
+from src.audit import events
 from src.ticketing.models import AuditEvent, TicketAssignmentHistory, TicketStatusHistory
 from src.ticketing.service import workflow_service
 

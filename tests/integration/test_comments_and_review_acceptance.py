@@ -18,7 +18,7 @@ from src.iam.principal import (
     ROLE_DISTRIBUTOR,
     ROLE_INTERNAL_USER,
 )
-from src.ticketing import events
+from src.audit import events
 from src.ticketing.models import AuditEvent, TicketComment, TicketSectorHistory
 from src.ticketing.service import comment_service, review_service
 

@@ -8,9 +8,10 @@ from sqlalchemy.orm import Session
 from src.core.errors import PermissionDeniedError, ValidationError
 from src.common.spans import set_attr, span
 from src.iam.principal import Principal
-from src.ticketing import events
+from src.audit import events
 from src.ticketing.models import Ticket
-from src.ticketing.service import audit_service, comment_service, ticket_service, workflow_service
+from src.audit import service as audit_service
+from src.ticketing.service import comment_service, ticket_service, workflow_service
 
 ALLOWED_PRIORITIES = {"low", "medium", "high", "critical"}
 

@@ -10,9 +10,10 @@ from src.core.errors import BusinessRuleError, NotFoundError, PermissionDeniedEr
 from src.iam import rbac
 from src.iam.models import User
 from src.iam.principal import Principal
-from src.ticketing import events
+from src.audit import events
 from src.ticketing.models import TicketComment
-from src.ticketing.service import audit_service, ticket_service
+from src.audit import service as audit_service
+from src.ticketing.service import ticket_service
 from src.tasking.producer import publish
 
 EDIT_WINDOW = timedelta(minutes=15)

@@ -12,11 +12,12 @@ from src.common.spans import set_attr, span
 from src.iam.principal import Principal
 from src.iam import rbac
 from src.iam.models import User
-from src.ticketing import events
+from src.audit import events
 from src.ticketing.models import (
     Beneficiary, Sector, Ticket, TicketAssignee, TicketSectorAssignment,
 )
-from src.ticketing.service import audit_service, beneficiary_service, sla_service
+from src.audit import service as audit_service
+from src.ticketing.service import beneficiary_service, sla_service
 from src.tasking.producer import publish
 
 

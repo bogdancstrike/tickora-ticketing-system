@@ -5,7 +5,7 @@ from src.core.db import get_db
 from src.iam.decorators import require_authenticated
 from src.iam.principal import Principal
 from src.ticketing.serializers import serialize_audit_event
-from src.ticketing.service import audit_service
+from src.audit import service as audit_service
 
 
 def _limit() -> int:

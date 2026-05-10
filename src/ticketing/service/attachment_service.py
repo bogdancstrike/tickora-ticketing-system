@@ -14,9 +14,10 @@ from src.core import object_storage
 from src.core.errors import NotFoundError, PermissionDeniedError, ValidationError
 from src.iam import rbac
 from src.iam.principal import Principal
-from src.ticketing import events
+from src.audit import events
 from src.ticketing.models import TicketAttachment, TicketComment
-from src.ticketing.service import audit_service, ticket_service
+from src.audit import service as audit_service
+from src.ticketing.service import ticket_service
 
 SAFE_NAME = re.compile(r"[^A-Za-z0-9._-]+")
 
