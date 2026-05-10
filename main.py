@@ -53,7 +53,7 @@ def main() -> None:
 
     # Best-effort DB warm-up. Migrations run separately via Alembic.
     try:
-        from src.core.db import get_engine
+        from src.common.db import get_engine
         from sqlalchemy import text
         with get_engine().connect() as conn:
             conn.execute(text("SELECT 1"))
@@ -86,8 +86,8 @@ def main() -> None:
 
     if handles.app:
         # Install correlation + error hooks on the Flask app QF created.
-        from src.core.correlation import install_flask_hooks
-        from src.core.errors import install_flask_error_handlers
+        from src.common.correlation import install_flask_hooks
+        from src.common.errors import install_flask_error_handlers
 
         install_flask_hooks(handles.app)
         install_flask_error_handlers(handles.app)

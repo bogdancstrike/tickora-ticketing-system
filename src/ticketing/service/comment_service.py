@@ -6,7 +6,7 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from src.core.errors import BusinessRuleError, NotFoundError, PermissionDeniedError, ValidationError
+from src.common.errors import BusinessRuleError, NotFoundError, PermissionDeniedError, ValidationError
 from src.iam import rbac
 from src.iam.models import User
 from src.iam.principal import Principal

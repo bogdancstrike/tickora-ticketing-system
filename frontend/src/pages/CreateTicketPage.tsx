@@ -7,8 +7,11 @@ import {
 import { SaveOutlined } from '@ant-design/icons'
 import { createTicket, type CreateTicketPayload } from '@/api/tickets'
 import { useSessionStore } from '@/stores/sessionStore'
+import { ProductTour, TourInfoButton } from '@/components/common/ProductTour'
+import { useTranslation } from 'react-i18next'
 
 export function CreateTicketPage() {
+  const { t } = useTranslation()
   const [form] = Form.useForm<CreateTicketPayload>()
   const [msg, holder] = message.useMessage()
   const navigate = useNavigate()
@@ -33,10 +36,13 @@ export function CreateTicketPage() {
   return (
     <div style={{ padding: 24, display: 'grid', gap: 16, maxWidth: 920 }}>
       {holder}
-      <div>
-        <Typography.Title level={3} style={{ margin: 0 }}>Create Ticket</Typography.Title>
-        <Typography.Text type="secondary">Register a beneficiary request for distribution and follow-up</Typography.Text>
-      </div>
+      <Flex justify="space-between" align="center" wrap="wrap" gap={12}>
+        <div>
+          <Typography.Title level={3} style={{ margin: 0 }}>Create Ticket</Typography.Title>
+          <Typography.Text type="secondary">Register a beneficiary request for distribution and follow-up</Typography.Text>
+        </div>
+        <TourInfoButton pageKey="create-ticket" />
+      </Flex>
 
       {create.error && <Alert type="error" message={create.error.message} showIcon />}
 
@@ -49,6 +55,7 @@ export function CreateTicketPage() {
         >
           <Form.Item name="beneficiary_type" hidden><Input /></Form.Item>
           <Alert
+            data-tour-id="create-beneficiary"
             showIcon
             type="info"
             style={{ marginBottom: 16 }}
@@ -80,14 +87,14 @@ export function CreateTicketPage() {
             </>
           )}
 
-          <Form.Item name="title" label="Title" rules={[{ max: 500 }]}>
+          <Form.Item name="title" label="Title" rules={[{ max: 500 }]} data-tour-id="create-title">
             <Input placeholder="Short summary" />
           </Form.Item>
-          <Form.Item name="txt" label="Description" rules={[{ required: true, min: 5, max: 20000 }]}>
+          <Form.Item name="txt" label="Description" rules={[{ required: true, min: 5, max: 20000 }]} data-tour-id="create-description">
             <Input.TextArea rows={8} placeholder="Describe the request, impact, affected assets, and expected outcome" />
           </Form.Item>
 
-          <Flex justify="end" gap={8}>
+          <Flex justify="end" gap={8} data-tour-id="create-actions">
             <Button onClick={() => navigate('/tickets')}>Cancel</Button>
             <Button type="primary" htmlType="submit" icon={<SaveOutlined />} loading={create.isPending}>
               Create
@@ -95,6 +102,15 @@ export function CreateTicketPage() {
           </Flex>
         </Form>
       </div>
+      <ProductTour
+        pageKey="create-ticket"
+        steps={[
+          { target: '[data-tour-id="create-beneficiary"]', content: t('tour.create.beneficiary') },
+          { target: '[data-tour-id="create-title"]', content: t('tour.create.title') },
+          { target: '[data-tour-id="create-description"]', content: t('tour.create.description') },
+          { target: '[data-tour-id="create-actions"]', content: t('tour.create.actions') },
+        ]}
+      />
     </div>
   )
 }

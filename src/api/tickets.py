@@ -3,9 +3,9 @@ from flask import request as flask_request
 from pydantic import ValidationError as PydValidationError
 
 from src.config import Config
-from src.core import rate_limiter
-from src.core.db import get_db
-from src.core.errors import ValidationError
+from src.common import rate_limiter
+from src.common.db import get_db
+from src.common.errors import ValidationError
 from src.iam.decorators import require_authenticated
 from src.iam.principal import Principal
 from src.ticketing.schemas import CreateTicketIn, ListTicketsQuery

@@ -6,7 +6,7 @@ from framework.commons.logger import logger
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from src.core.db import get_db
+from src.common.db import get_db
 from src.config import Config
 from src.tasking.registry import register_task
 from src.ticketing.models import Beneficiary, Notification, Ticket, TicketAssignee, SectorMembership, Sector
@@ -511,7 +511,7 @@ def _publish_to_sse(user_id: str, notification: Notification):
         notification: The Notification model instance to publish.
     """
     try:
-        from src.core.redis_client import get_redis
+        from src.common.redis_client import get_redis
         redis = get_redis()
         channel = f"notifications:{user_id}"
         data = {

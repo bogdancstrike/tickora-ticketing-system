@@ -8,8 +8,8 @@ from sqlalchemy import desc, select, update
 from flask import request as flask_request
 
 from framework.commons.logger import logger
-from src.core.db import get_db
-from src.core.redis_client import get_redis
+from src.common.db import get_db
+from src.common.redis_client import get_redis
 from src.iam.decorators import require_authenticated
 from src.iam.principal import Principal
 from src.ticketing.models import Notification

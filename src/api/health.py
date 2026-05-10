@@ -1,8 +1,8 @@
 """Health, liveness, readiness endpoints. QF handler signature."""
 from sqlalchemy import text
 
-from src.core.db import get_engine
-from src.core.redis_client import get_redis
+from src.common.db import get_engine
+from src.common.redis_client import get_redis
 from src.common.spans import set_attr, span
 from framework.commons.logger import logger as log
 

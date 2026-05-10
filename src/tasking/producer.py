@@ -6,8 +6,8 @@ from typing import Any, Dict, Optional
 from kafka import KafkaProducer
 from framework.commons.logger import logger
 from src.config import Config
-from src.core.correlation import get_correlation_id
-from src.core.db import enqueue_after_commit
+from src.common.correlation import get_correlation_id
+from src.common.db import enqueue_after_commit
 
 _PRODUCER_LOCK = threading.Lock()
 _PRODUCER: Optional[KafkaProducer] = None

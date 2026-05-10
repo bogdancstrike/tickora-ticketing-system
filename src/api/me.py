@@ -1,7 +1,7 @@
 """GET /api/me — return the authenticated principal as JSON."""
 from sqlalchemy import select
 
-from src.core.db import get_db
+from src.common.db import get_db
 from src.iam.decorators import require_authenticated
 from src.iam.keycloak_admin import KeycloakAdminClient
 from src.iam.models import User

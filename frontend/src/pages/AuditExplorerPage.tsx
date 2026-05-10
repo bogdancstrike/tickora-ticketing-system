@@ -12,6 +12,8 @@ import type { ColumnsType, TablePaginationConfig } from 'antd/es/table'
 import type { FilterValue, SorterResult, FilterDropdownProps } from 'antd/es/table/interface'
 import { ReloadOutlined, SearchOutlined } from '@ant-design/icons'
 import { listAudit, listTicketAudit, type AuditEventDto } from '@/api/tickets'
+import { ProductTour, TourInfoButton } from '@/components/common/ProductTour'
+import { useTranslation } from 'react-i18next'
 
 const { RangePicker } = DatePicker
 
@@ -95,6 +97,7 @@ interface AuditFilterState {
 }
 
 export function AuditExplorerPage() {
+  const { t } = useTranslation()
   const { token } = antTheme.useToken()
   const [params, setParams] = useState<AuditFilterState>({ sort_by: 'created_at', sort_dir: 'desc' })
   const [graphTicketId, setGraphTicketId] = useState<string | null>(null)
@@ -212,10 +215,13 @@ export function AuditExplorerPage() {
           <Typography.Title level={3} style={{ margin: 0 }}>Audit Explorer</Typography.Title>
           <Typography.Text type="secondary">Global audit ledger for admins and auditors</Typography.Text>
         </div>
-        <Button icon={<ReloadOutlined />} onClick={() => audit.refetch()} />
+        <Space>
+          <TourInfoButton pageKey="audit" />
+          <Button icon={<ReloadOutlined />} onClick={() => audit.refetch()} data-tour-id="audit-refresh" />
+        </Space>
       </Flex>
 
-      <Card size="small" styles={{ body: { padding: 12 } }}>
+      <Card size="small" styles={{ body: { padding: 12 } }} data-tour-id="audit-filters">
         <Form layout="inline" onFinish={onFilter}>
           <Form.Item name="q" tooltip="Search ticket ID (UUID) or actor username">
             <Input allowClear placeholder="Quick search · ticket UUID or username"
@@ -237,7 +243,7 @@ export function AuditExplorerPage() {
       </Card>
 
       {audit.error && <Alert type="error" showIcon message={audit.error.message} />}
-      <div style={{ border: `1px solid ${token.colorBorderSecondary}`, borderRadius: 8, overflow: 'hidden' }}>
+      <div style={{ border: `1px solid ${token.colorBorderSecondary}`, borderRadius: 8, overflow: 'hidden' }} data-tour-id="audit-table">
         <Table
           rowKey="id"
           loading={audit.isLoading}
@@ -280,6 +286,7 @@ export function AuditExplorerPage() {
       </div>
 
       <Drawer
+        data-tour-id="audit-drawer"
         title={graphTicketId ? `Ticket evolution · ${graphTicketId}` : 'Ticket evolution'}
         open={!!graphTicketId}
         size="large"
@@ -292,6 +299,14 @@ export function AuditExplorerPage() {
       >
         {graphTicketId && <TicketEvolutionGraph ticketId={graphTicketId} />}
       </Drawer>
+      <ProductTour
+        pageKey="audit"
+        steps={[
+          { target: '[data-tour-id="audit-filters"]', content: t('tour.audit.filters') },
+          { target: '[data-tour-id="audit-table"]', content: t('tour.audit.table') },
+          { target: '[data-tour-id="audit-refresh"]', content: t('tour.audit.refresh') },
+        ]}
+      />
     </div>
   )
 }

@@ -1,7 +1,7 @@
 """Unit tests for src/core/pagination.py."""
 from datetime import datetime, timezone
 
-from src.core.pagination import Cursor, clamp_limit
+from src.common.pagination import Cursor, clamp_limit
 
 
 def test_encode_decode_roundtrip_str():

@@ -1,6 +1,6 @@
 """Metadata HTTP endpoints."""
 from flask import request as flask_request
-from src.core.db import get_db
+from src.common.db import get_db
 from src.iam.decorators import require_authenticated
 from src.iam.principal import Principal
 from src.ticketing.serializers import serialize_metadata

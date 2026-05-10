@@ -27,7 +27,7 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import INET, JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
-from src.core.db import Base
+from src.common.db import Base
 
 
 def _uuid() -> str:

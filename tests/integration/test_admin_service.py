@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 from sqlalchemy.orm import Session
 
-from src.core.errors import PermissionDeniedError, ValidationError
+from src.common.errors import PermissionDeniedError, ValidationError
 from src.iam.principal import ROLE_ADMIN
 from src.ticketing.service import admin_service
 

@@ -16,7 +16,7 @@ from __future__ import annotations
 import pytest
 from sqlalchemy.orm import Session
 
-from src.core.errors import NotFoundError, PermissionDeniedError, ValidationError
+from src.common.errors import NotFoundError, PermissionDeniedError, ValidationError
 from src.iam.principal import (
     SectorMembership,
     ROLE_ADMIN,

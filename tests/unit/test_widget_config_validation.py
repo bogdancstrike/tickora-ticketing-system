@@ -9,7 +9,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from src.core.errors import PermissionDeniedError, ValidationError
+from src.common.errors import PermissionDeniedError, ValidationError
 from src.iam.principal import (
     ROLE_ADMIN,
     ROLE_AUDITOR,
@@ -82,7 +82,7 @@ class TestValidateWidgetConfig:
 
     def test_ticket_id_routes_through_visibility_check(self, monkeypatch):
         """ticket_service.get is the canonical visibility check; we delegate."""
-        from src.core.errors import NotFoundError
+        from src.common.errors import NotFoundError
 
         called = {}
 

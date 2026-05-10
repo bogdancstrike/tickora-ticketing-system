@@ -46,7 +46,7 @@ export function WatchButton({ ticketId, showCount = true }: WatchButtonProps) {
   })
 
   const unsubscribe = useMutation({
-    mutationFn: () => removeWatcher(ticketId, user!.id),
+    mutationFn: () => removeWatcher(ticketId, user!.id!),
     onSuccess: async () => {
       msg.info('Unsubscribed.')
       await queryClient.invalidateQueries({ queryKey: ['watchers', ticketId] })

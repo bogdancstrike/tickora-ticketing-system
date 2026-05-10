@@ -21,7 +21,7 @@ from typing import Any, Optional
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
-from src.core.db import get_db
+from src.common.db import get_db
 from src.tasking.models import (
     STATUS_COMPLETED,
     STATUS_FAILED,

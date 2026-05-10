@@ -99,7 +99,7 @@ class TestPostgresReconnect:
     inside SQLAlchemy."""
 
     def test_engine_configured_with_pre_ping(self):
-        from src.core.db import get_engine
+        from src.common.db import get_engine
         engine = get_engine()
         # SQLAlchemy stores the flag on the pool.
         assert engine.pool._pre_ping is True

@@ -9,8 +9,8 @@ from typing import Callable, Iterable
 
 from flask import request as flask_request
 
-from src.core.correlation import set_user_id
-from src.core.errors import AuthenticationError, PermissionDeniedError, TickoraError
+from src.common.correlation import set_user_id
+from src.common.errors import AuthenticationError, PermissionDeniedError, TickoraError
 from src.common.spans import set_attr, span
 from src.iam.principal import Principal
 from src.iam.service import principal_from_claims
@@ -27,7 +27,7 @@ def _extract_bearer() -> str:
     # Uses a short-lived one-time ticket from Redis.
     ticket = flask_request.args.get("sse_ticket")
     if ticket:
-        from src.core.redis_client import get_redis
+        from src.common.redis_client import get_redis
         redis = get_redis()
         if redis:
             token = redis.get(f"sse_ticket:{ticket}")

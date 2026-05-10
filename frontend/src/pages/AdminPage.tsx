@@ -173,7 +173,7 @@ function WidgetCataloguePanel() {
         open={!!editing}
         onCancel={() => setEditing(null)}
         footer={null}
-        destroyOnHide
+        destroyOnHidden
       >
         <Form
           layout="vertical"
@@ -400,6 +400,7 @@ function TicketMetadatasPanel() {
 }
 
 function ConfigTab() {
+  const { t } = useTranslation()
   const qc = useQueryClient()
   const [editing, setEditing] = useState<AdminMetadataKey | null>(null)
   const keys = useQuery({ queryKey: ['adminMetadataKeys'], queryFn: listAdminMetadataKeys, staleTime: 60_000 })
@@ -652,7 +653,7 @@ export function AdminPage() {
       <ProductTour
         pageKey="admin"
         steps={[
-          { target: '[data-tour-id="admin-kpis"]', content: t('tour.admin.kpis'), disableBeacon: true },
+          { target: '[data-tour-id="admin-kpis"]', content: t('tour.admin.kpis') },
           { target: '[data-tour-id="admin-tabs"]', content: t('tour.admin.tabs') },
         ]}
       />

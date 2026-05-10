@@ -8,7 +8,7 @@ from framework.commons.logger import logger
 from framework.tracing import get_tracer
 
 from src.config import Config
-from src.core.correlation import set_correlation_id
+from src.common.correlation import set_correlation_id
 from src.tasking.registry import get_handler
 
 

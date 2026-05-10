@@ -16,7 +16,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 from sqlalchemy.orm import Session
 
-from src.core.errors import BusinessRuleError, PermissionDeniedError, ValidationError
+from src.common.errors import BusinessRuleError, PermissionDeniedError, ValidationError
 from src.iam.principal import (
     SectorMembership,
     ROLE_ADMIN,

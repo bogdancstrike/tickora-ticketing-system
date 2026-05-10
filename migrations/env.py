@@ -1,4 +1,4 @@
-"""Alembic env.py — drives migrations from src.core.db.Base.metadata."""
+"""Alembic env.py — drives migrations from src.common.db.Base.metadata."""
 from logging.config import fileConfig
 from pathlib import Path
 import sys
@@ -10,7 +10,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 from src.config import Config as AppConfig  # noqa: E402
-from src.core.db import Base  # noqa: E402
+from src.common.db import Base  # noqa: E402
 
 # Import models so their tables register with Base.metadata.
 from src.iam import models as _iam_models  # noqa: F401, E402

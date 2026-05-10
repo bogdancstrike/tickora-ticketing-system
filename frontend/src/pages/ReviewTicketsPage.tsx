@@ -8,6 +8,7 @@ import { listTickets, type TicketDto } from '@/api/tickets'
 import { StatusTag } from '@/components/common/StatusTag'
 import { PriorityTag } from '@/components/common/PriorityTag'
 import { fmtDateTime, fmtRelative } from '@/components/common/format'
+import { ProductTour, TourInfoButton } from '@/components/common/ProductTour'
 
 export function ReviewTicketsPage() {
   const navigate = useNavigate()
@@ -144,7 +145,8 @@ export function ReviewTicketsPage() {
     query: any, 
     pagination: { current: number, pageSize: number }, 
     setPagination: any,
-    emptyText: string
+    emptyText: string,
+    tourId: string
   ) => (
     <div style={{
       background: token.colorBgContainer,
@@ -152,7 +154,7 @@ export function ReviewTicketsPage() {
       borderRadius: 8,
       overflow: 'hidden',
       boxShadow: token.boxShadowTertiary,
-    }}>
+    }} data-tour-id={tourId}>
       <Flex justify="space-between" align="center" wrap="wrap" gap={12} style={{ padding: '14px 16px', borderBottom: `1px solid ${token.colorBorderSecondary}` }}>
         <div>
           <Typography.Title level={5} style={{ margin: 0 }}>{title}</Typography.Title>
@@ -191,6 +193,7 @@ export function ReviewTicketsPage() {
           <Typography.Text type="secondary">Tickets split by review/routing status</Typography.Text>
         </div>
         <Space wrap>
+          <TourInfoButton pageKey="review-queue" />
           <Button icon={<ReloadOutlined />} onClick={() => { pendingQueue.refetch(); reviewedQueue.refetch() }} />
         </Space>
       </Flex>
@@ -205,6 +208,7 @@ export function ReviewTicketsPage() {
         pendingPage,
         setPendingPage,
         'No tickets waiting for review',
+        'review-pending',
       )}
 
       {tablePanel(
@@ -214,7 +218,15 @@ export function ReviewTicketsPage() {
         reviewedPage,
         setReviewedPage,
         'No reviewed tickets in the queue',
+        'review-reviewed',
       )}
+      <ProductTour
+        pageKey="review-queue"
+        steps={[
+          { target: '[data-tour-id="review-pending"]', content: 'These tickets still need triage. Open one to set sector, priority, metadata, and assignment before it enters normal work queues.' },
+          { target: '[data-tour-id="review-reviewed"]', content: 'This section shows tickets already routed by distribution, so you can quickly check recent review decisions and assignments.' },
+        ]}
+      />
 
       <Modal
         title="Assigned Users"

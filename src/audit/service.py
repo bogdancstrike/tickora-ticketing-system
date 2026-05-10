@@ -3,17 +3,16 @@
 Module dependencies (the boundary that lets `src/audit/` ship as a
 microservice):
 
-  * `src.core` — `db`, `errors`, `correlation`. Required.
+  * `src.common` — `db`, `errors`, `correlation`, request metadata.
+    Required shared platform package.
   * `src.iam`  — `rbac` predicates + `Principal`. Required.
-  * `src.common.request_metadata` — for trusted-proxy IP extraction.
-    Required (but `src.common` is a self-contained companion package).
   * **No coupling to `src.ticketing`.** Per-ticket visibility checks
     used to import `ticket_service.get` directly; that's now an
     injectable resolver (see `set_ticket_resolver` below). The host
     module registers it at boot.
 
 A microservice extraction needs to:
-  1. Copy `src/audit/`, `src/core/`, `src/common/`, `src/iam/`, and the
+  1. Copy `src/audit/`, `src/common/`, `src/iam/`, and the
      migrations that own `audit_events` (and `users`, since `actor_user_id`
      references it).
   2. Either drop the `tickets.id` foreign key in the audit migration
@@ -29,8 +28,8 @@ from typing import Any, Callable, Optional, Protocol
 from sqlalchemy import asc, desc, select
 from sqlalchemy.orm import Session
 
-from src.core.correlation import get_correlation_id
-from src.core.errors import NotFoundError, PermissionDeniedError
+from src.common.correlation import get_correlation_id
+from src.common.errors import NotFoundError, PermissionDeniedError
 from src.iam import rbac
 from src.iam.principal import Principal
 from src.audit.models import AuditEvent

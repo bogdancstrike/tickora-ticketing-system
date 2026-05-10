@@ -5,7 +5,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from src.core.errors import PermissionDeniedError, ValidationError
+from src.common.errors import PermissionDeniedError, ValidationError
 from src.common.spans import set_attr, span
 from src.iam.principal import Principal
 from src.audit import events

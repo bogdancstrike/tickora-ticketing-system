@@ -81,6 +81,7 @@ export interface TicketListResponse {
 export interface CreateTicketPayload {
   title: string
   txt: string
+  beneficiary_type?: 'internal' | 'external'
   priority?: string
   category?: string
   type?: string
@@ -136,6 +137,8 @@ export interface AuditEventDto {
   old_value?: any
   new_value?: any
   metadata?: any
+  request_ip?: string | null
+  user_agent?: string | null
 }
 
 export interface AssignableUserDto {
@@ -149,6 +152,20 @@ export interface AssignableUserDto {
 export interface MonitorBreakdown {
   key: string
   count: number
+}
+
+export type DashboardBreakdown = MonitorBreakdown
+
+export interface AdminTicketMetadata {
+  id: string
+  ticket_id: string
+  ticket_code?: string | null
+  ticket_title?: string | null
+  key: string
+  value: string
+  label?: string | null
+  created_at?: string | null
+  updated_at?: string | null
 }
 
 export interface MonitorOldTicket {
@@ -203,6 +220,8 @@ export interface MonitorOverview {
     by_priority: MonitorBreakdown[]
     by_category: MonitorBreakdown[]
     oldest: MonitorOldTicket[]
+    not_reviewed?: MonitorOldTicket[]
+    reviewed_today?: MonitorOldTicket[]
   } | null
   sectors: MonitorSector[]
   personal: {
@@ -614,6 +633,21 @@ export const deleteTicket = async (ticketId: string): Promise<void> => {
 
 export const markNotificationRead = async (notificationId: string): Promise<void> => {
   await apiClient.post(`/api/notifications/${notificationId}/mark-read`)
+}
+
+export interface NotificationDto {
+  id: string
+  type: string
+  title: string
+  body?: string | null
+  ticket_id?: string | null
+  read: boolean
+  created_at?: string | null
+}
+
+export const listNotifications = async (): Promise<{ items: NotificationDto[] }> => {
+  const { data } = await apiClient.get('/api/notifications')
+  return data
 }
 
 export const createStreamTicket = async (): Promise<{ ticket: string }> => {

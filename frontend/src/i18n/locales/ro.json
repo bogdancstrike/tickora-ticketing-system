@@ -262,17 +262,45 @@
       "close": "Închide"
     },
     "tickets": {
-      "search": "Caută după cod, titlu sau conținut. Filtrele și sortarea se aplică suplimentar.",
-      "filters": "Filtrează după stare, prioritate sau sector. Vizibilitatea e impusă pe server — vezi doar tichetele permise.",
-      "create": "Creează un tichet nou. Utilizatorii interni au beneficiar intern; cei externi completează formularul de solicitant."
+      "search": "Caută după codul tichetului, titlu sau textul descrierii. Căutarea funcționează împreună cu filtrele și sortarea, fără să ocolească regulile de vizibilitate.",
+      "filters": "Folosește filtrele de stare, prioritate și sector pentru a restrânge lista. Reset șterge filtrele curente; serverul continuă să ascundă sectoarele sau tichetele private nepermise.",
+      "create": "Creează un tichet nou de aici. Utilizatorii interni creează solicitări pentru beneficiari interni; cei externi completează detalii de contact înainte de distribuție."
     },
     "monitor": {
-      "tabs": "Comută între vizualizările global, distribuție, sector și personal. Fiecare e o secțiune diferită a acelorași date.",
-      "cache": "Agregările sunt memorate 60 de secunde — a doua vizită e instant."
+      "tabs": "Comută între vizualizările disponibile rolului tău: operațional global, distribuție, volum pe sector și activitatea personală/ca solicitant. Fiecare tab este filtrat pe server.",
+      "refresh": "Reîmprospătarea este lângă controalele raportului, ca să actualizeze datele operaționale fără să aglomereze titlul paginii.",
+      "kpis": "Aceste carduri KPI rezumă zona selectată: lucru activ, finalizat, risc SLA, tichete stagnante și alte contoare permise rolului curent.",
+      "workload": "Detaliile de volum compară tichetele active și finalizate pe utilizator. Șefii și administratorii văd rapid supraîncărcarea, lucrul nealocat și dezechilibrele.",
+      "range": "Schimbă intervalul graficului de tendință. Ferestrele scurte ajută în incidente; cele lungi arată dacă randamentul se îmbunătățește.",
+      "cache": "Graficul creat-vs-închis arată tendința de intrare și rezolvare pe intervalul ales. Agregările monitorului sunt memorate scurt pentru viteză."
     },
     "admin": {
-      "kpis": "Sesiuni active arată utilizatorii autentificați acum (fereastră de prezență de 5 minute).",
-      "tabs": "Gestionează utilizatori, sectoare, configurare și sănătatea sistemului din taburile de mai jos."
+      "kpis": "Aceste carduri rezumă administrarea sistemului: utilizatori, sesiuni active din fereastra de 5 minute, sectoare, tichete și contoare operaționale.",
+      "tabs": "Folosește taburile pentru utilizatori, apartenențe la sectoare, SLA, metadate, catalogul de widgeturi și sănătatea sistemului. API-ul verifică în continuare permisiunile."
+    },
+    "create": {
+      "beneficiary": "Tipul beneficiarului este derivat din rolul contului. Utilizatorii interni trimit solicitări interne; cei externi completează datele de contact.",
+      "title": "Titlul este rezumatul ușor de scanat în liste, dashboarduri și review. Păstrează-l scurt.",
+      "description": "Descrierea conține detaliul operațional: solicitarea, impactul, resursele afectate, rezultatul așteptat și date utile pentru rutare.",
+      "actions": "Cancel revine la listă fără salvare. Create trimite tichetul și deschide pagina lui după acceptarea de către backend."
+    },
+    "audit": {
+      "filters": "Folosește căutarea rapidă pentru UUID de tichet sau username, apoi adaugă interval de dată pentru o fereastră de incident.",
+      "table": "Tabelul de audit listează evenimente imuabile. Extinde un rând pentru valori vechi/noi, metadate de request, correlation id și legături către tichet.",
+      "refresh": "Reîmprospătarea reîncarcă jurnalul cu filtrele curente, util când urmărești activitate live."
+    },
+    "dashboard": {
+      "list": "Aceasta este biblioteca ta personală de dashboarduri. Fiecare dashboard poate urmări alt context: review de dimineață, volum pe sector sau sănătate admin.",
+      "new": "Creează un dashboard gol, apoi adaugă widgeturi manual sau folosește auto-configurarea din dashboard.",
+      "grid": "Widgeturile stau într-o grilă mutabilă și redimensionabilă. Fiecare își păstrează titlul, legenda, dimensiunea și configurația.",
+      "add": "Add Widget deschide catalogul. Auto-configurarea alege widgeturi utile după roluri și apartenențe la sectoare.",
+      "arrange": "Auto-arrange reașază widgeturile într-o grilă curată fără să schimbe configurația datelor."
+    },
+    "profile": {
+      "identity": "Cardul de identitate arată valorile sincronizate din providerul de identitate și folosite în tichete, audit și notificări.",
+      "roles": "Rolurile și apartenențele la sectoare explică ce poți vedea și face. Rolul de șef de sector deblochează unelte de workload; admin/auditor oferă vizibilitate mai largă.",
+      "assignments": "Atribuirile recente arată ultimele tichete rutate către tine, cu timpul relativ al ultimei actualizări.",
+      "status": "Graficul de stare rezumă volumul tău vizibil pe stări de workflow."
     },
     "language": "Comută între engleză și română de aici. Alegerea ta e reținută.",
     "info_button": "Arată tutorialul paginii"

@@ -15,6 +15,8 @@ import {
 } from '@/api/tickets'
 import { StatusTag } from '@/components/common/StatusTag'
 import { fmtDate, fmtRelative } from '@/components/common/format'
+import { ProductTour, TourInfoButton } from '@/components/common/ProductTour'
+import { useTranslation } from 'react-i18next'
 
 function initials(first?: string, last?: string, fallback = '?') {
   return ((first?.[0] || '') + (last?.[0] || '')).toUpperCase() || fallback
@@ -217,6 +219,7 @@ function TeamsILead({
 }
 
 export function ProfilePage() {
+  const { t } = useTranslation()
   const { token } = antTheme.useToken()
   const user = useSessionStore((s) => s.user)
   const setUser = useSessionStore((s) => s.setUser)
@@ -234,8 +237,8 @@ export function ProfilePage() {
       id: me.data.user_id,
       username: me.data.username,
       email: me.data.email,
-      firstName: me.data.first_name,
-      lastName: me.data.last_name,
+      firstName: me.data.first_name ?? undefined,
+      lastName: me.data.last_name ?? undefined,
       createdAt: me.data.created_at,
       roles: me.data.roles,
       sectors: me.data.sectors.map((s) => ({ sectorCode: s.sector_code, role: s.role })),
@@ -251,7 +254,7 @@ export function ProfilePage() {
 
   const overview = useQuery({
     queryKey: ['monitorOverview'],
-    queryFn: getMonitorOverview,
+    queryFn: () => getMonitorOverview(),
     staleTime: 60_000,
     enabled: !!user?.id,
   })
@@ -266,10 +269,17 @@ export function ProfilePage() {
   ).values())
 
   return (
-    <div style={{ padding: 24 }}>
+    <div style={{ padding: 24, display: 'grid', gap: 16 }}>
+      <Flex justify="space-between" align="center">
+        <div>
+          <Typography.Title level={3} style={{ margin: 0 }}>Profile</Typography.Title>
+          <Typography.Text type="secondary">Identity, roles, sectors, and personal workload</Typography.Text>
+        </div>
+        <TourInfoButton pageKey="profile" />
+      </Flex>
       <Row gutter={[24, 24]}>
         {/* Identity card */}
-        <Col xs={24} md={8}>
+        <Col xs={24} md={8} data-tour-id="profile-identity">
           <Card>
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16, padding: '8px 0' }}>
               <Avatar size={96} style={{
@@ -294,7 +304,7 @@ export function ProfilePage() {
         </Col>
 
         {/* Roles + KPIs */}
-        <Col xs={24} md={16}>
+        <Col xs={24} md={16} data-tour-id="profile-roles">
           <div style={{ display: 'grid', gap: 24 }}>
             <Card title={<Space><SafetyCertificateOutlined /> Roles & Sectors</Space>}>
               <Space orientation="vertical" style={{ width: '100%' }} size={12}>
@@ -334,7 +344,7 @@ export function ProfilePage() {
         </Col>
 
         {/* Recent assignments */}
-        <Col xs={24} lg={12}>
+        <Col xs={24} lg={12} data-tour-id="profile-assignments">
           <Card title={<Space><CalendarOutlined /> Recent assignments</Space>}>
             {(recent.data?.items || []).length === 0
               ? <Empty description="Nothing assigned to you" image={Empty.PRESENTED_IMAGE_SIMPLE} />
@@ -360,7 +370,7 @@ export function ProfilePage() {
         </Col>
 
         {/* Status breakdown chart */}
-        <Col xs={24} lg={12}>
+        <Col xs={24} lg={12} data-tour-id="profile-status">
           <Card title="Status breakdown">
             {personal?.by_status?.length ? (
               <ReactECharts
@@ -374,7 +384,7 @@ export function ProfilePage() {
                     avoidLabelOverlap: false,
                     label: { show: false },
                     labelLine: { show: false },
-                    data: personal.by_status.map((b) => ({ name: b.key.replace(/_/g, ' '), value: b.count })),
+                    data: personal.by_status.map((b: { key: string; count: number }) => ({ name: b.key.replace(/_/g, ' '), value: b.count })),
                   }],
                 }}
               />
@@ -392,6 +402,15 @@ export function ProfilePage() {
           </Col>
         )}
       </Row>
+      <ProductTour
+        pageKey="profile"
+        steps={[
+          { target: '[data-tour-id="profile-identity"]', content: t('tour.profile.identity') },
+          { target: '[data-tour-id="profile-roles"]', content: t('tour.profile.roles') },
+          { target: '[data-tour-id="profile-assignments"]', content: t('tour.profile.assignments') },
+          { target: '[data-tour-id="profile-status"]', content: t('tour.profile.status') },
+        ]}
+      />
     </div>
   )
 }

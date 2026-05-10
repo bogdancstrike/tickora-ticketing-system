@@ -17,8 +17,8 @@ load_dotenv()
 
 from src.config import Config
 from framework.commons.logger import logger
-from src.core.db import get_db
-from src.core.redis_client import get_redis
+from src.common.db import get_db
+from src.common.redis_client import get_redis
 from src.ticketing.service import sla_service
 
 def _signal_handler(signum, _frame):

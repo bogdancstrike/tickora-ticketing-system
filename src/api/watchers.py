@@ -13,8 +13,8 @@ layer — a controller bug here can't leak existence.
 """
 from flask import request as flask_request
 
-from src.core.db import get_db
-from src.core.errors import ValidationError
+from src.common.db import get_db
+from src.common.errors import ValidationError
 from src.iam.decorators import require_authenticated
 from src.iam.principal import Principal
 from src.ticketing.service import watcher_service

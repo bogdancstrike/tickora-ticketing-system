@@ -4,7 +4,7 @@ import gevent
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, sessionmaker
 
-from src.core.errors import ConcurrencyConflictError
+from src.common.errors import ConcurrencyConflictError
 from src.iam.principal import SectorMembership
 from src.ticketing.models import AuditEvent, Ticket, TicketAssignmentHistory
 from src.ticketing.service import workflow_service

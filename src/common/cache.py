@@ -11,7 +11,7 @@ import json
 from datetime import date, datetime
 from typing import Any, Callable, Iterable
 
-from src.core.redis_client import get_redis
+from src.common.redis_client import get_redis
 
 _PREFIX = "tickora:cache:"
 

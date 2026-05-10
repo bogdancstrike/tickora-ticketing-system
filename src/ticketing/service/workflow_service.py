@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
-from src.core.errors import (
+from src.common.errors import (
     BusinessRuleError,
     ConcurrencyConflictError,
     NotFoundError,

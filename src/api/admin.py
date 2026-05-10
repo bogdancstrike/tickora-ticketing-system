@@ -2,8 +2,8 @@
 from flask import request as flask_request
 from sqlalchemy import select
 
-from src.core.db import get_db
-from src.core.errors import ValidationError
+from src.common.db import get_db
+from src.common.errors import PermissionDeniedError, ValidationError
 from src.iam.decorators import require_authenticated
 from src.iam.principal import Principal
 from src.ticketing.models import WidgetDefinition

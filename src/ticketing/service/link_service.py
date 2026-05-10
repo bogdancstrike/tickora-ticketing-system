@@ -26,7 +26,7 @@ from sqlalchemy.orm import Session
 
 from src.audit import service as audit_service
 from src.audit.events import TICKET_LINK_ADDED, TICKET_LINK_REMOVED
-from src.core.errors import (
+from src.common.errors import (
     BusinessRuleError,
     NotFoundError,
     PermissionDeniedError,

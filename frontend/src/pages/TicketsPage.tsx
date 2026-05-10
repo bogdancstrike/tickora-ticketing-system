@@ -65,8 +65,8 @@ function useSessionBootstrap() {
         id: query.data.user_id,
         username: query.data.username,
         email: query.data.email,
-        firstName: query.data.first_name,
-        lastName: query.data.last_name,
+        firstName: query.data.first_name ?? undefined,
+        lastName: query.data.last_name ?? undefined,
         roles: query.data.roles,
         sectors: query.data.sectors.map((s) => ({ sectorCode: s.sector_code, role: s.role })),
         hasRootGroup: query.data.has_root_group,
@@ -1085,7 +1085,10 @@ export function TicketsPage() {
           {
             target: '[data-tour-id="tickets-search"]',
             content: t('tour.tickets.search'),
-            disableBeacon: true,
+          },
+          {
+            target: '[data-tour-id="tickets-filters"]',
+            content: t('tour.tickets.filters'),
           },
           {
             target: '[data-tour-id="tickets-create"]',

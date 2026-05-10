@@ -15,6 +15,7 @@ import { Joyride, STATUS, type EventData, type Step } from 'react-joyride'
 import { Button, Tooltip, theme as antTheme } from 'antd'
 import { InfoCircleOutlined } from '@ant-design/icons'
 
+const JoyrideAny = Joyride as any
 
 /** Imperative trigger: page header buttons call this to start the tour. */
 export function showTour(pageKey: string): void {
@@ -55,11 +56,16 @@ export function ProductTour({ pageKey, steps }: ProductTourProps) {
   const { t } = useTranslation()
   const { token } = antTheme.useToken()
   const [run, setRun] = useState(false)
+  const [tourKey, setTourKey] = useState(0)
 
   useEffect(() => {
     function onShow(e: Event) {
       const detail = (e as CustomEvent<string>).detail
-      if (detail === pageKey) setRun(true)
+      if (detail === pageKey) {
+        setRun(false)
+        setTourKey((value) => value + 1)
+        window.setTimeout(() => setRun(true), 0)
+      }
     }
     window.addEventListener('tickora:show-tour', onShow)
     return () => window.removeEventListener('tickora:show-tour', onShow)
@@ -71,12 +77,15 @@ export function ProductTour({ pageKey, steps }: ProductTourProps) {
   }
 
   return (
-    <Joyride
+    <JoyrideAny
       steps={steps}
+      key={tourKey}
       run={run}
       continuous
+      scrollToFirstStep
       showSkipButton
       showProgress
+      spotlightClicks
       disableOverlayClose
       callback={onCallback}
       locale={{
@@ -93,7 +102,7 @@ export function ProductTour({ pageKey, steps }: ProductTourProps) {
           textColor: token.colorText,
           zIndex: 2000,
         },
-      }}
+      } as any}
     />
   )
 }

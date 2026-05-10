@@ -5,8 +5,8 @@ from typing import Any, Iterable
 from sqlalchemy import and_, asc, desc, exists, func, or_, select
 from sqlalchemy.orm import Session
 
-from src.core.correlation import get_correlation_id, set_ticket_id
-from src.core.errors import NotFoundError, PermissionDeniedError, ValidationError
+from src.common.correlation import get_correlation_id, set_ticket_id
+from src.common.errors import NotFoundError, PermissionDeniedError, ValidationError
 from src.common.pagination import Cursor, clamp_limit
 from src.common.spans import set_attr, span
 from src.iam.principal import Principal

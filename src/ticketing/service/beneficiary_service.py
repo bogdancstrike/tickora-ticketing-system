@@ -4,7 +4,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from src.core.errors import ValidationError
+from src.common.errors import ValidationError
 from src.iam.models import User
 from src.iam.principal import Principal
 from src.ticketing.models import Beneficiary

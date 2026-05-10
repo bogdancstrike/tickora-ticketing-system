@@ -9,7 +9,7 @@ from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
 from testcontainers.postgres import PostgresContainer
 
-from src.core.db import Base
+from src.common.db import Base
 from src.iam.models import User
 from src.iam.principal import Principal, ROLE_DISTRIBUTOR, SectorMembership
 from src.ticketing.models import Beneficiary, Sector, Ticket

@@ -15,7 +15,7 @@ from sqlalchemy import and_, case, desc, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from src.core.errors import BusinessRuleError, NotFoundError, PermissionDeniedError, ValidationError
+from src.common.errors import BusinessRuleError, NotFoundError, PermissionDeniedError, ValidationError
 from src.iam.keycloak_admin import KeycloakAdminClient
 from src.iam.models import User
 from src.iam.principal import (

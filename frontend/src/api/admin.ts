@@ -115,8 +115,13 @@ export const getAdminOverview = async (): Promise<AdminOverview> => {
   return data
 }
 
-export const listAdminUsers = async (search?: string): Promise<{ items: AdminUser[] }> => {
-  const { data } = await apiClient.get('/api/admin/users', { params: { search: search || undefined, limit: 200 } })
+export const listAdminUsers = async (
+  params: string | { search?: string; limit?: number; offset?: number } = {},
+): Promise<{ items: AdminUser[]; total?: number }> => {
+  const query = typeof params === 'string'
+    ? { search: params || undefined, limit: 200 }
+    : { ...params, limit: params.limit || 200 }
+  const { data } = await apiClient.get('/api/admin/users', { params: query })
   return data
 }
 

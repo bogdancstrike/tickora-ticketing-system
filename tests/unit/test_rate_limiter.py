@@ -11,7 +11,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from src.common import rate_limiter
-from src.core.errors import RateLimitError
+from src.common.errors import RateLimitError
 
 
 @pytest.fixture

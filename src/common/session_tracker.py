@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from typing import Iterable
 
-from src.core.redis_client import get_redis
+from src.common.redis_client import get_redis
 
 _KEY_PREFIX = "tickora:session:active:"
 _DEFAULT_TTL_SECONDS = 5 * 60  # 5 minutes

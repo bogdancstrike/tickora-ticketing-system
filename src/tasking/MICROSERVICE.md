@@ -11,11 +11,11 @@ along.
 | Symbol                       | Source                | Required? |
 |------------------------------|-----------------------|-----------|
 | `Config`                     | `src.config`          | Yes — Kafka servers, topic names, `INLINE_TASKS_IN_DEV`, `TASK_HANDLER_MODULES`. |
-| `Base`                       | `src.core.db`         | Yes — `Task` ORM. |
-| `get_db`, `enqueue_after_commit` | `src.core.db`     | Yes — lifecycle row writes + DEV inline scheduling. |
-| `get_correlation_id` / `set_correlation_id` | `src.core.correlation` | Yes — task envelopes carry the originating correlation id. |
+| `Base`                       | `src.common.db`       | Yes — `Task` ORM. |
+| `get_db`, `enqueue_after_commit` | `src.common.db`   | Yes — lifecycle row writes + DEV inline scheduling. |
+| `get_correlation_id` / `set_correlation_id` | `src.common.correlation` | Yes — task envelopes carry the originating correlation id. |
 
-Specifically: **no import from `ticketing`, `audit`, `iam`, or `common`.**
+Specifically: **no import from `ticketing`, `audit`, or `iam`.**
 Handler modules (where `@register_task` is called) are listed in
 `Config.TASK_HANDLER_MODULES` — tasking doesn't know or care which
 package owns them.
@@ -27,7 +27,7 @@ Copy these files into the new project:
 ```
 src/
 ├── config.py                     # bring or replace
-├── core/                         # required
+├── common/                       # required platform package
 │   ├── __init__.py
 │   ├── correlation.py
 │   ├── db.py
@@ -105,4 +105,4 @@ minutes) back to `pending`. Run again after an unclean shutdown.
 * `src.ticketing.*`              — handlers register themselves; tasking imports nothing about ticket logic.
 * `src.audit.*`                  — task lifecycle is its own audit; if you want audit rows for tasks, add an `@register_task` wrapper that calls `audit.service.record`.
 * `src.iam.*`                    — task execution is system-internal; no Principal involved.
-* `src.common.*`                 — none required for the core lifecycle.
+* Additional `src.common.*` helpers beyond DB/correlation/errors.

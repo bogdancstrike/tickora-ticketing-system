@@ -12,7 +12,7 @@ from __future__ import annotations
 import pytest
 from sqlalchemy.orm import Session
 
-from src.core.errors import PermissionDeniedError
+from src.common.errors import PermissionDeniedError
 from src.iam.principal import (
     Principal,
     ROLE_ADMIN,

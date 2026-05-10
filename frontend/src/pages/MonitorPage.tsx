@@ -99,7 +99,7 @@ function SectorPanel({ sector, controls }: { sector: MonitorSector; controls?: R
         </div>
         {controls}
       </Flex>
-      <KpiGrid values={sector.kpis} />
+      <div data-tour-id="monitor-sector-kpis"><KpiGrid values={sector.kpis} /></div>
       <Row gutter={[16, 16]}>
         <Col xs={24} xl={8}>
           <ChartPanel title="Status" description="Tickets currently routed to this sector, grouped by workflow status.">
@@ -134,7 +134,7 @@ function SectorPanel({ sector, controls }: { sector: MonitorSector; controls?: R
         </Col>
         <Col xs={24} lg={12}>
           <ChartPanel title="Workload Details" description="Tabular view of active and completed tickets.">
-            <Table rowKey="assignee_user_id" size="small" pagination={false} columns={columns} dataSource={sector.workload} />
+          <div data-tour-id="monitor-workload"><Table rowKey="assignee_user_id" size="small" pagination={false} columns={columns} dataSource={sector.workload} /></div>
           </ChartPanel>
         </Col>
       </Row>
@@ -394,16 +394,24 @@ export function MonitorPage() {
           <Typography.Title level={3} style={{ margin: 0 }}>Monitor</Typography.Title>
           <Typography.Text type="secondary">Role-scoped operational metrics</Typography.Text>
         </div>
-        <Button icon={<ReloadOutlined />} onClick={() => overview.refetch()} />
-        <TourInfoButton pageKey="monitor" />
+        <Space>
+          <TourInfoButton pageKey="monitor" />
+        </Space>
       </Flex>
 
       {overview.error && <Alert type="error" message={overview.error.message} showIcon />}
       {selectedSector.error && <Alert type="error" message={selectedSector.error.message} showIcon />}
       {selectedUser.error && <Alert type="error" message={selectedUser.error.message} showIcon />}
 
-      <div data-tour-id="monitor-tabs">
-        <Tabs items={tabs as any} />
+      <div>
+        <Flex justify="end" style={{ marginBottom: 8 }}>
+          <Button icon={<ReloadOutlined />} onClick={() => overview.refetch()} data-tour-id="monitor-refresh">
+            {t('common.refresh')}
+          </Button>
+        </Flex>
+        <div data-tour-id="monitor-tabs">
+          <Tabs items={tabs as any} />
+        </div>
       </div>
 
       {timeseriesOption && (
@@ -420,6 +428,7 @@ export function MonitorPage() {
               onChange={setDays}
               size="small"
               style={{ width: 120 }}
+              data-tour-id="monitor-range"
               options={[
                 { value: 1, label: 'Last 24h' },
                 { value: 7, label: 'Last 7 days' },
@@ -433,7 +442,11 @@ export function MonitorPage() {
       <ProductTour
         pageKey="monitor"
         steps={[
-          { target: '[data-tour-id="monitor-tabs"]', content: t('tour.monitor.tabs'), disableBeacon: true },
+          { target: '[data-tour-id="monitor-tabs"]', content: t('tour.monitor.tabs') },
+          { target: '[data-tour-id="monitor-refresh"]', content: t('tour.monitor.refresh') },
+          { target: '[data-tour-id="monitor-sector-kpis"]', content: t('tour.monitor.kpis') },
+          { target: '[data-tour-id="monitor-workload"]', content: t('tour.monitor.workload') },
+          { target: '[data-tour-id="monitor-range"]', content: t('tour.monitor.range') },
           { target: '[data-tour-id="monitor-timeseries"]', content: t('tour.monitor.cache') },
         ]}
       />

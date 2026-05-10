@@ -11,7 +11,7 @@ from pytest_bdd import given, scenarios, then, when
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from src.core.errors import PermissionDeniedError
+from src.common.errors import PermissionDeniedError
 from src.iam.principal import (
     SectorMembership,
     ROLE_ADMIN,

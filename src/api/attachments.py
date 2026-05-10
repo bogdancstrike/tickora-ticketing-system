@@ -2,8 +2,8 @@
 from flask import redirect, request as flask_request
 from pydantic import BaseModel, ConfigDict, Field, ValidationError as PydValidationError
 
-from src.core.db import get_db
-from src.core.errors import ValidationError
+from src.common.db import get_db
+from src.common.errors import ValidationError
 from src.iam.decorators import require_authenticated
 from src.iam.principal import Principal
 from src.ticketing.serializers import serialize_attachment

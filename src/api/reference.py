@@ -1,8 +1,8 @@
 """Reference data endpoints for form dropdowns."""
 from flask import request as flask_request
 
-from src.core.db import get_db
-from src.core.errors import PermissionDeniedError
+from src.common.db import get_db
+from src.common.errors import PermissionDeniedError
 from src.iam.decorators import require_authenticated
 from src.iam.principal import Principal
 from src.ticketing.service import reference_service

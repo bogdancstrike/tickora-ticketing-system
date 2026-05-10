@@ -21,8 +21,8 @@ from __future__ import annotations
 import time
 import uuid
 
-from src.core.errors import RateLimitError
-from src.core.redis_client import get_redis
+from src.common.errors import RateLimitError
+from src.common.redis_client import get_redis
 
 
 _KEY_PREFIX = "tickora:ratelimit:"

@@ -10,9 +10,9 @@ service.
 
 | Symbol                     | Source              | Required? |
 |----------------------------|---------------------|-----------|
-| `Base`                     | `src.core.db`       | Yes — `AuditEvent` ORM. |
-| `get_correlation_id()`     | `src.core.correlation` | Yes — every audit row carries the originating correlation id. |
-| `NotFoundError`, `PermissionDeniedError` | `src.core.errors` | Yes. |
+| `Base`                     | `src.common.db`     | Yes — `AuditEvent` ORM. |
+| `get_correlation_id()`     | `src.common.correlation` | Yes — every audit row carries the originating correlation id. |
+| `NotFoundError`, `PermissionDeniedError` | `src.common.errors` | Yes. |
 | `rbac` predicates          | `src.iam.rbac`      | Yes — `can_view_global_audit`, `can_view_sector_audit`, `can_view_ticket`. |
 | `Principal`                | `src.iam.principal` | Yes — typed actor. |
 | `request_metadata()`       | `src.common.request_metadata` | Yes — fills `request_ip` / `user_agent` on every row. |
@@ -28,15 +28,13 @@ Copy these files into the new project:
 ```
 src/
 ├── config.py                     # bring or replace
-├── core/                         # required
+├── common/                       # required platform package
 │   ├── __init__.py
 │   ├── correlation.py
 │   ├── db.py
 │   ├── errors.py
 │   ├── redis_client.py           # only if you keep the request-metadata helper
-│   └── tracing.py
-├── common/                       # required (request_metadata)
-│   ├── __init__.py
+│   ├── tracing.py
 │   └── request_metadata.py
 ├── iam/                          # required (Principal + rbac)
 │   ├── __init__.py

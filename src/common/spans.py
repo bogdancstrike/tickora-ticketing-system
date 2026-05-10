@@ -4,7 +4,7 @@ from __future__ import annotations
 from contextlib import contextmanager
 from typing import Iterator
 
-from src.core.tracing import get_tracer
+from src.common.tracing import get_tracer
 
 _tracer = get_tracer()
 

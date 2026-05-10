@@ -9,7 +9,7 @@ from __future__ import annotations
 import pytest
 from sqlalchemy.orm import Session
 
-from src.core.errors import PermissionDeniedError, ValidationError
+from src.common.errors import PermissionDeniedError, ValidationError
 from src.iam.principal import (
     SectorMembership,
     ROLE_ADMIN,
@@ -31,7 +31,7 @@ def stub_object_storage(monkeypatch):
     """Mock MinIO so we can run without a live bucket. Successful presign +
     object-exists are the default; individual tests can override.
     """
-    from src.core import object_storage
+    from src.common import object_storage
     monkeypatch.setattr(object_storage, "ensure_bucket", lambda _: None)
     monkeypatch.setattr(
         object_storage, "presigned_put_url",
@@ -107,7 +107,7 @@ class TestRequestUploadUrl:
 
     def test_outsider_cannot_upload(self, db_session, world):
         # Outsider can't even *see* the ticket → NotFound, not 403.
-        from src.core.errors import NotFoundError
+        from src.common.errors import NotFoundError
         with pytest.raises(NotFoundError):
             attachment_service.request_upload_url(
                 db_session, world["principals"]["outsider"], world["ticket"].id,
@@ -169,7 +169,7 @@ class TestRegister:
             )
 
     def test_register_rejects_missing_object(self, db_session, world, monkeypatch):
-        from src.core import object_storage
+        from src.common import object_storage
         monkeypatch.setattr(object_storage, "object_exists", lambda b, k: False)
         key = self._upload(db_session, world)
         with pytest.raises(ValidationError, match="not found"):

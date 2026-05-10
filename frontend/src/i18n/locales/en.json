@@ -262,17 +262,45 @@
       "close": "Close"
     },
     "tickets": {
-      "search": "Search by code, title, or body. Filter and sort apply on top.",
-      "filters": "Filter by status, priority, or sector. Visibility is enforced server-side — you only ever see tickets you're allowed to.",
-      "create": "Create a new ticket. Internal users get an internal beneficiary; externals fill out the requester form."
+      "search": "Search by ticket code, title, or description text. The search works together with filters and sorting, so you can narrow a queue without losing your current role-based visibility rules.",
+      "filters": "Use status, priority, and sector filters to focus the list. Reset clears the current filter set; the backend still enforces visibility, so hidden sectors or private tickets never appear.",
+      "create": "Create a new ticket from here. Internal users create internal beneficiary requests; external users complete requester details before the ticket enters distribution."
     },
     "monitor": {
-      "tabs": "Switch between global, distribution, sector, and personal views. Each tab is a different cut of the same data.",
-      "cache": "Aggregates are memoised for 60 seconds — the second visit is instant."
+      "tabs": "Switch between the views available to your role: global operations, distribution queues, sector workload, and your personal/requester workload. Each tab is server-filtered for your permissions.",
+      "refresh": "Refresh is placed with the report controls so it updates the operational data without competing with the page title or tutorial button.",
+      "kpis": "These KPI tiles summarize the selected scope: active work, done work, SLA risk, stale tickets, and other counts the current role is allowed to inspect.",
+      "workload": "Workload details compare active and completed tickets per assignee. Chiefs and admins use this to spot overload, unassigned work, and distribution imbalance.",
+      "range": "Change the time window for the trend chart. Short windows are useful during incidents; longer windows show whether throughput is improving.",
+      "cache": "The created-vs-closed chart shows ticket intake and closure trends for the selected window. Monitor aggregates are cached briefly, so repeated reads stay fast."
     },
     "admin": {
-      "kpis": "Active sessions counts users currently signed in (5-minute presence window).",
-      "tabs": "Manage users, sectors, configuration, and system health from the tabs below."
+      "kpis": "These cards summarize system administration: total users, active sessions from the 5-minute presence window, sectors, tickets, and current operational counters.",
+      "tabs": "Use the tabs to manage users, sector membership, SLA and metadata configuration, widget catalogue entries, and system health. Each change is still permission-checked on the API."
+    },
+    "create": {
+      "beneficiary": "The beneficiary type is derived from your account role. Internal users file requests for internal beneficiaries; external users provide requester contact details.",
+      "title": "The title is the queue-friendly summary shown in lists, dashboards, and review screens. Keep it short enough for operators to scan.",
+      "description": "The description is the operational detail: request, impact, affected assets, expected outcome, and anything the reviewer needs for routing.",
+      "actions": "Cancel returns to the queue without saving. Create submits the ticket, then opens the new ticket detail page after the backend accepts it."
+    },
+    "audit": {
+      "filters": "Use quick search for a ticket UUID or actor username, then add a date range when investigating a specific incident window.",
+      "table": "The audit table lists immutable events. Expand a row to inspect before/after values, request metadata, correlation id, and related ticket links.",
+      "refresh": "Refresh reloads the audit ledger with the current filters, useful while following live activity during triage."
+    },
+    "dashboard": {
+      "list": "This is your personal dashboard library. Each dashboard can hold a different operational view, such as morning review, sector workload, or admin health.",
+      "new": "Create a blank dashboard, then add widgets manually or use auto-configuration inside the dashboard.",
+      "grid": "Widgets live on a draggable, resizable grid. Each widget keeps its own title, optional legend, size, and configuration.",
+      "add": "Add Widget opens the catalogue. Auto-configuration chooses useful widgets based on your roles and sector memberships.",
+      "arrange": "Auto-arrange lays out the current widgets into a clean grid without changing their data configuration."
+    },
+    "profile": {
+      "identity": "Your identity card shows the profile values synchronized from the identity provider and used in tickets, audit rows, and notifications.",
+      "roles": "Roles and sector memberships explain what you can see and do. Chief memberships unlock sector workload tools; admin and auditor roles unlock broader views.",
+      "assignments": "Recent assignments show the latest tickets routed to you, with relative update times for quick follow-up.",
+      "status": "The status chart summarizes your visible ticket workload by workflow state, so you can see where your work is concentrated."
     },
     "language": "Switch between English and Romanian here. Your choice is remembered.",
     "info_button": "Show page tour"

@@ -27,7 +27,7 @@ from src.audit.events import (
     TICKET_WATCHER_ADDED,
     TICKET_WATCHER_REMOVED,
 )
-from src.core.errors import (
+from src.common.errors import (
     BusinessRuleError,
     NotFoundError,
     PermissionDeniedError,

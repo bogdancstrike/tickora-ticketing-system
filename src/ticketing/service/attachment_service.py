@@ -10,8 +10,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from src.config import Config
-from src.core import object_storage
-from src.core.errors import NotFoundError, PermissionDeniedError, ValidationError
+from src.common import object_storage
+from src.common.errors import NotFoundError, PermissionDeniedError, ValidationError
 from src.iam import rbac
 from src.iam.principal import Principal
 from src.audit import events

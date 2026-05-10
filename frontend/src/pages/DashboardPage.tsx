@@ -14,7 +14,7 @@ import {
   MessageOutlined, FieldTimeOutlined, DatabaseOutlined,
   CarryOutOutlined, SmileOutlined, TeamOutlined, HistoryOutlined, LineChartOutlined,
   ClockCircleOutlined, CheckCircleOutlined, SearchOutlined, DashboardOutlined, InfoCircleOutlined,
-  HourglassOutlined,
+  HourglassOutlined, ExclamationCircleOutlined, BellOutlined, EyeOutlined, LinkOutlined,
 } from '@ant-design/icons'
 import { Responsive, WidthProvider } from 'react-grid-layout'
 import 'react-grid-layout/css/styles.css'
@@ -25,9 +25,10 @@ import {
   listDashboards, updateDashboard, upsertWidget, autoConfigureDashboard,
   listTickets, getMonitorOverview, listAudit, listTicketAudit,
   getMonitorSector, listComments, getTicketOptions, listAssignableUsers,
+  listNotifications,
   type CustomDashboardDto, type DashboardWidgetDto, type TicketDto,
 } from '@/api/tickets'
-import { listAdminWidgets } from '@/api/admin'
+import { getAdminOverview, listAdminTasks, listAdminWidgets, type AdminTask } from '@/api/admin'
 import { useSessionStore } from '@/stores/sessionStore'
 import { StatusTag, STATUS_OPTIONS } from '@/components/common/StatusTag'
 import { PriorityTag, PRIORITY_OPTIONS } from '@/components/common/PriorityTag'
@@ -35,6 +36,8 @@ import { fmtDateTime } from '@/components/common/format'
 import { useNavigate } from 'react-router-dom'
 import { apiClient } from '@/api/client'
 import { BreakdownChart, WorkloadChart } from '@/components/dashboard/DashboardCharts'
+import { ProductTour, TourInfoButton } from '@/components/common/ProductTour'
+import { useTranslation } from 'react-i18next'
 
 const ResponsiveGridLayout = WidthProvider(Responsive)
 
@@ -228,7 +231,7 @@ function AuditWidget({ config }: { config: any }) {
               <div style={{ marginTop: 4 }}>
                 <Space orientation="vertical" size={0}>
                    <Typography.Text type="secondary" style={{ fontSize: 11 }}>{fmtDateTime(a.created_at)}</Typography.Text>
-                   {a.ticket_id && <Typography.Text type="link" style={{ fontSize: 10 }}>Ticket: {a.ticket_id.slice(0,8)}</Typography.Text>}
+                   {a.ticket_id && <Typography.Text style={{ fontSize: 10 }}>Ticket: {a.ticket_id.slice(0,8)}</Typography.Text>}
                 </Space>
               </div>
             </div>
@@ -411,6 +414,210 @@ function SlaOverviewWidget() {
            <Statistic title="Critical" value={data?.distributor?.kpis.critical_pending ?? 0} styles={{ content: { color: '#d46b08' } }} />
         </Col>
       </Row>
+    </div>
+  )
+}
+
+function GlobalKpiWidget() {
+  const { data, isLoading } = useQuery({
+    queryKey: ['monitorOverview'],
+    queryFn: () => getMonitorOverview(),
+    staleTime: 60_000,
+  })
+
+  if (isLoading) return <div style={{ textAlign: 'center', padding: 20 }}><Spin /></div>
+
+  const kpis = data?.global?.kpis || data?.personal?.kpis || {}
+  const items = [
+    ['Total', kpis.total_tickets],
+    ['Active', kpis.active_tickets ?? kpis.assigned_active],
+    ['New today', kpis.new_today],
+    ['Closed today', kpis.closed_today],
+  ]
+
+  return (
+    <div style={{ padding: 16 }}>
+      <Row gutter={[16, 12]}>
+        {items.map(([label, value]) => (
+          <Col key={String(label)} xs={12} md={6}>
+            <Statistic title={label as string} value={(value as number | null | undefined) ?? 0} />
+          </Col>
+        ))}
+      </Row>
+    </div>
+  )
+}
+
+function ActiveSessionsWidget() {
+  const { data, isLoading, error } = useQuery({
+    queryKey: ['adminOverviewForActiveSessions'],
+    queryFn: getAdminOverview,
+    staleTime: 60_000,
+    retry: false,
+  })
+
+  if (isLoading) return <div style={{ textAlign: 'center', padding: 20 }}><Spin /></div>
+  if (error) return <div style={{ padding: 20 }}><Empty description="Admin access required" image={Empty.PRESENTED_IMAGE_SIMPLE} /></div>
+
+  return (
+    <div style={{ padding: 16 }}>
+      <Row gutter={16}>
+        <Col span={12}>
+          <Statistic title="Active sessions" value={data?.kpis.active_sessions ?? 0} prefix={<TeamOutlined />} />
+        </Col>
+        <Col span={12}>
+          <Statistic title="Active users" value={data?.kpis.active_users ?? 0} />
+        </Col>
+      </Row>
+    </div>
+  )
+}
+
+function TaskHealthWidget() {
+  const { data, isLoading, error } = useQuery({
+    queryKey: ['taskHealthWidget'],
+    queryFn: async () => {
+      const [pending, running, failed] = await Promise.all([
+        listAdminTasks({ status: 'pending', limit: 200 }),
+        listAdminTasks({ status: 'running', limit: 200 }),
+        listAdminTasks({ status: 'failed', limit: 200 }),
+      ])
+      return {
+        pending: pending.items.length,
+        running: running.items.length,
+        failed: failed.items.length,
+      }
+    },
+    staleTime: 30_000,
+    retry: false,
+  })
+
+  if (isLoading) return <div style={{ textAlign: 'center', padding: 20 }}><Spin /></div>
+  if (error) return <div style={{ padding: 20 }}><Empty description="Task admin access required" image={Empty.PRESENTED_IMAGE_SIMPLE} /></div>
+
+  return (
+    <div style={{ padding: 16 }}>
+      <Row gutter={16}>
+        <Col span={8}><Statistic title="Pending" value={data?.pending ?? 0} /></Col>
+        <Col span={8}><Statistic title="Running" value={data?.running ?? 0} /></Col>
+        <Col span={8}><Statistic title="Failed" value={data?.failed ?? 0} valueStyle={{ color: (data?.failed ?? 0) ? '#cf1322' : undefined }} /></Col>
+      </Row>
+    </div>
+  )
+}
+
+function RecentFailuresWidget({ config }: { config: any }) {
+  const { token } = antTheme.useToken()
+  const { data, isLoading, error } = useQuery({
+    queryKey: ['recentTaskFailures', config.limit],
+    queryFn: () => listAdminTasks({ status: 'failed', limit: config.limit || 10 }),
+    staleTime: 30_000,
+    retry: false,
+  })
+
+  if (isLoading) return <div style={{ textAlign: 'center', padding: 20 }}><Spin /></div>
+  if (error) return <div style={{ padding: 20 }}><Empty description="Task admin access required" image={Empty.PRESENTED_IMAGE_SIMPLE} /></div>
+
+  const items = data?.items || []
+  return (
+    <div style={{ padding: '4px 0' }}>
+      {items.map((task: AdminTask) => (
+        <div key={task.id} style={{ padding: '8px 12px', borderBottom: `1px solid ${token.colorBorderSecondary}` }}>
+          <Flex justify="space-between" gap={8}>
+            <Typography.Text strong style={{ fontSize: 12 }} ellipsis>{task.task_name}</Typography.Text>
+            <Tag color="red">{task.attempts} attempts</Tag>
+          </Flex>
+          <Typography.Text type="secondary" style={{ fontSize: 11 }}>{task.last_error || 'No error message'}</Typography.Text>
+        </div>
+      ))}
+      {items.length === 0 && <div style={{ padding: 20 }}><Empty description="No recent failures" image={Empty.PRESENTED_IMAGE_SIMPLE} /></div>}
+    </div>
+  )
+}
+
+function AssignmentAgeWidget({ config }: { config: any }) {
+  const { data, isLoading } = useQuery<any>({
+    queryKey: ['assignmentAgeWidget', config.sectorCode],
+    queryFn: () => config.sectorCode ? getMonitorSector(config.sectorCode) : getMonitorOverview(),
+    staleTime: 60_000,
+  })
+
+  if (isLoading) return <div style={{ textAlign: 'center', padding: 20 }}><Spin /></div>
+  const kpis = config.sectorCode ? data?.kpis : data?.global?.kpis
+  const value = kpis?.avg_assignment_minutes ?? kpis?.avg_resolution_minutes ?? null
+
+  return (
+    <div style={{ padding: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
+      <Statistic title="Average assignment age" value={value ?? 0} suffix="min" precision={typeof value === 'number' ? 1 : 0} prefix={<FieldTimeOutlined />} />
+    </div>
+  )
+}
+
+function SimpleTicketListWidget({ config, mode }: { config: any; mode: 'assigned' | 'requests' | 'watchlist' | 'linked' }) {
+  const navigate = useNavigate()
+  const user = useSessionStore(s => s.user)
+  const { token } = antTheme.useToken()
+  const { data, isLoading } = useQuery({
+    queryKey: ['simpleTicketListWidget', mode, user?.id, config.limit],
+    queryFn: () => listTickets({
+      assignee_user_id: mode === 'assigned' ? user?.id : undefined,
+      sort_by: 'updated_at',
+      sort_dir: 'desc',
+      limit: config.limit || 20,
+    }),
+    enabled: !!user,
+    staleTime: 30_000,
+  })
+
+  if (isLoading) return <div style={{ textAlign: 'center', padding: 20 }}><Spin /></div>
+  let items = data?.items || []
+  if (mode === 'requests') {
+    items = items.filter(t => t.beneficiary_user_id === user?.id || t.created_by_user_id === user?.id)
+  }
+
+  return (
+    <div style={{ padding: '4px 0' }}>
+      {items.slice(0, config.limit || 20).map((t) => (
+        <div key={t.id} style={{ padding: '8px 12px', cursor: 'pointer', borderBottom: `1px solid ${token.colorBorderSecondary}` }} onClick={() => navigate(`/tickets/${t.id}`)} className="tickora-row-clickable">
+          <Flex justify="space-between" align="center" gap={8}>
+            <Typography.Text strong ellipsis style={{ fontSize: 13 }}>{t.title || t.ticket_code}</Typography.Text>
+            <StatusTag status={t.status} />
+          </Flex>
+          <Space size={4} style={{ fontSize: 11 }}>
+            <PriorityTag priority={t.priority} />
+            <Typography.Text type="secondary">{t.ticket_code}</Typography.Text>
+          </Space>
+        </div>
+      ))}
+      {items.length === 0 && <div style={{ padding: 20 }}><Empty description="No tickets found" image={Empty.PRESENTED_IMAGE_SIMPLE} /></div>}
+    </div>
+  )
+}
+
+function NotificationFeedWidget({ config }: { config: any }) {
+  const navigate = useNavigate()
+  const { token } = antTheme.useToken()
+  const { data, isLoading } = useQuery({
+    queryKey: ['notificationFeedWidget'],
+    queryFn: listNotifications,
+    staleTime: 30_000,
+  })
+
+  if (isLoading) return <div style={{ textAlign: 'center', padding: 20 }}><Spin /></div>
+  const items = (data?.items || []).slice(0, config.limit || 15)
+
+  return (
+    <div style={{ padding: '4px 0' }}>
+      {items.map((n) => (
+        <div key={n.id} style={{ padding: '8px 12px', cursor: n.ticket_id ? 'pointer' : 'default', borderBottom: `1px solid ${token.colorBorderSecondary}` }} onClick={() => n.ticket_id && navigate(`/tickets/${n.ticket_id}`)} className={n.ticket_id ? 'tickora-row-clickable' : ''}>
+          <Flex justify="space-between" gap={8}>
+            <Typography.Text strong style={{ fontSize: 12 }} ellipsis>{n.title}</Typography.Text>
+            {!n.read && <Tag color="blue">new</Tag>}
+          </Flex>
+          <Typography.Text type="secondary" style={{ fontSize: 11 }}>{n.body || n.type}</Typography.Text>
+        </div>
+      ))}
+      {items.length === 0 && <div style={{ padding: 20 }}><Empty description="No notifications" image={Empty.PRESENTED_IMAGE_SIMPLE} /></div>}
     </div>
   )
 }
@@ -644,6 +851,10 @@ const ICON_MAP: Record<string, React.ReactNode> = {
     InfoCircleOutlined: <InfoCircleOutlined />,
     HourglassOutlined: <HourglassOutlined />,
     CheckCircleOutlined: <CheckCircleOutlined />,
+    ExclamationCircleOutlined: <ExclamationCircleOutlined />,
+    BellOutlined: <BellOutlined />,
+    EyeOutlined: <EyeOutlined />,
+    LinkOutlined: <LinkOutlined />,
 }
 
 function getIconComponent(name: string | null | undefined) {
@@ -664,6 +875,17 @@ const WIDGET_TYPES = [
     { type: 'bottleneck_analysis', label: 'Bottleneck Analysis', icon: <LineChartOutlined />, configurable: true },
     { type: 'not_reviewed', label: 'Not Yet Reviewed', icon: <HourglassOutlined />, configurable: true },
     { type: 'reviewed_today', label: 'Reviewed Today', icon: <CheckCircleOutlined />, configurable: true },
+    { type: 'global_kpi', label: 'Global KPI', icon: <BarChartOutlined />, configurable: false },
+    { type: 'task_health', label: 'Task Health', icon: <DatabaseOutlined />, configurable: false },
+    { type: 'recent_failures', label: 'Recent Task Failures', icon: <ExclamationCircleOutlined />, configurable: true },
+    { type: 'active_sessions', label: 'Active Sessions', icon: <TeamOutlined />, configurable: false },
+    { type: 'assignment_age', label: 'Assignment Age', icon: <FieldTimeOutlined />, configurable: true },
+    { type: 'my_assigned', label: 'My Assigned', icon: <UserOutlined />, configurable: true },
+    { type: 'my_requests', label: 'My Requests', icon: <SendOutlined />, configurable: true },
+    { type: 'my_watchlist', label: 'My Watchlist', icon: <EyeOutlined />, configurable: true },
+    { type: 'my_mentions', label: 'My Mentions', icon: <BellOutlined />, configurable: true },
+    { type: 'linked_tickets', label: 'Linked Tickets', icon: <LinkOutlined />, configurable: true },
+    { type: 'notification_feed', label: 'Notification Feed', icon: <BellOutlined />, configurable: true },
     { type: 'shortcuts', label: 'Quick Links', icon: <SendOutlined />, configurable: true },
     { type: 'clock', label: 'Clock', icon: <FieldTimeOutlined />, configurable: false },
     { type: 'system_health', label: 'System Health', icon: <DatabaseOutlined />, configurable: false },
@@ -696,8 +918,18 @@ function WidgetRenderer({ widget }: { widget: DashboardWidgetDto }) {
   if (widget.type === 'bottleneck_analysis') return <BottleneckWidget config={widget.config} />
   if (widget.type === 'not_reviewed') return <NotReviewedWidget config={widget.config} />
   if (widget.type === 'reviewed_today') return <ReviewedTodayWidget config={widget.config} />
+  if (widget.type === 'global_kpi') return <GlobalKpiWidget />
+  if (widget.type === 'task_health') return <TaskHealthWidget />
+  if (widget.type === 'recent_failures') return <RecentFailuresWidget config={widget.config} />
+  if (widget.type === 'active_sessions') return <ActiveSessionsWidget />
+  if (widget.type === 'assignment_age') return <AssignmentAgeWidget config={widget.config} />
+  if (widget.type === 'my_assigned') return <SimpleTicketListWidget config={widget.config} mode="assigned" />
+  if (widget.type === 'my_requests') return <SimpleTicketListWidget config={widget.config} mode="requests" />
+  if (widget.type === 'my_watchlist') return <SimpleTicketListWidget config={widget.config} mode="watchlist" />
+  if (widget.type === 'linked_tickets') return <SimpleTicketListWidget config={widget.config} mode="linked" />
+  if (widget.type === 'notification_feed' || widget.type === 'my_mentions') return <NotificationFeedWidget config={widget.config} />
 
-  return <Empty description={`Widget type ${widget.type} coming soon`} image={Empty.PRESENTED_IMAGE_SIMPLE} />
+  return <Empty description={`Unknown widget type: ${widget.type}`} image={Empty.PRESENTED_IMAGE_SIMPLE} />
 }
 
 // ── Dashboard Detail ────────────────────────────────────────────────────────
@@ -705,7 +937,9 @@ function WidgetRenderer({ widget }: { widget: DashboardWidgetDto }) {
 const CONFIGURABLE_TYPES = [
     'ticket_list', 'monitor_kpi', 'audit_stream', 'profile_card', 'shortcuts', 
     'sector_stats', 'user_workload', 'workload_balancer', 'bottleneck_analysis', 
-    'stale_tickets', 'recent_comments', 'not_reviewed', 'reviewed_today'
+    'stale_tickets', 'recent_comments', 'not_reviewed', 'reviewed_today',
+    'recent_failures', 'assignment_age', 'my_assigned', 'my_requests',
+    'my_watchlist', 'linked_tickets', 'notification_feed', 'my_mentions'
 ]
 
 /**
@@ -719,6 +953,7 @@ const CONFIGURABLE_TYPES = [
  */
 function DashboardDetail({ dashboardId, onBack }: { dashboardId: string, onBack: () => void }) {
   const { token } = antTheme.useToken()
+  const { t } = useTranslation()
   const qc = useQueryClient()
   const [editingTitle, setEditingTitle] = useState(false)
   const [editingWidget, setEditingWidget] = useState<DashboardWidgetDto | null>(null)
@@ -875,13 +1110,14 @@ function DashboardDetail({ dashboardId, onBack }: { dashboardId: string, onBack:
           )}
         </Space>
         <Space>
-           <Button icon={<SettingOutlined />} loading={autoArrange.isPending} onClick={() => autoArrange.mutate()}>Auto-arrange</Button>
-           <Button icon={<AppstoreAddOutlined />} type="primary" onClick={() => { setEditingWidget(null); setIsAddingWidget(true) }}>Add Widget</Button>
+           <TourInfoButton pageKey="dashboard-detail" />
+           <Button icon={<SettingOutlined />} loading={autoArrange.isPending} onClick={() => autoArrange.mutate()} data-tour-id="dashboard-arrange">Auto-arrange</Button>
+           <Button icon={<AppstoreAddOutlined />} type="primary" onClick={() => { setEditingWidget(null); setIsAddingWidget(true) }} data-tour-id="dashboard-add">Add Widget</Button>
            <Button icon={<ReloadOutlined />} onClick={() => qc.invalidateQueries({ queryKey: ['customDashboard', dashboardId] })} />
         </Space>
       </Flex>
 
-      <div style={{ background: 'rgba(0,0,0,0.02)', borderRadius: 12, minHeight: 'calc(100vh - 200px)', padding: 8 }}>
+      <div style={{ background: 'rgba(0,0,0,0.02)', borderRadius: 12, minHeight: 'calc(100vh - 200px)', padding: 8 }} data-tour-id="dashboard-grid">
         <ResponsiveGridLayout
           key={dashboard.widgets?.length} 
           className="layout"
@@ -1084,7 +1320,7 @@ function DashboardDetail({ dashboardId, onBack }: { dashboardId: string, onBack:
                     </Form.Item>
                   )
               }
-              if (type === 'sector_stats' || type === 'user_workload' || type === 'workload_balancer' || type === 'bottleneck_analysis' || type === 'not_reviewed' || type === 'reviewed_today') {
+              if (type === 'sector_stats' || type === 'user_workload' || type === 'workload_balancer' || type === 'bottleneck_analysis' || type === 'not_reviewed' || type === 'reviewed_today' || type === 'assignment_age') {
                  return (
                     <>
                         <SectorSelect name={['config', 'sectorCode']} label="Target Sector" />
@@ -1116,11 +1352,26 @@ function DashboardDetail({ dashboardId, onBack }: { dashboardId: string, onBack:
                     <TicketSelect name={['config', 'ticketId']} label="Watch Ticket" />
                   )
               }
+              if (type === 'recent_failures' || type === 'notification_feed' || type === 'my_mentions' || type === 'my_assigned' || type === 'my_requests' || type === 'my_watchlist' || type === 'linked_tickets') {
+                  return (
+                    <Form.Item name={['config', 'limit']} label="Max Items">
+                      <Select options={[5, 10, 15, 20, 50].map(v => ({ value: v, label: v }))} />
+                    </Form.Item>
+                  )
+              }
               return null
             }}
           </Form.Item>
         </Form>
       </Modal>
+      <ProductTour
+        pageKey="dashboard-detail"
+        steps={[
+          { target: '[data-tour-id="dashboard-grid"]', content: t('tour.dashboard.grid') },
+          { target: '[data-tour-id="dashboard-add"]', content: t('tour.dashboard.add') },
+          { target: '[data-tour-id="dashboard-arrange"]', content: t('tour.dashboard.arrange') },
+        ]}
+      />
     </div>
   )
 }
@@ -1129,6 +1380,7 @@ function DashboardDetail({ dashboardId, onBack }: { dashboardId: string, onBack:
 
 export function DashboardPage() {
   const { token } = antTheme.useToken()
+  const { t } = useTranslation()
   const [activeDashboardId, setActiveDashboardId] = useState<string | null>(null)
   const [isCreating, setIsAdding] = useState(false)
   const [form] = Form.useForm()
@@ -1167,10 +1419,13 @@ export function DashboardPage() {
           <Typography.Title level={3} style={{ margin: 0 }}>Dashboards</Typography.Title>
           <Typography.Text type="secondary">Customizable operational views with live widgets</Typography.Text>
         </div>
-        <Button type="primary" icon={<PlusOutlined />} onClick={() => setIsAdding(true)}>New Dashboard</Button>
+        <Space>
+          <TourInfoButton pageKey="dashboard-list" />
+          <Button type="primary" icon={<PlusOutlined />} onClick={() => setIsAdding(true)} data-tour-id="dashboard-new">New Dashboard</Button>
+        </Space>
       </Flex>
 
-      <Row gutter={[16, 16]}>
+      <Row gutter={[16, 16]} data-tour-id="dashboard-list">
         {(list.data?.items || []).map((d) => (
           <Col key={d.id} xs={24} sm={12} lg={8} xl={6}>
             <Card
@@ -1220,6 +1475,13 @@ export function DashboardPage() {
           </Form.Item>
         </Form>
       </Modal>
+      <ProductTour
+        pageKey="dashboard-list"
+        steps={[
+          { target: '[data-tour-id="dashboard-list"]', content: t('tour.dashboard.list') },
+          { target: '[data-tour-id="dashboard-new"]', content: t('tour.dashboard.new') },
+        ]}
+      />
     </div>
   )
 }

@@ -6,7 +6,7 @@ from typing import Any
 from sqlalchemy import select, delete
 from sqlalchemy.orm import Session
 
-from src.core.errors import NotFoundError, PermissionDeniedError, ValidationError
+from src.common.errors import NotFoundError, PermissionDeniedError, ValidationError
 from src.iam.principal import Principal
 from src.ticketing.models import CustomDashboard, DashboardWidget, WidgetDefinition, Ticket, SystemSetting
 from src.ticketing.service.ticket_service import _visibility_filter
@@ -230,39 +230,39 @@ def sync_widget_catalogue(db: Session) -> None:
         db: Database session.
     """
     catalogue = [
-        ("ticket_list", "Ticket List", "Versatile ticket list with customizable filters", "UnorderedListOutlined"),
-        ("monitor_kpi", "KPI Statistic", "Key performance indicators and metrics", "BarChartOutlined"),
-        ("audit_stream", "Audit Log", "Real-time stream of system events", "AuditOutlined"),
-        ("profile_card", "My Profile", "Quick access to your user profile and settings", "UserOutlined"),
-        ("recent_comments", "Recent Comments", "Latest updates on tickets you follow", "MessageOutlined"),
-        ("sector_stats", "Sector Chart", "Distribution of tickets across sectors", "PieChartOutlined"),
-        ("user_workload", "User Workload", "Capacity and workload across team members", "TeamOutlined"),
-        ("stale_tickets", "Stale Tickets", "Tickets requiring immediate attention", "HistoryOutlined"),
-        ("workload_balancer", "Workload Balancer", "Optimize ticket distribution", "BarChartOutlined"),
-        ("bottleneck_analysis", "Bottleneck Analysis", "Identify delays in the workflow", "LineChartOutlined"),
-        ("shortcuts", "Quick Links", "Customizable action shortcuts", "SendOutlined"),
-        ("clock", "Clock", "Local and UTC time display", "FieldTimeOutlined"),
-        ("system_health", "System Health", "Backend services status monitor", "DatabaseOutlined"),
-        ("sla_overview", "SLA Overview", "Service level agreement compliance tracking", "CarryOutOutlined"),
-        ("welcome_banner", "Welcome Banner", "Personalized greeting and tips", "SmileOutlined"),
-        ("not_reviewed", "Not Yet Reviewed", "Pending tickets waiting for distribution", "HourglassOutlined"),
-        ("reviewed_today", "Reviewed Today", "Tickets reviewed by distributors in the last 24h", "CheckCircleOutlined"),
+        ("ticket_list", "Ticket List", "Versatile ticket list with customizable filters", "UnorderedListOutlined", []),
+        ("monitor_kpi", "KPI Statistic", "Key performance indicators and metrics", "BarChartOutlined", []),
+        ("audit_stream", "Audit Log", "Real-time stream of system events", "AuditOutlined", ["tickora_admin", "tickora_auditor", "tickora_distributor"]),
+        ("profile_card", "My Profile", "Quick access to your user profile and settings", "UserOutlined", []),
+        ("recent_comments", "Recent Comments", "Latest updates on tickets you follow", "MessageOutlined", []),
+        ("sector_stats", "Sector Chart", "Distribution of tickets across sectors", "PieChartOutlined", ["tickora_admin", "tickora_auditor", "tickora_distributor", "tickora_internal_user"]),
+        ("user_workload", "User Workload", "Capacity and workload across team members", "TeamOutlined", ["tickora_admin", "tickora_auditor", "tickora_distributor", "tickora_internal_user"]),
+        ("stale_tickets", "Stale Tickets", "Tickets requiring immediate attention", "HistoryOutlined", ["tickora_admin", "tickora_auditor", "tickora_distributor", "tickora_internal_user"]),
+        ("workload_balancer", "Workload Balancer", "Optimize ticket distribution", "BarChartOutlined", ["tickora_admin", "tickora_distributor", "tickora_internal_user"]),
+        ("bottleneck_analysis", "Bottleneck Analysis", "Identify delays in the workflow", "LineChartOutlined", ["tickora_admin", "tickora_auditor", "tickora_distributor", "tickora_internal_user"]),
+        ("shortcuts", "Quick Links", "Customizable action shortcuts", "SendOutlined", []),
+        ("clock", "Clock", "Local and UTC time display", "FieldTimeOutlined", []),
+        ("system_health", "System Health", "Backend services status monitor", "DatabaseOutlined", ["tickora_admin", "tickora_auditor"]),
+        ("sla_overview", "SLA Overview", "Service level agreement compliance tracking", "CarryOutOutlined", ["tickora_admin", "tickora_auditor", "tickora_distributor", "tickora_internal_user"]),
+        ("welcome_banner", "Welcome Banner", "Personalized greeting and tips", "SmileOutlined", []),
+        ("not_reviewed", "Not Yet Reviewed", "Pending tickets waiting for distribution", "HourglassOutlined", ["tickora_admin", "tickora_distributor"]),
+        ("reviewed_today", "Reviewed Today", "Tickets reviewed by distributors in the last 24h", "CheckCircleOutlined", ["tickora_admin", "tickora_distributor"]),
         # ── Phase 7 surfaces ─────────────────────────────────────────────
-        ("my_watchlist", "My Watchlist", "Tickets you've subscribed to follow", "EyeOutlined"),
-        ("my_mentions", "My Mentions", "Comments where you were @mentioned", "BellOutlined"),
-        ("my_assigned", "My Assigned", "Tickets currently assigned to you", "UserOutlined"),
-        ("my_requests", "My Requests", "Tickets where you're the requester or beneficiary", "SendOutlined"),
-        ("linked_tickets", "Linked Tickets", "Parent / child / blocked-by relationships involving you", "LinkOutlined"),
+        ("my_watchlist", "My Watchlist", "Tickets you've subscribed to follow", "EyeOutlined", []),
+        ("my_mentions", "My Mentions", "Comments where you were @mentioned", "BellOutlined", []),
+        ("my_assigned", "My Assigned", "Tickets currently assigned to you", "UserOutlined", ["tickora_internal_user", "tickora_distributor", "tickora_admin"]),
+        ("my_requests", "My Requests", "Tickets where you're the requester or beneficiary", "SendOutlined", []),
+        ("linked_tickets", "Linked Tickets", "Parent / child / blocked-by relationships involving you", "LinkOutlined", []),
         # ── Operations ───────────────────────────────────────────────────
-        ("task_health", "Task Health", "Counts of running / pending / failed background tasks", "DatabaseOutlined"),
-        ("recent_failures", "Recent Task Failures", "Most recent failed background-task rows", "ExclamationCircleOutlined"),
-        ("active_sessions", "Active Sessions", "Users currently signed in (5-minute window)", "TeamOutlined"),
-        ("assignment_age", "Assignment Age", "Average time tickets stay with one assignee", "FieldTimeOutlined"),
-        ("global_kpi", "Global KPI", "Headline counts: total / active / new today / closed today", "BarChartOutlined"),
-        ("notification_feed", "Notification Feed", "Recent in-app notifications", "BellOutlined"),
+        ("task_health", "Task Health", "Counts of running / pending / failed background tasks", "DatabaseOutlined", ["tickora_admin"]),
+        ("recent_failures", "Recent Task Failures", "Most recent failed background-task rows", "ExclamationCircleOutlined", ["tickora_admin"]),
+        ("active_sessions", "Active Sessions", "Users currently signed in (5-minute window)", "TeamOutlined", ["tickora_admin"]),
+        ("assignment_age", "Assignment Age", "Average time tickets stay with one assignee", "FieldTimeOutlined", ["tickora_admin", "tickora_auditor", "tickora_distributor", "tickora_internal_user"]),
+        ("global_kpi", "Global KPI", "Headline counts: total / active / new today / closed today", "BarChartOutlined", ["tickora_admin", "tickora_auditor", "tickora_distributor"]),
+        ("notification_feed", "Notification Feed", "Recent in-app notifications", "BellOutlined", []),
     ]
 
-    for w_type, name, desc, icon in catalogue:
+    for w_type, name, desc, icon, required_roles in catalogue:
         wd = db.get(WidgetDefinition, w_type)
         if not wd:
             wd = WidgetDefinition(type=w_type)
@@ -270,6 +270,7 @@ def sync_widget_catalogue(db: Session) -> None:
         wd.display_name = name
         wd.description = desc
         wd.icon = icon
+        wd.required_roles = required_roles
     db.flush()
 
 

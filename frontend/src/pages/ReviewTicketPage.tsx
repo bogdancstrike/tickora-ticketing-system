@@ -19,6 +19,7 @@ import { StatusTag } from '@/components/common/StatusTag'
 import { PriorityTag } from '@/components/common/PriorityTag'
 import { fmtRelative } from '@/components/common/format'
 import { AuditTimeline } from '@/components/common/AuditTimeline'
+import { ProductTour, TourInfoButton } from '@/components/common/ProductTour'
 
 interface MetadataKeyDef {
   key: string
@@ -279,6 +280,7 @@ export function ReviewTicketPage() {
           <Typography.Text type="secondary" style={{ fontFamily: 'monospace' }}>{t.ticket_code}</Typography.Text>
         </Space>
         <Space>
+          <TourInfoButton pageKey="review-ticket" />
           <Button icon={<ReloadOutlined />} onClick={() => ticket.refetch()} />
           <Button onClick={() => navigate(`/tickets/${t.id}`)}>Open ticket</Button>
         </Space>
@@ -286,7 +288,7 @@ export function ReviewTicketPage() {
 
       {/* Hero — the *thing being reviewed*. Title front-and-center;
           status / priority / one-line meta on a single secondary row. */}
-      <Card styles={{ body: { padding: 24 } }}>
+      <Card styles={{ body: { padding: 24 } }} data-tour-id="review-ticket-summary">
         <Typography.Title level={3} style={{ margin: 0, lineHeight: 1.25 }}>
           {t.title || 'Untitled ticket'}
         </Typography.Title>
@@ -348,7 +350,7 @@ export function ReviewTicketPage() {
 
       <Row gutter={[16, 16]}>
         {/* Triage form — three logical steps + one big primary CTA. */}
-        <Col xs={24} lg={15}>
+        <Col xs={24} lg={15} data-tour-id="review-ticket-form">
           <Card
             title={
               <Space size={8}>
@@ -498,7 +500,7 @@ export function ReviewTicketPage() {
         </Col>
 
         {/* Sidebar — context the distributor refers to while editing. */}
-        <Col xs={24} lg={9}>
+        <Col xs={24} lg={9} data-tour-id="review-ticket-sidebar">
           <div style={{ display: 'grid', gap: 16 }}>
             <Card title="Requester" styles={{ body: { padding: 16 } }}>
               <Descriptions size="small" column={1} colon={false}>
@@ -522,6 +524,14 @@ export function ReviewTicketPage() {
           </div>
         </Col>
       </Row>
+      <ProductTour
+        pageKey="review-ticket"
+        steps={[
+          { target: '[data-tour-id="review-ticket-summary"]', content: 'This summary shows the request being reviewed, including status, priority, beneficiary type, timestamps, and current routing.' },
+          { target: '[data-tour-id="review-ticket-form"]', content: 'Use the review form to route the ticket to the right sector, set priority/category/type, add a private decision note, and optionally close clear non-actionable requests.' },
+          { target: '[data-tour-id="review-ticket-sidebar"]', content: 'The sidebar keeps supporting context close by: metadata fields, requester details, and recent audit activity used to justify the routing decision.' },
+        ]}
+      />
     </div>
   )
 }

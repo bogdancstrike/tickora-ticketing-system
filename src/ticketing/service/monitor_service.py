@@ -12,7 +12,7 @@ from framework.commons.logger import logger
 from sqlalchemy import case, func, or_, select, cast as sa_cast, Text as sa_Text
 from sqlalchemy.orm import Session
 
-from src.core.errors import NotFoundError, PermissionDeniedError, ValidationError
+from src.common.errors import NotFoundError, PermissionDeniedError, ValidationError
 from src.common.spans import set_attr, span
 from src.iam import rbac
 from src.iam.principal import Principal

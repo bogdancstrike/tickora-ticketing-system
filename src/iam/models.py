@@ -6,7 +6,7 @@ from sqlalchemy import Boolean, DateTime, String, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
-from src.core.db import Base
+from src.common.db import Base
 
 
 def _uuid() -> str:

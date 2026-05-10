@@ -6,8 +6,8 @@ from typing import Any
 
 from sqlalchemy import select
 
-from src.core.db import get_db
-from src.core.redis_client import get_redis
+from src.common.db import get_db
+from src.common.redis_client import get_redis
 from src.iam.models import User
 from src.iam.principal import (
     Principal,

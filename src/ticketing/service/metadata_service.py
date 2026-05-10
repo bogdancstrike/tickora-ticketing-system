@@ -4,7 +4,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 from framework.commons.logger import logger
 
-from src.core.errors import PermissionDeniedError
+from src.common.errors import PermissionDeniedError
 from src.iam import rbac
 from src.iam.principal import Principal
 from src.ticketing.models import Ticket, TicketMetadata

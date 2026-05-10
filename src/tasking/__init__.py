@@ -11,7 +11,7 @@ Owns:
   * `registry.register_task(name)` — decorator for handler authors.
 
 External dependencies (the modulith → microservice boundary):
-  * `src.config`, `src.core.db`, `src.core.correlation`. Nothing else.
+  * `src.config`, `src.common.db`, `src.common.correlation`. Nothing else.
   * Handler modules are registered indirectly via
     `Config.TASK_HANDLER_MODULES` — tasking imports nothing about
     ticketing or any specific producer.
