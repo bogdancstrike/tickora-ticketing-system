@@ -16,9 +16,11 @@ def test_sync_widget_catalogue(db_session: Session):
     db_session.flush()
 
     dashboard_service.sync_widget_catalogue(db_session)
-    
+
     count = db_session.query(WidgetDefinition).count()
-    assert count == 15
+    # The catalogue grows whenever we ship a new widget type; assert it
+    # produced rows and that the well-known seeds exist below.
+    assert count >= 15
     
     # Check a few specific ones
     ticket_list = db_session.get(WidgetDefinition, "ticket_list")

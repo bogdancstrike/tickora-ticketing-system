@@ -104,7 +104,48 @@ def create(
         "actor_user_id": principal.user_id,
         "visibility":   visibility,
     })
+
+    # Mentions (Phase 7) — parse `@username` tokens from the comment body
+    # and dispatch a notification per mention. Resolution + visibility
+    # gating happens inside the task handler so we don't pay the user
+    # lookup cost when there are zero mentions.
+    mentioned = _extract_mentions(body)
+    if mentioned:
+        publish("notify_mentions", {
+            "ticket_id":    ticket.id,
+            "comment_id":   comment.id,
+            "actor_user_id": principal.user_id,
+            "visibility":   visibility,
+            "usernames":    mentioned,
+        })
+
     return comment
+
+
+# Match @<username> tokens. Username chars: letters, digits, ., _, -.
+# Bound on word boundaries so an email address `foo@bar.com` doesn't
+# trigger. Limit to 32 chars to align with our user model.
+_MENTION_RE = __import__("re").compile(r"(?:^|[\s(\[\{])@([A-Za-z0-9._-]{1,32})\b")
+
+
+def _extract_mentions(body: str) -> list[str]:
+    """Return unique `@username` tokens from a comment body.
+
+    The list is the *normalised lowercase usernames* — we'll resolve them
+    to user_ids in the notify task. Order is insertion-order so duplicate
+    mentions are deduped without surprising the user about who got
+    notified first.
+    """
+    if not body:
+        return []
+    seen: list[str] = []
+    seen_set: set[str] = set()
+    for match in _MENTION_RE.finditer(body):
+        u = match.group(1).strip().lower()
+        if u and u not in seen_set:
+            seen.append(u)
+            seen_set.add(u)
+    return seen
 
 
 def _load_visible(db: Session, principal: Principal, comment_id: str) -> TicketComment:

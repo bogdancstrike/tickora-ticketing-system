@@ -247,6 +247,19 @@ def sync_widget_catalogue(db: Session) -> None:
         ("welcome_banner", "Welcome Banner", "Personalized greeting and tips", "SmileOutlined"),
         ("not_reviewed", "Not Yet Reviewed", "Pending tickets waiting for distribution", "HourglassOutlined"),
         ("reviewed_today", "Reviewed Today", "Tickets reviewed by distributors in the last 24h", "CheckCircleOutlined"),
+        # ── Phase 7 surfaces ─────────────────────────────────────────────
+        ("my_watchlist", "My Watchlist", "Tickets you've subscribed to follow", "EyeOutlined"),
+        ("my_mentions", "My Mentions", "Comments where you were @mentioned", "BellOutlined"),
+        ("my_assigned", "My Assigned", "Tickets currently assigned to you", "UserOutlined"),
+        ("my_requests", "My Requests", "Tickets where you're the requester or beneficiary", "SendOutlined"),
+        ("linked_tickets", "Linked Tickets", "Parent / child / blocked-by relationships involving you", "LinkOutlined"),
+        # ── Operations ───────────────────────────────────────────────────
+        ("task_health", "Task Health", "Counts of running / pending / failed background tasks", "DatabaseOutlined"),
+        ("recent_failures", "Recent Task Failures", "Most recent failed background-task rows", "ExclamationCircleOutlined"),
+        ("active_sessions", "Active Sessions", "Users currently signed in (5-minute window)", "TeamOutlined"),
+        ("assignment_age", "Assignment Age", "Average time tickets stay with one assignee", "FieldTimeOutlined"),
+        ("global_kpi", "Global KPI", "Headline counts: total / active / new today / closed today", "BarChartOutlined"),
+        ("notification_feed", "Notification Feed", "Recent in-app notifications", "BellOutlined"),
     ]
 
     for w_type, name, desc, icon in catalogue:
@@ -262,17 +275,195 @@ def sync_widget_catalogue(db: Session) -> None:
 
 _AUTO_CONFIGURE_WATCHER_HARD_CAP = 50
 
+# Layout primitives. The grid is 12 columns wide; rows are unbounded.
+# Sizes are tuples of (width, height). Widgets pack left-to-right and
+# wrap onto new rows when they don't fit on the current row.
+_SIZES: dict[str, tuple[int, int]] = {
+    "sm":   (4, 3),    # third-of-row, short
+    "md":   (6, 4),    # half-row
+    "lg":   (8, 4),    # two-thirds
+    "xl":   (12, 4),   # full row, normal height
+    "tall": (4, 6),    # narrow but tall (lists)
+    "wide": (12, 6),   # full row, tall (charts)
+}
+
+_GRID_WIDTH = 12
+
+
+def _pack(widgets: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Place each widget on a 12-col grid by row-major bin-packing.
+
+    Mutates each widget dict to add `x` / `y` / `w` / `h` based on its
+    declared `size` (defaults to `md` if absent or unknown). Honors any
+    `x` / `y` already set on a widget — pre-positioned items skip the
+    packer.
+
+    The packer is intentionally simple — first-fit row-major. Adjacent
+    widgets of the same row align by sharing the row's max height, so
+    we don't end up with ragged rows where a 3-tall widget creates a
+    visual hole next to a 6-tall one. Good enough for ~20 widgets; we
+    don't need 2D bin-packing here.
+    """
+    placed: list[dict[str, Any]] = []
+    cursor_y = 0
+    row_x = 0
+    row_h = 0
+
+    for w in widgets:
+        size_key = w.pop("size", None) or "md"
+        if size_key not in _SIZES:
+            size_key = "md"
+        ww, hh = _SIZES[size_key]
+
+        # Pre-positioned widgets respect the user's intent.
+        if "x" in w and "y" in w and "w" in w and "h" in w:
+            placed.append(w)
+            continue
+
+        # Wrap to next row if this widget doesn't fit on the current one.
+        if row_x + ww > _GRID_WIDTH:
+            cursor_y += row_h
+            row_x = 0
+            row_h = 0
+
+        w["x"] = row_x
+        w["y"] = cursor_y
+        w["w"] = ww
+        w["h"] = hh
+        placed.append(w)
+
+        row_x += ww
+        if hh > row_h:
+            row_h = hh
+
+    return placed
+
+
+# ── Recipes ─────────────────────────────────────────────────────────────────
+# Each recipe is an ordered list of `WidgetSpec`s. The packer turns them
+# into x/y/w/h. Recipes use the catalogue's widget types (and the new
+# Phase 7 ones) so the frontend can decide how to render each.
+
+def _recipe_admin() -> list[dict[str, Any]]:
+    return [
+        {"type": "welcome_banner",     "title": "Welcome", "size": "sm"},
+        {"type": "global_kpi",         "size": "lg",  "config": {}},
+        {"type": "active_sessions",    "size": "sm",  "config": {}},
+        {"type": "task_health",        "size": "sm",  "config": {}},
+        {"type": "system_health",      "size": "sm"},
+        {"type": "sla_overview",       "size": "sm",  "config": {}},
+        {"type": "stale_tickets",      "size": "md",  "config": {"hours": 48}},
+        {"type": "recent_failures",    "size": "md",  "config": {"limit": 10}},
+        {"type": "bottleneck_analysis","size": "wide","config": {"days": 30}},
+        {"type": "audit_stream",       "size": "wide","config": {"limit": 30}},
+    ]
+
+
+def _recipe_auditor() -> list[dict[str, Any]]:
+    return [
+        {"type": "welcome_banner",      "title": "Welcome", "size": "sm"},
+        {"type": "global_kpi",          "size": "lg"},
+        {"type": "sla_overview",        "size": "sm"},
+        {"type": "audit_stream",        "size": "wide", "config": {"limit": 50}},
+        {"type": "bottleneck_analysis", "size": "md",   "config": {"days": 30}},
+        {"type": "stale_tickets",       "size": "md",   "config": {"hours": 72}},
+    ]
+
+
+def _recipe_distributor() -> list[dict[str, Any]]:
+    return [
+        {"type": "welcome_banner",   "title": "Welcome", "size": "sm"},
+        {"type": "monitor_kpi",      "size": "lg",  "config": {"scope": "global"}},
+        {"type": "sla_overview",     "size": "sm"},
+        {"type": "not_reviewed",     "size": "md"},
+        {"type": "reviewed_today",   "size": "md"},
+        {"type": "stale_tickets",    "size": "md",  "config": {"hours": 24, "scope": "global"}},
+        {"type": "workload_balancer","size": "md"},
+        {"type": "audit_stream",     "size": "wide", "config": {"limit": 20}},
+    ]
+
+
+def _recipe_chief(sector_code: str) -> list[dict[str, Any]]:
+    cfg = {"scope": "sector", "sector_code": sector_code}
+    return [
+        {"type": "welcome_banner",      "title": f"Sector {sector_code}", "size": "sm"},
+        {"type": "monitor_kpi",         "size": "lg",   "config": cfg},
+        {"type": "user_workload",       "size": "sm",   "config": cfg},
+        {"type": "workload_balancer",   "size": "md",   "config": cfg},
+        {"type": "assignment_age",      "size": "md",   "config": cfg},
+        {"type": "ticket_list",         "size": "md",   "title": f"Sector queue · {sector_code}", "config": cfg},
+        {"type": "stale_tickets",       "size": "md",   "config": {**cfg, "hours": 24}},
+        {"type": "bottleneck_analysis", "size": "wide", "config": {**cfg, "days": 14}},
+        {"type": "sector_stats",        "size": "md",   "config": cfg},
+        {"type": "audit_stream",        "size": "md",   "config": {"sector_code": sector_code, "limit": 20}},
+    ]
+
+
+def _recipe_member() -> list[dict[str, Any]]:
+    return [
+        {"type": "welcome_banner",  "title": "My day", "size": "sm"},
+        {"type": "monitor_kpi",     "size": "lg", "config": {"scope": "personal"}},
+        {"type": "my_assigned",     "size": "md"},
+        {"type": "my_watchlist",    "size": "md"},
+        {"type": "my_mentions",     "size": "md", "config": {"limit": 10}},
+        {"type": "linked_tickets",  "size": "md"},
+        {"type": "recent_comments", "size": "md", "config": {"scope": "personal"}},
+        {"type": "notification_feed", "size": "md", "config": {"limit": 15}},
+    ]
+
+
+def _recipe_beneficiary() -> list[dict[str, Any]]:
+    return [
+        {"type": "welcome_banner",  "title": "Welcome", "size": "sm"},
+        {"type": "profile_card",    "size": "sm"},
+        {"type": "shortcuts",       "size": "sm"},
+        {"type": "my_requests",     "size": "lg"},
+        {"type": "recent_comments", "size": "md",
+         "config": {"visibility": "public", "scope": "my_requests"}},
+        {"type": "notification_feed", "size": "md", "config": {"limit": 10}},
+    ]
+
+
+def _pick_recipe(p: Principal, primary_sector: str | None) -> list[dict[str, Any]]:
+    """Choose the best recipe for the principal.
+
+    Order matters: admin trumps everything, then auditor, then
+    distributor, then chief, then member, then beneficiary. A user with
+    multiple roles gets the most-privileged recipe — that's almost
+    always what they want a "default" dashboard to look like.
+    """
+    if p.is_admin:
+        return _recipe_admin()
+    if p.is_auditor:
+        return _recipe_auditor()
+    if p.is_distributor:
+        return _recipe_distributor()
+    if p.chief_sectors:
+        sc = primary_sector or sorted(p.chief_sectors)[0]
+        return _recipe_chief(sc)
+    if p.is_internal:
+        return _recipe_member()
+    return _recipe_beneficiary()
+
 
 def auto_configure_dashboard(db: Session, p: Principal, dashboard_id: str, mode: str = "append", primary_sector: str | None = None) -> None:
-    """Heuristic logic to build a role-appropriate dashboard.
+    """Heuristically populate a dashboard with a sensible widget set.
 
-    Note on the watcher cap: the per-dashboard watcher count is taken from
-    the system setting `autopilot_max_ticket_watchers`, which an
-    administrator can edit at runtime. We *also* enforce a hard cap
-    (`_AUTO_CONFIGURE_WATCHER_HARD_CAP`) so a typo or a malicious script
-    that bumps the setting to a huge number can't paste hundreds of widgets
-    onto a dashboard in a single call. The hard cap floors at 0 so a
-    negative setting can't trigger an unbounded read.
+    Steps:
+      1. Pick a recipe based on the principal's role/sector profile.
+      2. Pack the recipe onto a 12-column grid (`_pack`).
+      3. Append a small "watch list" of recent visible tickets if the
+         system setting `autopilot_max_ticket_watchers` says so. Hard-
+         capped at `_AUTO_CONFIGURE_WATCHER_HARD_CAP`.
+      4. Persist the widgets.
+
+    The watcher widgets sit *under* the recipe widgets so they don't
+    crowd the headline metrics. They're added at the next available row
+    after the recipe finishes packing.
+
+    `mode='replace'` clears existing widgets first; `mode='append'`
+    leaves them and adds new ones (useful for a "suggest more widgets"
+    button down the line).
     """
     d = db.get(CustomDashboard, dashboard_id)
     if d is None or d.owner_user_id != p.user_id:
@@ -283,83 +474,48 @@ def auto_configure_dashboard(db: Session, p: Principal, dashboard_id: str, mode:
         db.flush()
         db.refresh(d)
 
-    # Load limits — hard-capped regardless of system-setting value.
     raw_max = int(get_setting(db, "autopilot_max_ticket_watchers", 5))
     max_watchers = max(0, min(raw_max, _AUTO_CONFIGURE_WATCHER_HARD_CAP))
 
-    # Heuristics
-    widgets_to_add = []
-    
-    # Base widget
-    widgets_to_add.append({"type": "welcome_banner", "title": "Welcome!", "x": 0, "y": 0, "w": 4, "h": 3})
+    # Step 1+2: recipe → packed grid coordinates.
+    recipe = _pick_recipe(p, primary_sector)
+    placed = _pack(recipe)
 
-    if p.is_admin:
-        widgets_to_add.extend([
-            {"type": "system_health", "x": 4, "y": 0, "w": 4, "h": 3},
-            {"type": "sla_overview", "x": 8, "y": 0, "w": 4, "h": 3},
-            {"type": "stale_tickets", "x": 0, "y": 3, "w": 4, "h": 4, "config": {"hours": 48}},
-            {"type": "bottleneck_analysis", "x": 4, "y": 3, "w": 8, "h": 4, "config": {"days": 30}},
-            {"type": "audit_stream", "x": 0, "y": 7, "w": 12, "h": 4},
-        ])
-    elif p.chief_sectors:
-        sector_code = primary_sector or list(p.chief_sectors)[0]
-        widgets_to_add.extend([
-            {"type": "workload_balancer", "x": 4, "y": 0, "w": 8, "h": 3, "config": {"sectorCode": sector_code}},
-            {"type": "bottleneck_analysis", "x": 0, "y": 3, "w": 12, "h": 4, "config": {"scope": "sector", "sector_code": sector_code, "days": 14}},
-            {"type": "ticket_list", "x": 0, "y": 7, "w": 6, "h": 4, "title": f"Sector Queue: {sector_code}", "config": {"scope": "sector", "sector_code": sector_code}},
-            {"type": "stale_tickets", "x": 6, "y": 7, "w": 6, "h": 4, "config": {"scope": "sector", "sector_code": sector_code, "hours": 24}},
-        ])
-    elif p.is_internal:
-        widgets_to_add.extend([
-            {"type": "monitor_kpi", "x": 4, "y": 0, "w": 8, "h": 3, "config": {"scope": "personal"}},
-            {"type": "ticket_list", "x": 0, "y": 3, "w": 8, "h": 4, "title": "My Active Queue", "config": {"scope": "personal"}},
-            {"type": "recent_comments", "x": 8, "y": 3, "w": 4, "h": 4, "config": {"scope": "personal"}},
-        ])
-    else:  # Beneficiary
-        widgets_to_add.extend([
-            {"type": "profile_card", "x": 4, "y": 0, "w": 4, "h": 3},
-            {"type": "shortcuts", "x": 8, "y": 0, "w": 4, "h": 3},
-            {"type": "ticket_list", "x": 0, "y": 3, "w": 8, "h": 4, "title": "My Requests", "config": {"scope": "my_requests"}},
-            {"type": "recent_comments", "x": 8, "y": 3, "w": 4, "h": 4, "config": {"visibility": "public", "scope": "my_requests"}},
-        ])
+    # Where does the recipe end? We'll start the watcher row beneath it.
+    recipe_max_y = max((w["y"] + w["h"] for w in placed), default=0)
 
-    # Add dynamic watchers for most recent active tickets
-    recent_tickets = db.scalars(
-        _visible_stmt(p)
-        .where(Ticket.status.in_(ACTIVE_STATUSES))
-        .order_by(Ticket.created_at.desc())
-        .limit(max_watchers)
-    ).all()
+    # Step 3: watcher widgets (most-recent visible active tickets).
+    watcher_specs: list[dict[str, Any]] = []
+    if max_watchers > 0:
+        recent_tickets = db.scalars(
+            _visible_stmt(p)
+            .where(Ticket.status.in_(ACTIVE_STATUSES))
+            .order_by(Ticket.created_at.desc())
+            .limit(max_watchers)
+        ).all()
+        for t in recent_tickets:
+            label = f"{t.ticket_code}: {t.title}" if t.title else f"Comments: {t.ticket_code}"
+            watcher_specs.append({
+                "type":  "recent_comments",
+                "title": label,
+                "size":  "sm",
+                "config": {"ticketId": t.id, "limit": 5},
+            })
+    # Pack the watchers onto their own row block, then offset y by the
+    # recipe's depth so they don't overlap.
+    watcher_placed = _pack(watcher_specs)
+    for w in watcher_placed:
+        w["y"] += recipe_max_y
 
-    current_y = 11
-    for idx, t in enumerate(recent_tickets):
-        # Include ticket code AND title in the widget header
-        title = f"Comments: {t.ticket_code}"
-        if t.title:
-            title = f"{t.ticket_code}: {t.title}"
-
-        widgets_to_add.append({
-            "type": "recent_comments",
-            "title": title,
-            "x": (idx % 3) * 4,
-            "y": current_y + (idx // 3) * 4,
-            "w": 4, "h": 4,
-            "config": {"ticketId": t.id, "limit": 5}
-        })
-
-    for w_data in widgets_to_add:
-        w = DashboardWidget(
+    # Step 4: persist.
+    for w in placed + watcher_placed:
+        db.add(DashboardWidget(
             dashboard_id=d.id,
-            type=w_data["type"],
-            title=w_data.get("title"),
-            x=w_data["x"],
-            y=w_data["y"],
-            w=w_data["w"],
-            h=w_data["h"],
-            config=w_data.get("config", {})
-        )
-        db.add(w)
-    
+            type=w["type"],
+            title=w.get("title"),
+            x=w["x"], y=w["y"], w=w["w"], h=w["h"],
+            config=w.get("config", {}),
+        ))
     db.flush()
 
 

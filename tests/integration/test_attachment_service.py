@@ -180,17 +180,26 @@ class TestRegister:
             )
 
     def test_register_rejects_wrong_ticket_comment(self, db_session, world):
-        # Build a second ticket and try to register a comment on it.
-        sector = create_sector(db_session, code="s99")
+        # Build a SECOND ticket in the same sector (s10) so the assignee
+        # can see it, then try to register an attachment whose `comment_id`
+        # belongs to the *world* ticket — different ticket, invalid combo.
+        from sqlalchemy import select
+        from src.ticketing.models import Sector
+
+        s10 = db_session.scalar(select(Sector).where(Sector.code == "s10"))
         u = create_user(db_session, "elsewhere")
         b = create_beneficiary(db_session, u)
-        other = create_ticket(db_session, b, created_by=u, current_sector=sector)
+        other = create_ticket(db_session, b, created_by=u, current_sector=s10)
         db_session.commit()
-        key = self._upload(db_session, world)
+
+        out = attachment_service.request_upload_url(
+            db_session, world["principals"]["assignee"], other.id,
+            file_name="x.pdf", content_type=None, size_bytes=10,
+        )
         with pytest.raises(ValidationError, match="invalid comment_id"):
             attachment_service.register(
                 db_session, world["principals"]["assignee"], other.id,
-                storage_key=key, file_name="x.pdf",
+                storage_key=out["storage_key"], file_name="x.pdf",
                 size_bytes=10, comment_id=world["public_comment"].id,
             )
 

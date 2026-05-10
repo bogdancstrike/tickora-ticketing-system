@@ -38,3 +38,10 @@ CONFIG_CHANGED      = "CONFIG_CHANGED"
 # ── Auth ──────────────────────────────────────────────────────────────────────
 ACCESS_DENIED = "ACCESS_DENIED"
 EXPORT_RUN    = "EXPORT_RUN"
+
+# ── Watchers / mentions / links (Phase 7) ─────────────────────────────────────
+TICKET_WATCHER_ADDED   = "TICKET_WATCHER_ADDED"
+TICKET_WATCHER_REMOVED = "TICKET_WATCHER_REMOVED"
+TICKET_MENTION         = "TICKET_MENTION"
+TICKET_LINK_ADDED      = "TICKET_LINK_ADDED"
+TICKET_LINK_REMOVED    = "TICKET_LINK_REMOVED"

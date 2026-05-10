@@ -253,6 +253,39 @@ export const upsertAdminWidget = async (payload: Partial<AdminWidgetDefinition> 
   return data
 }
 
+// ── Background tasks (lifecycle rows from src.tasking) ──────────────────────
+
+export type TaskStatus = 'pending' | 'running' | 'completed' | 'failed'
+
+export interface AdminTask {
+  id: string
+  task_name: string
+  topic: string | null
+  status: TaskStatus
+  payload: Record<string, unknown> | null
+  correlation_id: string | null
+  attempts: number
+  last_error: string | null
+  created_at: string | null
+  started_at: string | null
+  completed_at: string | null
+  last_heartbeat_at: string | null
+}
+
+export const listAdminTasks = async (params: {
+  status?: TaskStatus
+  task_name?: string
+  limit?: number
+} = {}): Promise<{ items: AdminTask[] }> => {
+  const { data } = await apiClient.get('/api/tasks', { params })
+  return data
+}
+
+export const getAdminTask = async (taskId: string): Promise<AdminTask> => {
+  const { data } = await apiClient.get(`/api/tasks/${taskId}`)
+  return data
+}
+
 export const syncAdminWidgets = async (): Promise<void> => {
   await apiClient.post('/api/admin/widget-definitions/sync')
 }

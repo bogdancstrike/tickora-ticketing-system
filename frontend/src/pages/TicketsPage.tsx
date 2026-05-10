@@ -3,6 +3,8 @@ import { useTranslation } from 'react-i18next'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ProductTour, TourInfoButton } from '@/components/common/ProductTour'
+import { WatchButton } from '@/components/common/WatchButton'
+import { TicketLinksPanel } from '@/components/common/TicketLinksPanel'
 import {
   Alert, Button, Card, Checkbox, Col, Descriptions, Empty, Flex, Form, Input, Modal, Row, Select,
   Space, Table, Tag, Typography, message, theme as antTheme, Upload, Statistic, Spin,
@@ -356,21 +358,42 @@ function CommentBox({
   })
 
   const add = useMutation({
+    /**
+     * Comment + attachments flow:
+     *   1. Persist the comment first so we have a `comment_id` to attach to.
+     *   2. For each queued file, request a presigned URL, PUT to MinIO,
+     *      then call `register` to store the metadata row.
+     *   3. Per-file failures bubble up — partial success is reported so
+     *      the user sees which file didn't make it.
+     *
+     * Visibility is the comment's visibility (public/private). Private
+     * uploads inherit the comment's RBAC: only staff that can read
+     * private comments can download them. Backend re-checks every time.
+     */
     mutationFn: async (values: { body: string; is_public?: boolean }) => {
       const visibility = (canPostPrivate ? values.is_public !== false : true) ? 'public' : 'private'
       const comment = await createComment(ticketId, values.body, visibility)
-      
-      // Sequential uploads for any attached files
+
+      const failures: string[] = []
       for (const fileItem of fileList) {
         if (!fileItem.originFileObj) continue
         const file = fileItem.originFileObj as File
-        const req = await requestAttachmentUpload(ticketId, file)
-        await fetch(req.upload_url, {
-          method: 'PUT',
-          headers: { 'Content-Type': file.type || 'application/octet-stream' },
-          body: file,
-        })
-        await registerAttachment(ticketId, file, req.storage_key, comment.id)
+        try {
+          const req = await requestAttachmentUpload(ticketId, file)
+          const putRes = await fetch(req.upload_url, {
+            method: 'PUT',
+            headers: { 'Content-Type': file.type || 'application/octet-stream' },
+            body: file,
+          })
+          if (!putRes.ok) throw new Error(`MinIO PUT failed: ${putRes.status}`)
+          await registerAttachment(ticketId, file, req.storage_key, comment.id)
+        } catch (e) {
+          failures.push(`${file.name}: ${(e as Error).message}`)
+        }
+      }
+      if (failures.length) {
+        // Surface partial-failure detail; the comment itself succeeded.
+        throw new Error(`Comment posted but ${failures.length} attachment(s) failed:\n${failures.join('\n')}`)
       }
       return comment
     },
@@ -382,7 +405,13 @@ function CommentBox({
       await queryClient.invalidateQueries({ queryKey: ['ticketAudit', ticketId] })
       msg.success('Comment posted')
     },
-    onError: (err) => msg.error(err.message),
+    onError: async (err) => {
+      // Even on partial failure the comment exists, so we still refresh
+      // the visible threads — the message tells the user what's missing.
+      msg.error({ content: err.message, duration: 6 })
+      await queryClient.invalidateQueries({ queryKey: ['comments', ticketId] })
+      await queryClient.invalidateQueries({ queryKey: ['attachments', ticketId] })
+    },
   })
 
   const remove = useMutation({
@@ -399,6 +428,11 @@ function CommentBox({
     queryFn: () => listAttachments(ticketId),
   })
 
+  // Upload props are shared between the Dragger (drag-and-drop area) and
+  // the inline button. `beforeUpload: false` short-circuits AntD's auto-
+  // upload so the file just lands in `fileList`; the actual transfer
+  // happens inside the comment-create mutation (so MinIO + register run
+  // after the comment exists and we have its id).
   const uploadProps: UploadProps = {
     onRemove: (file) => {
       const index = fileList.indexOf(file)
@@ -407,7 +441,16 @@ function CommentBox({
       setFileList(newFileList)
     },
     beforeUpload: (file) => {
-      setFileList([...fileList, file])
+      // Cap per-file size client-side to mirror the backend
+      // (`Config.ATTACHMENT_MAX_SIZE_BYTES`, default 25 MiB). We can't
+      // read the env from the SPA, so the limit is duplicated here as a
+      // safety net — the backend remains the source of truth.
+      const MAX = 25 * 1024 * 1024
+      if (file.size > MAX) {
+        msg.error(`${file.name} is larger than 25 MB`)
+        return Upload.LIST_IGNORE
+      }
+      setFileList((prev) => [...prev, file])
       return false
     },
     fileList,
@@ -425,9 +468,16 @@ function CommentBox({
             </Form.Item>
             
             <div style={{ marginBottom: 12 }}>
-              <Upload {...uploadProps}>
-                <Button size="small" icon={<PaperClipOutlined />}>Attach files</Button>
-              </Upload>
+              <Upload.Dragger {...uploadProps} style={{ padding: '12px 16px' }}>
+                <p style={{ margin: 0, color: 'rgba(0,0,0,0.65)' }}>
+                  <PaperClipOutlined style={{ fontSize: 18, marginRight: 6 }} />
+                  Drag files here or click to attach
+                </p>
+                <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                  Up to 25 MB per file. Files inherit the comment's
+                  visibility — private comments → private files.
+                </Typography.Text>
+              </Upload.Dragger>
             </div>
 
             <Flex justify="space-between" align="center">
@@ -663,6 +713,7 @@ function TicketSidebar({ ticket }: { ticket: TicketDto }) {
           <Descriptions.Item label="SLA due">{fmt(ticket.sla_due_at)}</Descriptions.Item>
         </Descriptions>
       </Card>
+      <TicketLinksPanel ticketId={ticket.id} />
       {items.length > 0 && (
         <Card size="small" title="Metadata">
           <div style={{ display: 'grid', gap: 4 }}>
@@ -705,14 +756,17 @@ function TicketDetails({ ticketId }: { ticketId?: string }) {
 
   return (
     <div style={{ padding: 24, display: 'grid', gap: 16 }}>
-      {/* Top breadcrumb / back */}
+      {/* Top breadcrumb / back + watch toggle */}
       <Flex justify="space-between" align="center" wrap="wrap" gap={8}>
         <Space>
           <Button type="link" onClick={() => navigate('/tickets')} style={{ padding: 0 }}>← Back to Tickets</Button>
         </Space>
-        <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-          Created {fmt(ticket.created_at)} · Updated {fmt(ticket.updated_at)}
-        </Typography.Text>
+        <Space>
+          <WatchButton ticketId={ticket.id} />
+          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+            Created {fmt(ticket.created_at)} · Updated {fmt(ticket.updated_at)}
+          </Typography.Text>
+        </Space>
       </Flex>
 
       {/* Hero card */}

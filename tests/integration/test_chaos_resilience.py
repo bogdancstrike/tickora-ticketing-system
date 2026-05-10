@@ -25,21 +25,21 @@ class TestRedisBlackout:
     silently degrade. None of these calls should raise."""
 
     def test_session_tracker_fails_open(self, monkeypatch):
-        from src.core import session_tracker
+        from src.common import session_tracker
         monkeypatch.setattr(session_tracker, "get_redis", lambda: None)
         session_tracker.mark_active("u-1")
         assert session_tracker.active_user_count() == 0
         assert session_tracker.active_user_ids() == set()
 
     def test_rate_limiter_fails_open(self, monkeypatch):
-        from src.core import rate_limiter
+        from src.common import rate_limiter
         monkeypatch.setattr(rate_limiter, "get_redis", lambda: None)
         # Even past the nominal limit, the call must succeed.
         for _ in range(100):
             rate_limiter.check(bucket="x", identity="u", limit=5, window_s=60)
 
     def test_cache_falls_through_to_producer(self, monkeypatch):
-        from src.core import cache
+        from src.common import cache
         monkeypatch.setattr(cache, "get_redis", lambda: None)
         producer = MagicMock(return_value={"v": "live"})
         out = cache.cached_call(
@@ -54,20 +54,20 @@ class TestRedisErrors:
     contract as a full blackout."""
 
     def test_session_tracker_handles_setex_error(self, monkeypatch):
-        from src.core import session_tracker
+        from src.common import session_tracker
         rds = MagicMock()
         rds.setex.side_effect = RuntimeError("boom")
         monkeypatch.setattr(session_tracker, "get_redis", lambda: rds)
         session_tracker.mark_active("u-1")  # no raise
 
     def test_cache_handles_get_error(self, monkeypatch):
-        from src.core import cache
+        from src.common import cache
         rds = MagicMock()
         rds.get.side_effect = RuntimeError("boom")
         monkeypatch.setattr(cache, "get_redis", lambda: rds)
         producer = MagicMock(return_value=[1])
         out = cache.cached_call(
-            namespace="m", key_parts=["x"], ttl=30, producer=producer,
+            namespace="m", key_parts=["x_distinct"], ttl=30, producer=producer,
         )
         assert out == [1]
 
@@ -112,7 +112,7 @@ class TestCompoundOutage:
         """`monitor_overview` falls back to a live computation when the
         cache layer is unreachable. The bug we're guarding against is a
         partial Redis outage propagating up as a 500."""
-        from src.core import cache
+        from src.common import cache
         monkeypatch.setattr(cache, "get_redis", lambda: None)
 
         # Stub the inner computation: we just want to confirm the wrapper
@@ -125,7 +125,7 @@ class TestCompoundOutage:
 
         out = cache.cached_call(
             namespace="monitor.overview",
-            key_parts=["v1", 30, "u-x"],
+            key_parts=["v1", 30, "u-cascade-test"],
             ttl=60,
             producer=producer,
         )

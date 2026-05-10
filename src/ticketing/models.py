@@ -379,6 +379,33 @@ class MetadataKeyDefinition(Base):
     updated_at:  Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
 
 
+# ── Watchers (Phase 7) ─────────────────────────────────────────────────────
+
+class TicketWatcher(Base):
+    """Users who subscribed to a ticket without being assigned.
+
+    A watcher gets the same notification fan-out as the requester /
+    beneficiary on visible events (comments, status, sector changes).
+    Private comments are still gated by `can_see_private_comments`, so
+    subscribing doesn't grant new visibility — it just ensures the
+    notification task picks the user up.
+
+    Self-subscription only by default; admins can add/remove others.
+    """
+    __tablename__ = "ticket_watchers"
+    __table_args__ = (
+        Index("idx_ticket_watchers_ticket", "ticket_id"),
+        Index("idx_ticket_watchers_user",   "user_id"),
+        UniqueConstraint("ticket_id", "user_id", name="uq_ticket_watchers"),
+    )
+
+    id:                  Mapped[str] = mapped_column(UUID(as_uuid=False), primary_key=True, default=_uuid)
+    ticket_id:           Mapped[str] = mapped_column(UUID(as_uuid=False), ForeignKey("tickets.id", ondelete="CASCADE"), nullable=False)
+    user_id:             Mapped[str] = mapped_column(UUID(as_uuid=False), ForeignKey("users.id"), nullable=False)
+    created_by_user_id:  Mapped[str | None] = mapped_column(UUID(as_uuid=False), ForeignKey("users.id"))
+    created_at:          Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
 # ── Customizable Dashboards ────────────────────────────────────────────────
 
 class CustomDashboard(Base):
@@ -391,6 +418,13 @@ class CustomDashboard(Base):
     owner_user_id:  Mapped[str] = mapped_column(UUID(as_uuid=False), ForeignKey("users.id"), nullable=False)
     title:          Mapped[str] = mapped_column(String(255), nullable=False)
     description:    Mapped[str | None] = mapped_column(Text)
+    # `is_public` was deprecated in favour of explicit sharing (which we
+    # haven't built yet). Keep the column mapped with a default so legacy
+    # databases that still have it as NOT NULL accept new inserts. Older
+    # rows keep whatever value they had. The drop-column migration
+    # (`d5e9b1207f08`) is optional — when it runs, this attribute simply
+    # stops appearing in INSERT statements.
+    is_public:      Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default=text("false"))
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=lambda: datetime.now(timezone.utc), nullable=False)

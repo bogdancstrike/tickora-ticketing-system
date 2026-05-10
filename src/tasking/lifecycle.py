@@ -156,13 +156,40 @@ def list_tasks(
     task_name: str | None = None,
     limit: int = 100,
 ) -> list[Task]:
+    """Return recent task rows.
+
+    If the `tasks` table doesn't exist yet (migration `e7b34cd9f211`
+    not applied), we return an empty list rather than 500. The admin
+    "Background tasks" widget then renders its quiet empty state.
+    """
     stmt = select(Task).order_by(Task.created_at.desc())
     if status:
         stmt = stmt.where(Task.status == status)
     if task_name:
         stmt = stmt.where(Task.task_name == task_name)
-    return list(db.scalars(stmt.limit(max(1, min(limit, 500)))))
+    try:
+        return list(db.scalars(stmt.limit(max(1, min(limit, 500)))))
+    except Exception as exc:
+        logger.warning(
+            "tasks table read failed (migration applied?)",
+            extra={"error": str(exc)},
+        )
+        # Roll the session back to clear the failed transaction state so
+        # subsequent queries on the same session don't error with
+        # "current transaction is aborted".
+        try:
+            db.rollback()
+        except Exception:
+            pass
+        return []
 
 
 def get_task(db: Session, task_id: str) -> Task | None:
-    return db.get(Task, task_id)
+    try:
+        return db.get(Task, task_id)
+    except Exception:
+        try:
+            db.rollback()
+        except Exception:
+            pass
+        return None

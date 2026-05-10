@@ -19,7 +19,8 @@ import {
 import {
   ADMIN_ROLES, createAdminSector, getAdminOverview,
   getGroupHierarchy, grantMembership, listAdminMemberships, listAdminMetadataKeys,
-  listAdminSectors, listAdminUsers, revokeMembership, updateAdminSector,
+  listAdminSectors, listAdminTasks, listAdminUsers, revokeMembership, updateAdminSector,
+  type AdminTask, type TaskStatus,
   updateAdminUser, upsertAdminMetadataKey,
   listAdminWidgets, upsertAdminWidget, syncAdminWidgets,
   listSystemSettings, upsertSystemSetting,
@@ -398,74 +399,6 @@ function TicketMetadatasPanel() {
   )
 }
 
-function SystemSettingsPanel() {
-  const qc = useQueryClient()
-  const settings = useQuery({ queryKey: ['adminSystemSettings'], queryFn: listSystemSettings, staleTime: 60_000 })
-  const [editing, setEditing] = useState<SystemSetting | null>(null)
-
-  const save = useMutation({
-    mutationFn: (values: any) => {
-        const payload = { 
-            ...editing, 
-            ...values, 
-            value: typeof values.value === 'string' ? JSON.parse(values.value) : values.value 
-        }
-        return upsertSystemSetting(payload)
-    },
-    onSuccess: () => {
-      message.success('Setting saved')
-      setEditing(null)
-      qc.invalidateQueries({ queryKey: ['adminSystemSettings'] })
-    },
-    onError: (err: any) => message.error(err.message || 'Save failed')
-  })
-
-  const columns: ColumnsType<SystemSetting> = [
-    { title: 'Setting Key', dataIndex: 'key', width: 250 },
-    { title: 'Value', dataIndex: 'value', render: (v) => <Typography.Text code>{JSON.stringify(v)}</Typography.Text> },
-    { title: 'Description', dataIndex: 'description' },
-    { title: 'Last Updated', dataIndex: 'updated_at', render: (v) => v ? fmtDateTime(v) : '-' },
-    {
-      title: 'Action',
-      width: 100,
-      render: (_, row) => <Button size="small" onClick={() => setEditing(row)}>Edit</Button>,
-    },
-  ]
-
-  return (
-    <Panel title="Auto-Pilot & System Settings" icon={<SettingOutlined />}>
-      <Table
-        rowKey="key"
-        size="small"
-        loading={settings.isLoading}
-        dataSource={settings.data?.items || []}
-        pagination={false}
-        columns={columns}
-      />
-      <Modal
-        title="Edit System Setting"
-        open={!!editing}
-        onCancel={() => setEditing(null)}
-        footer={null}
-        destroyOnHide
-      >
-        <Form
-          layout="vertical"
-          initialValues={editing ? { ...editing, value: JSON.stringify(editing.value, null, 2) } : {}}
-          onFinish={(values) => save.mutate(values)}
-        >
-          <Form.Item name="key" label="Key"><Input disabled /></Form.Item>
-          <Form.Item name="value" label="Value (JSON)" rules={[{ required: true }]}>
-            <Input.TextArea rows={6} placeholder='{"max": 5}' />
-          </Form.Item>
-          <Form.Item name="description" label="Description"><Input.TextArea rows={2} /></Form.Item>
-          <Button type="primary" htmlType="submit" loading={save.isPending}>Save</Button>
-        </Form>
-      </Modal>
-    </Panel>
-  )
-}
-
 function ConfigTab() {
   const qc = useQueryClient()
   const [editing, setEditing] = useState<AdminMetadataKey | null>(null)
@@ -476,8 +409,7 @@ function ConfigTab() {
   })
   return (
     <div style={{ display: 'grid', gap: 16 }}>
-      <SystemSettingsPanel />
-      <Panel title="Metadata catalogue" icon={<DatabaseOutlined />}>
+      <Panel title={t('common.metadata_catalogue')} icon={<DatabaseOutlined />}>
         <Flex justify="end" style={{ marginBottom: 12 }}><Button type="primary" icon={<PlusOutlined />} onClick={() => setEditing({ key: '', label: '', value_type: 'string', options: [], is_active: true })}>New metadata key</Button></Flex>
         <Table
           rowKey="key"
@@ -517,6 +449,8 @@ function SystemTab() {
   const overview = useQuery({ queryKey: ['adminOverview'], queryFn: getAdminOverview, staleTime: 30_000 })
   const hardening = [
     { key: 'hot_path_indexes', label: 'Hot-path indexes migration', status: 'ready', detail: '0007_phase8_hardening_indexes' },
+    { key: 'phase9_indexes', label: 'Phase 9 perf indexes',         status: 'ready', detail: '9a1f3e0c2d10_phase9_perf_indexes' },
+    { key: 'tasks_lifecycle', label: 'Task lifecycle table',         status: 'ready', detail: 'e7b34cd9f211_tasks_lifecycle_table' },
   ]
   return (
     <Row gutter={[16, 16]}>
@@ -543,7 +477,126 @@ function SystemTab() {
           <MetricPanel values={{ breached: overview.data?.sla.breached, due_24h: overview.data?.sla.due_24h }} />
         </Panel>
       </Col>
+      <Col xs={24}>
+        <Panel title="Background tasks" icon={<HistoryOutlined />}>
+          <BackgroundTasksWidget />
+        </Panel>
+      </Col>
     </Row>
+  )
+}
+
+/**
+ * Operator view of the `tasks` lifecycle table (`src.tasking.models.Task`).
+ *
+ * Two stacked groups: failed (top, ⚠ red) and active (running + pending,
+ * neutral). Completed rows are hidden by default — they're the noise. A
+ * "Show completed" toggle pulls the last 50 successes for spot checks.
+ *
+ * Refetches every 15 s so an admin watching a deploy can see jobs land
+ * without a manual reload. Backend caps `limit` at 500 so we don't have
+ * to.
+ */
+function BackgroundTasksWidget() {
+  const { token } = antTheme.useToken()
+  const [showCompleted, setShowCompleted] = useState(false)
+
+  const failed   = useQuery({ queryKey: ['adminTasks', 'failed'],    queryFn: () => listAdminTasks({ status: 'failed',    limit: 30 }), refetchInterval: 15_000 })
+  const running  = useQuery({ queryKey: ['adminTasks', 'running'],   queryFn: () => listAdminTasks({ status: 'running',   limit: 30 }), refetchInterval: 15_000 })
+  const pending  = useQuery({ queryKey: ['adminTasks', 'pending'],   queryFn: () => listAdminTasks({ status: 'pending',   limit: 30 }), refetchInterval: 15_000 })
+  const completed = useQuery({
+    queryKey: ['adminTasks', 'completed'],
+    queryFn: () => listAdminTasks({ status: 'completed', limit: 50 }),
+    enabled: showCompleted,
+    refetchInterval: showCompleted ? 30_000 : false,
+  })
+
+  const failedRows  = failed.data?.items   || []
+  const runningRows = running.data?.items  || []
+  const pendingRows = pending.data?.items  || []
+  const doneRows    = completed.data?.items || []
+
+  const columns: ColumnsType<AdminTask> = [
+    { title: 'Task',     dataIndex: 'task_name', width: 200, render: (v: string) => <Typography.Text style={{ fontFamily: 'monospace' }}>{v}</Typography.Text> },
+    { title: 'Status',   dataIndex: 'status',    width: 110, render: (v: TaskStatus) => {
+      const color = v === 'failed' ? 'red' : v === 'running' ? 'blue' : v === 'completed' ? 'green' : 'default'
+      return <Tag color={color}>{v}</Tag>
+    }},
+    { title: 'Attempts', dataIndex: 'attempts',  width: 90 },
+    { title: 'Created',  dataIndex: 'created_at', width: 160, render: (v: string | null) => v ? <Typography.Text type="secondary" style={{ fontSize: 12 }}>{new Date(v).toLocaleString()}</Typography.Text> : '—' },
+    { title: 'Last error / heartbeat', dataIndex: 'last_error', render: (err: string | null, row: AdminTask) => {
+      if (err) return <Typography.Text type="danger" style={{ fontSize: 12 }}>{err}</Typography.Text>
+      if (row.status === 'running' && row.last_heartbeat_at) {
+        return <Typography.Text type="secondary" style={{ fontSize: 12 }}>♥ {new Date(row.last_heartbeat_at).toLocaleTimeString()}</Typography.Text>
+      }
+      return <Typography.Text type="secondary" style={{ fontSize: 12 }}>—</Typography.Text>
+    }},
+  ]
+
+  return (
+    <div style={{ display: 'grid', gap: 16 }}>
+      <Row gutter={[12, 12]}>
+        <Col xs={8}>
+          <KpiTile label="Failed (recent)"  value={failedRows.length} />
+        </Col>
+        <Col xs={8}>
+          <KpiTile label="Running"          value={runningRows.length} />
+        </Col>
+        <Col xs={8}>
+          <KpiTile label="Pending"          value={pendingRows.length} />
+        </Col>
+      </Row>
+
+      {failedRows.length > 0 && (
+        <div>
+          <Typography.Text strong style={{ display: 'block', marginBottom: 6, color: token.colorErrorText }}>
+            Recent failures
+          </Typography.Text>
+          <Table<AdminTask>
+            rowKey="id" size="small" pagination={false}
+            columns={columns} dataSource={failedRows}
+          />
+        </div>
+      )}
+
+      {(runningRows.length + pendingRows.length) > 0 && (
+        <div>
+          <Typography.Text strong style={{ display: 'block', marginBottom: 6 }}>
+            Active
+          </Typography.Text>
+          <Table<AdminTask>
+            rowKey="id" size="small" pagination={false}
+            columns={columns} dataSource={[...runningRows, ...pendingRows]}
+          />
+        </div>
+      )}
+
+      {failedRows.length === 0 && runningRows.length === 0 && pendingRows.length === 0 && (
+        <Typography.Text type="secondary">No active or recently-failed tasks. Things look quiet.</Typography.Text>
+      )}
+
+      <Flex justify="end">
+        <Button
+          type="link"
+          size="small"
+          onClick={() => setShowCompleted((v) => !v)}
+        >
+          {showCompleted ? 'Hide completed' : 'Show recent completed'}
+        </Button>
+      </Flex>
+
+      {showCompleted && (
+        <div>
+          <Typography.Text strong style={{ display: 'block', marginBottom: 6 }}>
+            Recent completed
+          </Typography.Text>
+          <Table<AdminTask>
+            rowKey="id" size="small" pagination={false} loading={completed.isLoading}
+            columns={columns} dataSource={doneRows}
+          />
+        </div>
+      )}
+    </div>
   )
 }
 

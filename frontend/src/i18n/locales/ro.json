@@ -6,6 +6,7 @@
     "create": "Creează",
     "edit": "Editează",
     "delete": "Șterge",
+    "remove": "Elimină",
     "confirm": "Confirmă",
     "search": "Caută",
     "clear_filters": "Resetează filtrele",
@@ -13,7 +14,38 @@
     "yes": "Da",
     "no": "Nu",
     "unassigned": "Neasignat",
-    "back": "Înapoi"
+    "back": "Înapoi",
+    "open": "Deschide",
+    "close": "Închide",
+    "submit": "Trimite",
+    "apply": "Aplică",
+    "more": "Mai multe",
+    "name": "Nume",
+    "email": "E-mail",
+    "username": "Utilizator",
+    "type": "Tip",
+    "actions": "Acțiuni",
+    "status": "Stare",
+    "priority": "Prioritate",
+    "category": "Categorie",
+    "sector": "Sector",
+    "assignee": "Responsabil",
+    "title": "Titlu",
+    "description": "Descriere",
+    "details": "Detalii",
+    "created_at": "Creat la",
+    "updated_at": "Actualizat la",
+    "last_updated": "Ultima actualizare",
+    "see_timeline": "Vezi desfășurător",
+    "ticket_evolution": "Evoluția tichetului",
+    "event_log": "Jurnal de evenimente",
+    "metadata_catalogue": "Catalog de metadate",
+    "users_and_roles": "Utilizatori și roluri",
+    "all": "Toate",
+    "none": "Niciuna",
+    "loading_more": "Se încarcă mai multe…",
+    "show_more": "Afișează mai multe",
+    "show_less": "Afișează mai puține"
   },
   "nav": {
     "dashboard": "Tablou de bord",
@@ -30,6 +62,21 @@
     "en": "English",
     "ro": "Română"
   },
+  "status": {
+    "pending":            "În așteptare",
+    "assigned_to_sector": "Asignat sectorului",
+    "in_progress":        "În lucru",
+    "done":               "Finalizat",
+    "closed":             "Închis",
+    "reopened":           "Redeschis",
+    "cancelled":          "Anulat"
+  },
+  "priority": {
+    "low":      "Scăzută",
+    "medium":   "Medie",
+    "high":     "Ridicată",
+    "critical": "Critică"
+  },
   "tickets": {
     "title": "Tichete",
     "subtitle": "Coadă operațională cu acțiuni de flux",
@@ -38,6 +85,10 @@
     "total_suffix": "tichete",
     "total_count": "Total {{count}} tichete",
     "empty": "Niciun tichet nu corespunde filtrelor curente",
+    "back": "← Înapoi la tichete",
+    "watch": "Urmărește",
+    "watching": "Urmărit",
+    "open_ticket": "Deschide tichetul",
     "columns": {
       "code": "Cod",
       "title": "Titlu",
@@ -47,35 +98,94 @@
       "assignee": "Responsabil",
       "created": "Creat",
       "updated": "Actualizat"
+    },
+    "links": {
+      "title": "Legături",
+      "add": "Adaugă legătură",
+      "empty": "Nicio legătură",
+      "remove_confirm": "Elimini legătura?",
+      "search_placeholder": "Caută după cod, titlu sau conținut…",
+      "relations": {
+        "parent_of": "Părinte al",
+        "child_of": "Copil al",
+        "blocks": "Blochează",
+        "blocked_by": "Blocat de",
+        "duplicates": "Duplicat al",
+        "duplicate_of": "Duplicat al",
+        "relates_to": "Legat de"
+      }
+    },
+    "detail": {
+      "requester": "Solicitant",
+      "timeline": "Cronologie",
+      "metadata": "Metadate",
+      "comments": "Comentarii",
+      "attachments": "Atașamente",
+      "audit": "Audit",
+      "created": "Creat",
+      "updated": "Actualizat",
+      "assigned": "Asignat",
+      "first_response": "Primul răspuns",
+      "done": "Finalizat",
+      "closed": "Închis",
+      "sla_due": "Termen SLA"
+    },
+    "comments": {
+      "post": "Trimite",
+      "placeholder": "Scrie un comentariu…",
+      "public": "Vizibil pentru solicitant (public)",
+      "private": "Intern (privat)",
+      "attach_files": "Trage fișiere aici sau apasă pentru a atașa",
+      "attach_hint": "Maxim 25 MB pe fișier. Fișierele moștenesc vizibilitatea comentariului — comentarii private → fișiere private.",
+      "edit": "Editează",
+      "delete": "Șterge",
+      "deleted": "(șters)",
+      "edit_window_expired": "Fereastra de editare a expirat",
+      "no_comments": "Niciun comentariu"
     }
   },
   "review": {
     "title": "Triere tichete",
+    "subtitle": "Tichete în așteptare care încă au nevoie de triaj, review de metadate și rutare la sector",
     "pending_queue": "În așteptarea trierii",
     "reviewed_queue": "Direcționate",
     "open": "Deschide",
     "empty_pending": "Nu există tichete care așteaptă triere.",
-    "empty_reviewed": "Niciun tichet nu a fost direcționat încă."
-  },
-  "admin": {
-    "title": "Administrare",
-    "tabs": {
-      "users": "Utilizatori & roluri",
-      "sectors": "Sectoare & grupuri",
-      "config": "Configurări",
-      "system": "Sistem"
-    },
-    "kpis": {
-      "active_sessions": "Sesiuni active",
-      "total_users": "Utilizatori (total)",
-      "enabled_users": "Utilizatori activi",
-      "active_tickets": "Tichete active",
-      "sla_breached": "SLA depășit",
-      "new_today": "Tichete noi azi"
-    }
+    "empty_reviewed": "Niciun tichet nu a fost direcționat încă.",
+    "queue": "Coadă de triere",
+    "triage": "Triaj",
+    "where_does_this_go": "Unde este distribuit acesta?",
+    "what_is_it": "Ce este?",
+    "notes_and_decision": "Note și decizie",
+    "routing": "Rutare",
+    "classification": "Clasificare",
+    "notes": "Note",
+    "sector_choose": "Alege un sector",
+    "sector_required": "Alege un sector pentru a ruta acest tichet",
+    "sector_tooltip": "Distribuitorii predau tichetul către un sector. Șeful sectorului alege operatorul, dacă nu ești tu însuți admin sau șef.",
+    "assignee_optional": "Responsabil (opțional)",
+    "assignee_pick": "Alege un operator",
+    "assignee_chief_decides": "Șeful sectorului decide",
+    "assignee_hint": "Poți ruta la un sector; șeful asignează operatorul.",
+    "distributor_commentary": "Comentariu distribuitor",
+    "private_only_staff": "Privat — doar personalul care lucrează la tichet va vedea acest mesaj.",
+    "what_should_operator_know": "Ce ar trebui să știe operatorul?",
+    "routing_reason_optional": "Motiv rutare (opțional)",
+    "routing_reason_placeholder": "De ce acest sector / această prioritate?",
+    "apply_review": "Aplică triajul",
+    "close_without_routing": "Închide fără rutare",
+    "close_confirm_title": "Închizi tichetul fără a-l ruta?",
+    "close_confirm_description": "Folosește această opțiune când solicitarea nu este acționabilă. Motivul de rutare devine justificarea anulării.",
+    "close_confirm_ok": "Închide tichetul",
+    "moved_past_review": "Acest tichet a depășit deja coada de triere.",
+    "triage_actions_not_applicable": "Acțiunile de triaj pot să nu se aplice.",
+    "sectors_label": "Sectoare:",
+    "primary_label": "primar",
+    "recent_activity": "Activitate recentă"
   },
   "monitor": {
     "title": "Monitorizare",
+    "subtitle": "Metrici operaționale în funcție de rol",
     "tabs": {
       "global": "Global · toate sectoarele",
       "distribution": "Distribuție",
@@ -91,8 +201,57 @@
       "stale_tickets": "Tichete blocate",
       "oldest_active": "Cele mai vechi active",
       "workload_chart": "Grafic încărcare",
-      "workload_details": "Detalii încărcare"
+      "workload_details": "Detalii încărcare",
+      "created_vs_closed": "Create vs. închise · ultimele {{days}} zile",
+      "created_vs_closed_hint": "Numărul zilnic de tichete create și închise vizibile pentru rolul tău."
+    },
+    "ranges": {
+      "last_24h":  "Ultimele 24h",
+      "last_7d":   "Ultimele 7 zile",
+      "last_30d":  "Ultimele 30 zile"
     }
+  },
+  "admin": {
+    "title": "Administrare",
+    "tabs": {
+      "users": "Utilizatori și roluri",
+      "sectors": "Sectoare și grupuri",
+      "config": "Configurări",
+      "system": "Sistem"
+    },
+    "kpis": {
+      "active_sessions": "Sesiuni active",
+      "total_users": "Utilizatori (total)",
+      "enabled_users": "Utilizatori activi",
+      "active_tickets": "Tichete active",
+      "sla_breached": "SLA depășit",
+      "new_today": "Tichete noi azi"
+    },
+    "system": {
+      "system_health":     "Sănătatea sistemului",
+      "infra_posture":     "Stare infrastructură",
+      "sla_posture":       "Stare SLA",
+      "background_tasks":  "Sarcini de fundal",
+      "failed_recent":     "Eșuate (recent)",
+      "running":           "În execuție",
+      "pending":           "În așteptare",
+      "no_active":         "Nicio sarcină activă sau eșuată recent. E liniște.",
+      "show_completed":    "Arată finalizate recent",
+      "hide_completed":    "Ascunde finalizate",
+      "recent_failures":   "Eșecuri recente",
+      "active":            "Active",
+      "recent_completed":  "Finalizate recent",
+      "task":              "Sarcină",
+      "attempts":          "Încercări",
+      "last_error":        "Ultima eroare / heartbeat"
+    }
+  },
+  "audit": {
+    "title": "Explorator audit",
+    "ticket_evolution":   "Evoluția tichetului",
+    "event_log":          "Jurnal de evenimente",
+    "see_timeline":       "Vezi desfășurător",
+    "no_events":          "Niciun eveniment de audit"
   },
   "tour": {
     "buttons": {

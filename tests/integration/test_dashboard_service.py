@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy.orm import Session
 
 from src.iam.principal import ROLE_ADMIN, SectorMembership
-from src.ticketing.service import dashboard_service
+from src.ticketing.service import monitor_service
 
 from .conftest import create_beneficiary, create_sector, create_ticket, create_user, principal_for
 

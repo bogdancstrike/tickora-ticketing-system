@@ -210,6 +210,110 @@ def notify_comment(payload: Dict[str, Any]):
         db.commit()
 
 
+@register_task("notify_mentions")
+def notify_mentions(payload: Dict[str, Any]):
+    """Notify users `@mentioned` in a comment body.
+
+    The producer hands us the lowercase usernames; here we resolve them
+    to user_ids, drop any that can't see the comment (private comments
+    only reach `can_see_private_comments` users), and emit one in-app
+    notification per recipient. The actor is always excluded.
+
+    Failure modes (non-existent username, non-staff target on a private
+    comment) are silent — no error feedback in the comment UI yet, just
+    the missing notification. Worth adding a "mentions resolved: X / Y"
+    surface later.
+    """
+    from src.iam import rbac as _rbac
+    from src.iam.principal import (
+        Principal as _Principal,
+        SectorMembership as _SectorMembership,
+        ROLE_INTERNAL_USER as _ROLE_INTERNAL_USER,
+    )
+
+    ticket_id     = payload.get("ticket_id")
+    comment_id    = payload.get("comment_id")
+    actor_user_id = payload.get("actor_user_id")
+    visibility    = payload.get("visibility", "public")
+    usernames     = [u.lower() for u in payload.get("usernames", []) if u]
+    if not usernames:
+        return
+
+    with get_db() as db:
+        ticket = db.get(Ticket, ticket_id)
+        if not ticket:
+            return
+
+        # Resolve usernames → users. We cap at the first 25 mentions
+        # to defend against runaway or copy-pasted user lists.
+        resolved = list(db.scalars(
+            select(IAMUser).where(
+                IAMUser.username.in_(usernames[:25]),
+                IAMUser.is_active.is_(True),
+            )
+        ))
+
+        # Hydrate the ticket's current_sector_code so RBAC predicates
+        # below can answer correctly.
+        sector_code = None
+        if ticket.current_sector_id:
+            from src.ticketing.models import Sector
+            sector_code = db.scalar(
+                select(Sector.code).where(Sector.id == ticket.current_sector_id)
+            )
+        setattr(ticket, "current_sector_code", sector_code)
+        setattr(ticket, "sector_codes", [sector_code] if sector_code else [])
+        setattr(ticket, "assignee_user_ids",
+                list(_assignee_user_ids(db, ticket)))
+        # Beneficiary -> user_id hydration for can_view_ticket.
+        setattr(ticket, "beneficiary_user_id",
+                db.scalar(select(Beneficiary.user_id).where(Beneficiary.id == ticket.beneficiary_id))
+                if ticket.beneficiary_id else None)
+
+        for u in resolved:
+            if u.id == actor_user_id:
+                continue  # don't ping yourself
+            # Build a minimal Principal so `rbac.can_see_private_comments`
+            # answers correctly. We pull membership data lazily — for
+            # most users the visibility check terminates on the role
+            # path before we need sectors.
+            memberships = tuple(
+                _SectorMembership(sector_code=sc, role=role)
+                for (sc, role) in db.execute(
+                    select(Sector.code, SectorMembership.membership_role)
+                    .join(Sector, Sector.id == SectorMembership.sector_id)
+                    .where(
+                        SectorMembership.user_id == u.id,
+                        SectorMembership.is_active.is_(True),
+                    )
+                ).all()
+            )
+            ghost = _Principal(
+                user_id=u.id, keycloak_subject=u.keycloak_subject or "",
+                username=u.username, email=u.email,
+                user_type=u.user_type, global_roles=frozenset({_ROLE_INTERNAL_USER}),
+                sector_memberships=memberships,
+            )
+
+            # Visibility floor: the mention recipient must at minimum be
+            # able to view the ticket. Private mentions need
+            # `can_see_private_comments`.
+            if not _rbac.can_view_ticket(ghost, ticket):
+                continue
+            if visibility == "private" and not _rbac.can_see_private_comments(ghost, ticket):
+                continue
+
+            _create_in_app_notification(
+                db,
+                user_id=u.id,
+                type="mention",
+                title=f"You were mentioned on {ticket.ticket_code}",
+                body=f"@{u.username} — see the {visibility} comment.",
+                ticket_id=ticket.id,
+            )
+        db.commit()
+
+
 @register_task("notify_unassigned")
 def notify_unassigned(payload: Dict[str, Any]):
     """Notify the previously-assigned user (if not the actor) plus the sector
@@ -351,12 +455,23 @@ def _participant_recipient_ids(
     *,
     include_requester: bool,
     include_assignees: bool,
+    include_watchers: bool = True,
 ) -> set[str]:
+    """Collect notification recipients for a ticket event.
+
+    Watchers (Phase 7) are folded in by default — they opted in to
+    follow the ticket and shouldn't have to be assigned to receive
+    updates. Visibility is still enforced when the recipient eventually
+    reads the comment, so this isn't a leak.
+    """
     recipients: set[str] = set()
     if include_requester:
         recipients.update(_requester_user_ids(db, ticket))
     if include_assignees:
         recipients.update(_assignee_user_ids(db, ticket))
+    if include_watchers:
+        from src.ticketing.service.watcher_service import watcher_user_ids
+        recipients.update(watcher_user_ids(db, ticket.id))
     return recipients
 
 

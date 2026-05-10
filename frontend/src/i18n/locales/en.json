@@ -6,6 +6,7 @@
     "create": "Create",
     "edit": "Edit",
     "delete": "Delete",
+    "remove": "Remove",
     "confirm": "Confirm",
     "search": "Search",
     "clear_filters": "Clear filters",
@@ -13,7 +14,38 @@
     "yes": "Yes",
     "no": "No",
     "unassigned": "Unassigned",
-    "back": "Back"
+    "back": "Back",
+    "open": "Open",
+    "close": "Close",
+    "submit": "Submit",
+    "apply": "Apply",
+    "more": "More",
+    "name": "Name",
+    "email": "Email",
+    "username": "Username",
+    "type": "Type",
+    "actions": "Actions",
+    "status": "Status",
+    "priority": "Priority",
+    "category": "Category",
+    "sector": "Sector",
+    "assignee": "Assignee",
+    "title": "Title",
+    "description": "Description",
+    "details": "Details",
+    "created_at": "Created at",
+    "updated_at": "Updated at",
+    "last_updated": "Last updated",
+    "see_timeline": "See timeline",
+    "ticket_evolution": "Ticket evolution",
+    "event_log": "Event log",
+    "metadata_catalogue": "Metadata catalogue",
+    "users_and_roles": "Users & roles",
+    "all": "All",
+    "none": "None",
+    "loading_more": "Loading more…",
+    "show_more": "Show more",
+    "show_less": "Show less"
   },
   "nav": {
     "dashboard": "Dashboard",
@@ -30,6 +62,21 @@
     "en": "English",
     "ro": "Română"
   },
+  "status": {
+    "pending":            "Pending",
+    "assigned_to_sector": "Assigned to sector",
+    "in_progress":        "In progress",
+    "done":               "Done",
+    "closed":             "Closed",
+    "reopened":           "Reopened",
+    "cancelled":          "Cancelled"
+  },
+  "priority": {
+    "low":      "Low",
+    "medium":   "Medium",
+    "high":     "High",
+    "critical": "Critical"
+  },
   "tickets": {
     "title": "Tickets",
     "subtitle": "Operational queue with workflow actions",
@@ -38,6 +85,10 @@
     "total_suffix": "tickets",
     "total_count": "Total {{count}} tickets",
     "empty": "No tickets match the current filters",
+    "back": "← Back to Tickets",
+    "watch": "Watch",
+    "watching": "Watching",
+    "open_ticket": "Open ticket",
     "columns": {
       "code": "Code",
       "title": "Title",
@@ -47,15 +98,118 @@
       "assignee": "Assignee",
       "created": "Created",
       "updated": "Updated"
+    },
+    "links": {
+      "title": "Links",
+      "add": "Add link",
+      "empty": "No links yet",
+      "remove_confirm": "Remove this link?",
+      "search_placeholder": "Search by code, title, or body…",
+      "relations": {
+        "parent_of": "Parent of",
+        "child_of": "Child of",
+        "blocks": "Blocks",
+        "blocked_by": "Blocked by",
+        "duplicates": "Duplicates",
+        "duplicate_of": "Duplicate of",
+        "relates_to": "Relates to"
+      }
+    },
+    "detail": {
+      "requester": "Requester",
+      "timeline": "Timeline",
+      "metadata": "Metadata",
+      "comments": "Comments",
+      "attachments": "Attachments",
+      "audit": "Audit",
+      "created": "Created",
+      "updated": "Updated",
+      "assigned": "Assigned",
+      "first_response": "First response",
+      "done": "Done",
+      "closed": "Closed",
+      "sla_due": "SLA due"
+    },
+    "comments": {
+      "post": "Post",
+      "placeholder": "Write a comment…",
+      "public": "Visible to requester (public)",
+      "private": "Internal (private)",
+      "attach_files": "Drag files here or click to attach",
+      "attach_hint": "Up to 25 MB per file. Files inherit the comment's visibility — private comments → private files.",
+      "edit": "Edit",
+      "delete": "Delete",
+      "deleted": "(deleted)",
+      "edit_window_expired": "Edit window expired",
+      "no_comments": "No comments yet"
     }
   },
   "review": {
     "title": "Review Tickets",
+    "subtitle": "Pending tickets that still need triage, metadata review, and sector routing",
     "pending_queue": "Pending review",
     "reviewed_queue": "Already routed",
     "open": "Open",
     "empty_pending": "No tickets are waiting for review.",
-    "empty_reviewed": "No tickets have been routed yet."
+    "empty_reviewed": "No tickets have been routed yet.",
+    "queue": "Review queue",
+    "triage": "Triage",
+    "where_does_this_go": "Where does this go?",
+    "what_is_it": "What is it?",
+    "notes_and_decision": "Notes & decision",
+    "routing": "Routing",
+    "classification": "Classification",
+    "notes": "Notes",
+    "sector_choose": "Choose a sector",
+    "sector_required": "Pick a sector to route this ticket",
+    "sector_tooltip": "Distributors hand the ticket to a sector. The sector chief picks the operator unless you're an admin or chief yourself.",
+    "assignee_optional": "Assignee (optional)",
+    "assignee_pick": "Pick an operator",
+    "assignee_chief_decides": "Sector chief decides",
+    "assignee_hint": "You can route to a sector; the chief assigns the operator.",
+    "distributor_commentary": "Distributor commentary",
+    "private_only_staff": "Private — only staff working on the ticket will see this.",
+    "what_should_operator_know": "What should the operator know?",
+    "routing_reason_optional": "Routing reason (optional)",
+    "routing_reason_placeholder": "Why this sector / priority?",
+    "apply_review": "Apply review",
+    "close_without_routing": "Close without routing",
+    "close_confirm_title": "Close this ticket without routing?",
+    "close_confirm_description": "Use this when the request isn't actionable. The routing reason becomes the cancellation justification.",
+    "close_confirm_ok": "Close ticket",
+    "moved_past_review": "This ticket has already moved past the review queue.",
+    "triage_actions_not_applicable": "Triage actions may not be applicable.",
+    "sectors_label": "Sectors:",
+    "primary_label": "primary",
+    "recent_activity": "Recent activity"
+  },
+  "monitor": {
+    "title": "Monitor",
+    "subtitle": "Role-scoped operational metrics",
+    "tabs": {
+      "global": "Global · all sectors",
+      "distribution": "Distribution",
+      "sector": "Sector",
+      "personal": "User · {{name}}"
+    },
+    "charts": {
+      "status": "Status",
+      "priority": "Priority",
+      "categories": "Categories",
+      "by_sector": "Total tickets by sector",
+      "bottleneck": "Bottleneck Analysis",
+      "stale_tickets": "Stale Tickets",
+      "oldest_active": "Oldest Active",
+      "workload_chart": "Workload Chart",
+      "workload_details": "Workload Details",
+      "created_vs_closed": "Created vs Closed · last {{days}} days",
+      "created_vs_closed_hint": "Daily ticket creation and closure counts visible to your role."
+    },
+    "ranges": {
+      "last_24h":  "Last 24h",
+      "last_7d":   "Last 7 days",
+      "last_30d":  "Last 30 days"
+    }
   },
   "admin": {
     "title": "Administration",
@@ -72,27 +226,32 @@
       "active_tickets": "Active tickets",
       "sla_breached": "SLA breached",
       "new_today": "New today"
+    },
+    "system": {
+      "system_health":     "System health",
+      "infra_posture":     "Infrastructure posture",
+      "sla_posture":       "SLA posture",
+      "background_tasks":  "Background tasks",
+      "failed_recent":     "Failed (recent)",
+      "running":           "Running",
+      "pending":           "Pending",
+      "no_active":         "No active or recently-failed tasks. Things look quiet.",
+      "show_completed":    "Show recent completed",
+      "hide_completed":    "Hide completed",
+      "recent_failures":   "Recent failures",
+      "active":            "Active",
+      "recent_completed":  "Recent completed",
+      "task":              "Task",
+      "attempts":          "Attempts",
+      "last_error":        "Last error / heartbeat"
     }
   },
-  "monitor": {
-    "title": "Monitor",
-    "tabs": {
-      "global": "Global · all sectors",
-      "distribution": "Distribution",
-      "sector": "Sector",
-      "personal": "User · {{name}}"
-    },
-    "charts": {
-      "status": "Status",
-      "priority": "Priority",
-      "categories": "Categories",
-      "by_sector": "Total tickets by sector",
-      "bottleneck": "Bottleneck Analysis",
-      "stale_tickets": "Stale Tickets",
-      "oldest_active": "Oldest Active",
-      "workload_chart": "Workload Chart",
-      "workload_details": "Workload Details"
-    }
+  "audit": {
+    "title": "Audit explorer",
+    "ticket_evolution":   "Ticket evolution",
+    "event_log":          "Event log",
+    "see_timeline":       "See timeline",
+    "no_events":          "No audit events"
   },
   "tour": {
     "buttons": {

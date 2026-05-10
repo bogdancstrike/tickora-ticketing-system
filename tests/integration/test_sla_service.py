@@ -37,8 +37,12 @@ def _policy(
     beneficiary_type: str | None = None,
     resolution_minutes: int = 60,
     is_active: bool = True,
+    name: str | None = None,
 ):
+    # `name` is NOT NULL on the table; default to a deterministic label.
+    label = name or f"test-{priority}-{category or '*'}-{beneficiary_type or '*'}"
     return SlaPolicy(
+        name=label,
         priority=priority,
         category=category,
         beneficiary_type=beneficiary_type,

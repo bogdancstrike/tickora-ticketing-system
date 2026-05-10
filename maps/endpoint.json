@@ -383,6 +383,54 @@
     },
     {
       "namespace": "tickora",
+      "operation_name": "ticket_watchers_list",
+      "model_name": "Empty",
+      "request_method": ["GET"],
+      "api_url": "/api/tickets/<ticket_id>/watchers",
+      "exec_method": { "module_name": "api.watchers", "method_name": "list_watchers" }
+    },
+    {
+      "namespace": "tickora",
+      "operation_name": "ticket_watchers_add",
+      "model_name": "Empty",
+      "request_method": ["POST"],
+      "api_url": "/api/tickets/<ticket_id>/watchers",
+      "exec_method": { "module_name": "api.watchers", "method_name": "add_watcher" }
+    },
+    {
+      "namespace": "tickora",
+      "operation_name": "ticket_watchers_remove",
+      "model_name": "Empty",
+      "request_method": ["DELETE"],
+      "api_url": "/api/tickets/<ticket_id>/watchers/<user_id>",
+      "exec_method": { "module_name": "api.watchers", "method_name": "remove_watcher" }
+    },
+    {
+      "namespace": "tickora",
+      "operation_name": "ticket_links_list",
+      "model_name": "Empty",
+      "request_method": ["GET"],
+      "api_url": "/api/tickets/<ticket_id>/links",
+      "exec_method": { "module_name": "api.links", "method_name": "list_links" }
+    },
+    {
+      "namespace": "tickora",
+      "operation_name": "ticket_links_add",
+      "model_name": "Empty",
+      "request_method": ["POST"],
+      "api_url": "/api/tickets/<ticket_id>/links",
+      "exec_method": { "module_name": "api.links", "method_name": "add_link" }
+    },
+    {
+      "namespace": "tickora",
+      "operation_name": "ticket_links_remove",
+      "model_name": "Empty",
+      "request_method": ["DELETE"],
+      "api_url": "/api/links/<link_id>",
+      "exec_method": { "module_name": "api.links", "method_name": "remove_link" }
+    },
+    {
+      "namespace": "tickora",
       "operation_name": "monitor_overview",
       "model_name": "Empty",
       "request_method": ["GET"],

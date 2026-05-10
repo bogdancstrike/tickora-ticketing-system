@@ -1,20 +1,20 @@
-"""drop is_public column from custom_dashboards
+"""drop is_public column from custom_dashboards (no-op as of 2026-05-10)
 
-The flag was settable on write but never honored on read — there's no
-"public dashboard" listing endpoint and the only list query filters by
-`owner_user_id`. Rather than implement sharing-by-flag (which conflates
-two access models), drop the column. If a sharing surface is needed in
-the future, design it explicitly with the audit trail and RBAC in mind.
+Originally this migration dropped the `is_public` column. We backed
+that out: the column is harmless to keep, and dropping it created a
+schema/model mismatch for already-deployed environments that hadn't
+applied this revision yet.
+
+We keep this revision in the chain (so already-bumped environments
+don't see a missing revision) but the upgrade/downgrade are now no-ops.
+The column lives on, defaulted to `false`, and the application no
+longer reads or writes it.
 
 Revision ID: d5e9b1207f08
 Revises: c4d8a72e1f5b
 Create Date: 2026-05-10
 """
 from typing import Sequence, Union
-
-from alembic import op
-import sqlalchemy as sa
-
 
 revision: str = "d5e9b1207f08"
 down_revision: Union[str, None] = "c4d8a72e1f5b"
@@ -23,21 +23,11 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    op.drop_column("custom_dashboards", "is_public")
+    # Intentional no-op. Earlier drafts dropped `is_public` from
+    # custom_dashboards; we kept the column to avoid an in-flight
+    # schema/model mismatch. The application layer ignores the value.
+    pass
 
 
 def downgrade() -> None:
-    # Restore as nullable=False with a default so existing rows pick up
-    # `false` without an explicit backfill step.
-    op.add_column(
-        "custom_dashboards",
-        sa.Column(
-            "is_public",
-            sa.Boolean(),
-            nullable=False,
-            server_default=sa.false(),
-        ),
-    )
-    # Drop the server_default once the column is in place — the application
-    # is responsible for setting the value going forward.
-    op.alter_column("custom_dashboards", "is_public", server_default=None)
+    pass

@@ -16,7 +16,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 from sqlalchemy.orm import Session
 
-from src.core.errors import PermissionDeniedError, ValidationError
+from src.core.errors import BusinessRuleError, PermissionDeniedError, ValidationError
 from src.iam.principal import (
     SectorMembership,
     ROLE_ADMIN,
@@ -156,9 +156,24 @@ class TestPrivateCommentRBAC:
         )
         assert c.visibility == "private"
 
-    def test_distributor_keeps_private_lane(self, db_session, world):
+    def test_distributor_keeps_private_lane(self, db_session):
+        # Distributor's lane is the triage queue (`pending` /
+        # `assigned_to_sector`). They can't see in-progress tickets, so
+        # this test deliberately uses its own pending ticket fixture
+        # rather than the shared `world` (which is in_progress).
+        sector = create_sector(db_session, code="s11")
+        beneficiary_user = create_user(db_session, "ben.tdistr")
+        distributor_user = create_user(db_session, "distr.tdistr")
+        beneficiary = create_beneficiary(db_session, beneficiary_user)
+        ticket = create_ticket(
+            db_session, beneficiary,
+            created_by=beneficiary_user, current_sector=sector,
+            status="assigned_to_sector",
+        )
+        db_session.commit()
+        principal = principal_for(distributor_user, roles={ROLE_DISTRIBUTOR})
         c = comment_service.create(
-            db_session, world["principals"]["distributor"], world["ticket"].id,
+            db_session, principal, ticket.id,
             body="triage note", visibility="private",
         )
         assert c.id is not None
@@ -237,7 +252,10 @@ class TestEditWindow:
         # Backdate created_at past the 15-minute window.
         comment.created_at = datetime.now(timezone.utc) - timedelta(minutes=20)
         db_session.flush()
-        with pytest.raises(PermissionDeniedError):
+        # The service signals an expired edit window with `BusinessRuleError`,
+        # not `PermissionDenied` — the user *would* have permission, the
+        # window has just closed.
+        with pytest.raises(BusinessRuleError, match="window"):
             comment_service.edit(
                 db_session, world["principals"]["assignee"], comment.id,
                 body="too late",

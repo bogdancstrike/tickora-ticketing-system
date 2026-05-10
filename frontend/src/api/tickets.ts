@@ -509,6 +509,62 @@ export interface AttachmentDto {
   created_at: string
 }
 
+export interface WatcherDto {
+  id: string
+  user_id: string
+  username: string | null
+  email: string | null
+  display: string
+  created_at: string | null
+}
+
+export const listWatchers = async (ticketId: string): Promise<{ items: WatcherDto[] }> => {
+  const { data } = await apiClient.get(`/api/tickets/${ticketId}/watchers`)
+  return data
+}
+
+export const addWatcher = async (ticketId: string, userId?: string): Promise<WatcherDto> => {
+  const { data } = await apiClient.post(`/api/tickets/${ticketId}/watchers`, userId ? { user_id: userId } : {})
+  return data
+}
+
+export const removeWatcher = async (ticketId: string, userId: string): Promise<void> => {
+  await apiClient.delete(`/api/tickets/${ticketId}/watchers/${userId}`)
+}
+
+// ── Ticket links (Phase 7) ───────────────────────────────────────────────────
+
+export type LinkRelation =
+  | 'parent_of' | 'child_of'
+  | 'blocks'    | 'blocked_by'
+  | 'duplicates' | 'duplicate_of'
+  | 'relates_to'
+
+export interface TicketLinkDto {
+  id: string
+  direction: 'outgoing' | 'incoming'
+  relation: LinkRelation
+  other: { id: string; ticket_code: string; title: string | null; status: string }
+  created_at: string | null
+}
+
+export const listTicketLinks = async (ticketId: string): Promise<{ items: TicketLinkDto[] }> => {
+  const { data } = await apiClient.get(`/api/tickets/${ticketId}/links`)
+  return data
+}
+
+export const addTicketLink = async (
+  ticketId: string,
+  payload: { target_ticket_id: string; link_type: 'parent_of' | 'blocks' | 'duplicates' | 'relates_to' },
+): Promise<TicketLinkDto> => {
+  const { data } = await apiClient.post(`/api/tickets/${ticketId}/links`, payload)
+  return data
+}
+
+export const removeTicketLink = async (linkId: string): Promise<void> => {
+  await apiClient.delete(`/api/links/${linkId}`)
+}
+
 export const listAttachments = async (ticketId: string): Promise<{ items: AttachmentDto[] }> => {
   const { data } = await apiClient.get(`/api/tickets/${ticketId}/attachments`)
   return data
