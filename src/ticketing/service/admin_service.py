@@ -131,16 +131,32 @@ def overview(db: Session, principal: Principal) -> dict[str, Any]:
 
 
 def list_users(db: Session, principal: Principal, *, search: str | None = None, limit: int = 100) -> list[dict[str, Any]]:
-    # Allow admins or chiefs. If chief, we might want to filter results to their sector
-    # in the future, but for now we follow the "visible users" pattern.
+    # Allow admins or chiefs. 
     if not principal.has_root_group and not principal.chief_sectors:
         raise PermissionDeniedError("admin or sector chief required")
 
     limit = max(1, min(limit, 250))
     stmt = select(User).order_by(User.username.asc().nulls_last(), User.email.asc().nulls_last()).limit(limit)
+
+    if not principal.has_root_group:
+        # Chiefs only see members of sectors they are chief of.
+        stmt = (
+            select(User)
+            .join(SectorMembership, SectorMembership.user_id == User.id)
+            .join(Sector, Sector.id == SectorMembership.sector_id)
+            .where(
+                Sector.code.in_(principal.chief_sectors),
+                SectorMembership.is_active.is_(True)
+            )
+            .distinct()
+            .order_by(User.username.asc().nulls_last(), User.email.asc().nulls_last())
+            .limit(limit)
+        )
+
     if search:
         term = f"%{search.strip()}%"
         stmt = stmt.where(or_(User.username.ilike(term), User.email.ilike(term), User.first_name.ilike(term), User.last_name.ilike(term)))
+    
     users = list(db.scalars(stmt))
     memberships = _memberships_by_user(db, [u.id for u in users])
     role_map = _keycloak_roles_by_subject(users)
