@@ -359,6 +359,70 @@
     },
     {
       "namespace": "tickora",
+      "operation_name": "reference_subcategory_fields",
+      "model_name": "Empty",
+      "request_method": ["GET"],
+      "api_url": "/api/reference/subcategories/<subcategory_id>/fields",
+      "exec_method": { "module_name": "api.reference", "method_name": "subcategory_fields" }
+    },
+    {
+      "namespace": "tickora",
+      "operation_name": "admin_categories_list",
+      "model_name": "Empty",
+      "request_method": ["GET"],
+      "api_url": "/api/admin/categories",
+      "exec_method": { "module_name": "api.admin", "method_name": "list_categories" }
+    },
+    {
+      "namespace": "tickora",
+      "operation_name": "admin_categories_upsert",
+      "model_name": "Empty",
+      "request_method": ["POST"],
+      "api_url": "/api/admin/categories",
+      "exec_method": { "module_name": "api.admin", "method_name": "upsert_category" }
+    },
+    {
+      "namespace": "tickora",
+      "operation_name": "admin_categories_delete",
+      "model_name": "Empty",
+      "request_method": ["DELETE"],
+      "api_url": "/api/admin/categories/<category_id>",
+      "exec_method": { "module_name": "api.admin", "method_name": "delete_category" }
+    },
+    {
+      "namespace": "tickora",
+      "operation_name": "admin_subcategories_upsert",
+      "model_name": "Empty",
+      "request_method": ["POST"],
+      "api_url": "/api/admin/subcategories",
+      "exec_method": { "module_name": "api.admin", "method_name": "upsert_subcategory" }
+    },
+    {
+      "namespace": "tickora",
+      "operation_name": "admin_subcategories_delete",
+      "model_name": "Empty",
+      "request_method": ["DELETE"],
+      "api_url": "/api/admin/subcategories/<subcategory_id>",
+      "exec_method": { "module_name": "api.admin", "method_name": "delete_subcategory" }
+    },
+    {
+      "namespace": "tickora",
+      "operation_name": "admin_subcategory_fields_upsert",
+      "model_name": "Empty",
+      "request_method": ["POST"],
+      "api_url": "/api/admin/subcategory-fields",
+      "exec_method": { "module_name": "api.admin", "method_name": "upsert_subcategory_field" }
+    },
+    {
+      "namespace": "tickora",
+      "operation_name": "admin_subcategory_fields_delete",
+      "model_name": "Empty",
+      "request_method": ["DELETE"],
+      "api_url": "/api/admin/subcategory-fields/<field_id>",
+      "exec_method": { "module_name": "api.admin", "method_name": "delete_subcategory_field" }
+    },
+    {
+      "namespace": "tickora",
       "operation_name": "audit_list",
       "model_name": "Empty",
       "request_method": ["GET"],

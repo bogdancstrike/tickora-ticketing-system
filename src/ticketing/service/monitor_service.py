@@ -17,7 +17,7 @@ from src.common.spans import set_attr, span
 from src.iam import rbac
 from src.iam.principal import Principal
 from src.iam.models import User
-from src.ticketing.models import Beneficiary, Sector, SectorMembership, Ticket, TicketComment, TicketStatusHistory
+from src.ticketing.models import Beneficiary, Category, Sector, SectorMembership, Ticket, TicketComment, TicketStatusHistory
 from src.ticketing.service.ticket_service import _visibility_filter
 from src.ticketing.state_machine import ACTIVE_STATUSES, DONE_STATUSES
 
@@ -96,7 +96,7 @@ def monitor_global(db: Session, principal: Principal) -> dict[str, Any]:
             "by_status": _breakdown(db, Ticket.status),
             "by_priority": _breakdown(db, Ticket.priority),
             "by_beneficiary_type": _breakdown(db, Ticket.beneficiary_type),
-            "by_category": _breakdown(db, Ticket.category),
+            "by_category": _category_breakdown(db),
             "by_sector": _sector_breakdown(db),
             "top_backlog_sectors": _sector_breakdown(db, active_only=True, limit=5),
             "stale_tickets": _stale_tickets(db, principal, hours=24, limit=10),
@@ -158,7 +158,7 @@ def _build_monitor_distributor(db: Session) -> dict[str, Any]:
             "critical_pending": _count(db, _ticket_stmt().where(Ticket.priority == "critical", Ticket.status.in_(("pending", "assigned_to_sector")))),
         },
         "by_priority": _breakdown(db, Ticket.priority, status=("pending", "assigned_to_sector")),
-        "by_category": _breakdown(db, Ticket.category, status=("pending", "assigned_to_sector")),
+        "by_category": _category_breakdown(db, status=("pending", "assigned_to_sector")),
         "oldest": _oldest_tickets(db, status=("pending", "assigned_to_sector"), limit=8),
         "not_reviewed": _oldest_tickets(db, status=("pending",), limit=20),
         "reviewed_today": [
@@ -226,7 +226,7 @@ def _build_monitor_sectors(db: Session, principal: Principal) -> list[dict[str, 
     kpis_by_sector = _bulk_sector_kpis(db, sector_ids)
     by_status_by_sector = _bulk_sector_breakdown(db, sector_ids, Ticket.status)
     by_priority_by_sector = _bulk_sector_breakdown(db, sector_ids, Ticket.priority)
-    by_category_by_sector = _bulk_sector_breakdown(db, sector_ids, Ticket.category)
+    by_category_by_sector = _bulk_category_breakdown(db, sector_ids)
 
     out: list[dict[str, Any]] = []
     for s in sectors:
@@ -337,7 +337,7 @@ def monitor_sector(db: Session, principal: Principal, sector_code: str) -> dict[
         "kpis": _sector_kpis(db, sector_row.id),
         "by_status": _breakdown(db, Ticket.status, sector_id=sector_row.id),
         "by_priority": _breakdown(db, Ticket.priority, sector_id=sector_row.id),
-        "by_category": _breakdown(db, Ticket.category, sector_id=sector_row.id),
+        "by_category": _category_breakdown(db, sector_id=sector_row.id),
         "workload": _workload(db, sector_row.id),
         "oldest": _oldest_tickets(db, sector_id=sector_row.id, status=ACTIVE_STATUSES, limit=5),
         "stale_tickets": _stale_tickets(db, principal, sector_id=sector_row.id, hours=24, limit=10),
@@ -560,6 +560,52 @@ def _breakdown(db: Session, column, *, sector_id: str | None = None, status: tup
         stmt = stmt.where(Ticket.status.in_(status))
     stmt = stmt.group_by(column).order_by(func.count(Ticket.id).desc())
     return [{"key": key or "unset", "count": int(count)} for key, count in db.execute(stmt).all()]
+
+
+def _bulk_category_breakdown(
+    db: Session, sector_ids: list[str],
+) -> dict[str, list[dict[str, Any]]]:
+    """Per-sector category breakdown via FK join (one grouped query)."""
+    if not sector_ids:
+        return {}
+    rows = db.execute(
+        select(Ticket.current_sector_id, Category.name, func.count(Ticket.id))
+        .select_from(Ticket)
+        .join(Category, Category.id == Ticket.category_id, isouter=True)
+        .where(Ticket.is_deleted.is_(False), Ticket.current_sector_id.in_(sector_ids))
+        .group_by(Ticket.current_sector_id, Category.name)
+    ).all()
+    out: dict[str, list[dict[str, Any]]] = {}
+    for sid, name, count in rows:
+        out.setdefault(sid, []).append({"key": name or "unset", "count": int(count)})
+    for sid in out:
+        out[sid].sort(key=lambda r: r["count"], reverse=True)
+    return out
+
+
+def _category_breakdown(
+    db: Session,
+    *,
+    sector_id: str | None = None,
+    status: tuple[str, ...] | None = None,
+) -> list[dict[str, Any]]:
+    """Group ticket counts by category *name* via FK join.
+
+    Tickets without a category are bucketed as ``"unset"`` (matches the
+    convention used by `_breakdown` for null string columns).
+    """
+    stmt = (
+        select(Category.name, func.count(Ticket.id))
+        .select_from(Ticket)
+        .join(Category, Category.id == Ticket.category_id, isouter=True)
+        .where(Ticket.is_deleted.is_(False))
+    )
+    if sector_id:
+        stmt = stmt.where(Ticket.current_sector_id == sector_id)
+    if status:
+        stmt = stmt.where(Ticket.status.in_(status))
+    stmt = stmt.group_by(Category.name).order_by(func.count(Ticket.id).desc())
+    return [{"key": name or "unset", "count": int(count)} for name, count in db.execute(stmt).all()]
 
 
 def _breakdown_visible(

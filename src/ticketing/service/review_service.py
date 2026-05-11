@@ -23,22 +23,22 @@ def review(db: Session, principal: Principal, ticket_id: str, payload: dict[str,
 
         ticket = ticket_service.get(db, principal, ticket_id)
         old_metadata = {
-            "category": ticket.category,
-            "type": ticket.type,
-            "priority": ticket.priority,
+            "category_id":    ticket.category_id,
+            "subcategory_id": ticket.subcategory_id,
+            "priority":       ticket.priority,
         }
 
         changed: dict[str, dict[str, str | None]] = {}
-        category = _clean(payload.get("category"))
-        ticket_type = _clean(payload.get("type"))
-        priority = _clean(payload.get("priority"))
+        category_id    = _clean(payload.get("category_id"))
+        subcategory_id = _clean(payload.get("subcategory_id"))
+        priority       = _clean(payload.get("priority"))
 
-        if "category" in payload and category != ticket.category:
-            changed["category"] = {"old": ticket.category, "new": category}
-            ticket.category = category
-        if "type" in payload and ticket_type != ticket.type:
-            changed["type"] = {"old": ticket.type, "new": ticket_type}
-            ticket.type = ticket_type
+        if "category_id" in payload and category_id != ticket.category_id:
+            changed["category_id"] = {"old": ticket.category_id, "new": category_id}
+            ticket.category_id = category_id
+        if "subcategory_id" in payload and subcategory_id != ticket.subcategory_id:
+            changed["subcategory_id"] = {"old": ticket.subcategory_id, "new": subcategory_id}
+            ticket.subcategory_id = subcategory_id
         if priority:
             if priority not in ALLOWED_PRIORITIES:
                 raise ValidationError("priority must be low, medium, high, or critical")

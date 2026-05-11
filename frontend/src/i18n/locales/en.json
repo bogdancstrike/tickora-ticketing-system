@@ -77,6 +77,11 @@
     "high":     "High",
     "critical": "Critical"
   },
+  "beneficiary_type": {
+    "internal": "Internal",
+    "external": "External",
+    "label":    "Beneficiary"
+  },
   "tickets": {
     "title": "Tickets",
     "subtitle": "Operational queue with workflow actions",
@@ -140,7 +145,11 @@
       "delete": "Delete",
       "deleted": "(deleted)",
       "edit_window_expired": "Edit window expired",
-      "no_comments": "No comments yet"
+      "no_comments": "No comments yet",
+      "system": {
+        "unknown_actor": "system",
+        "status_changed": "{{actor}} changed status from {{old}} to {{new}}"
+      }
     }
   },
   "review": {

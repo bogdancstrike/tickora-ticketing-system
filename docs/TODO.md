@@ -204,6 +204,143 @@ Legend: `[x]` done · `[~]` partial · `[ ]` pending
 - [ ] Chaos tests (Postgres restart, Redis blackout, Keycloak unreachable).
 
 
+## Phase 11 — New requirements (2026-05-11)
+
+Tracked as work proceeds. `[ ]` pending → `[~]` in flight → `[x]` done.
+Design decisions confirmed by the user on 2026-05-11 inlined below.
+
+> Project is in dev mode — no back-compat shims required. Migrations
+> may drop and rename columns freely.
+
+- [x] **System auto-comments on status change** (2026-05-11) — every
+      `_record_status_change` in `workflow_service.py` now writes a
+      sibling `comment_type='system'` row in the same txn (visibility
+      public, body is a JSON payload with `kind='status_changed'`,
+      actor, old, new, reason). Frontend `SystemCommentRow` parses the
+      payload and renders via `tickets.comments.system.status_changed`
+      (en + ro). 276 unit tests still green; `tsc -b --force` clean.
+- [x] **INTERN / EXTERN tag column in `/tickets` and `/review`** (2026-05-11)
+      — new `BeneficiaryTypeTag` component (geekblue/magenta + icon),
+      `beneficiary_type` column wired into `TicketsPage` and
+      `ReviewTicketsPage` with a single-select filter. Tickets list
+      threads the filter to the backend (`ListTicketParams.beneficiary_type`
+      already supported by `ticket_service`); the review page filters
+      client-side over the smaller pending/routed pools. Detail page
+      "Requester / Type" now uses the same tag. i18n strings added
+      under `beneficiary_type.*` (en + ro).
+- [x] **Category + Subcategory + dynamic metadata at create time** (2026-05-11)
+      - **Schema:** new `categories`, `subcategories`,
+        `subcategory_field_definitions` tables (migration
+        `20260511_categories`). `tickets.category` and `tickets.type`
+        free-text columns dropped; `tickets.category_id` +
+        `tickets.subcategory_id` FKs added with matching indexes.
+      - **ORM:** `Category`, `Subcategory`, `SubcategoryFieldDefinition`
+        in `src/ticketing/models.py`. `Ticket` updated.
+      - **Service:** `ticket_service._validate_classification` validates
+        FKs and dynamic field payload (required gate, options gate,
+        unknown-key gate). Field values land in `ticket_metadatas`.
+      - **Hydration:** ticket get/list now attaches `category_code/name`
+        and `subcategory_code/name` so the serializer can render labels.
+      - **Reference API:** `GET /api/reference/ticket-options` now
+        returns nested `categories[{id, code, name, subcategories[]}]`.
+        New `GET /api/reference/subcategories/<id>/fields` returns the
+        ordered field catalogue for the create form.
+      - **Admin API:** `GET /api/admin/categories` (full tree),
+        `POST /api/admin/categories`, `DELETE /api/admin/categories/<id>`,
+        `POST/DELETE /api/admin/subcategories`,
+        `POST/DELETE /api/admin/subcategory-fields`.
+      - **Frontend:** create form rebuilt — cascading Category →
+        Subcategory dropdowns; dynamic fields render under a panel,
+        required ones get AntD's red `*`, enum fields render as Select.
+        Priority stays separate. Review page's classification block now
+        uses the same Category/Subcategory dropdowns. Ticket detail
+        shows "Category / Subcategory" with the resolved names.
+      - **Admin UI:** new `CategoriesPanel` in the Config tab — full
+        CRUD over categories, subcategories, and their dynamic fields.
+      - **Monitor:** `_category_breakdown` + `_bulk_category_breakdown`
+        helpers join with `Category` so all `by_category` widgets keep
+        working with FK-backed taxonomy.
+      - **Tests:** 276 unit tests still green; `tsc -b --force` clean.
+        Integration tests referencing the old free-text `category` field
+        (`test_http_role_matrix.py`, `test_comments_and_review_acceptance.py`)
+        will need a fixture update before they run again; flagged below.
+- [ ] **Post-mark-done approval flow + auto-comment on reopen reason**
+      - When operator hits `mark_done`, the beneficiary's view shows
+        "Approve closure" → `close` and "Reopen with reason" → `reopen`.
+      - Reopen reason becomes a mandatory public auto-comment.
+      - **Block:** `mark_done` AND `close` raise `BusinessRuleError`
+        while any endorsement row is `status='pending'` (resolved by
+        approve **or** reject — either decision unblocks).
+      - **Confirm with user:** is requirement #1 exactly this, or is
+        there an additional post-`closed` beneficiary approval step?
+- [ ] **Avizare suplimentară (supplementary endorsement)**
+      - New realm role `tickora_avizator` (added to
+        `scripts/keycloak_bootstrap.py`); a sibling sector-style group
+        `/tickora/avizatori` so the requester can target "the avizator
+        team" instead of a specific person.
+      - New table `ticket_endorsements(id, ticket_id, requested_by,
+        requested_at, assignee_user_id NULL, assigned_to_pool BOOL,
+        status, decided_by NULL, decided_at NULL, request_reason,
+        decision_reason)`. Multiple endorsements per ticket allowed.
+      - Request flow: the assignee picks either a specific avizator
+        user OR the avizator pool. Pool requests are visible to every
+        `tickora_avizator`; user-targeted requests are visible to that
+        user (plus admins/auditors). Any avizator can self-claim a pool
+        request.
+      - Endpoints: `POST /tickets/<id>/endorsements`,
+        `POST /endorsements/<id>/claim`,
+        `POST /endorsements/<id>/approve`,
+        `POST /endorsements/<id>/reject`,
+        `GET /tickets/<id>/endorsements`, `GET /endorsements`
+        (avizator inbox, filtered by audience).
+      - New page `/avizator` — table of pending + recently-decided
+        endorsements for the current avizator.
+      - Non-blocking for everyday workflow; blocks `mark_done`/`close`
+        only while at least one endorsement is `pending`.
+      - Both request and decision write audit events + system comments
+        on the ticket timeline.
+- [ ] **/snippets procedures page**
+      - New tables `snippets(id, title, body, created_by_user_id,
+        created_at, updated_at)` and `snippet_audiences(id, snippet_id,
+        audience_kind, audience_value)` where `audience_kind ∈
+        {'sector', 'role', 'beneficiary_type'}` and value is the sector
+        code / realm role / `internal|external`.
+      - A snippet with zero audience rows ⇒ visible to all authenticated
+        users.
+      - Admin-only create/update/delete; everyone else read-only,
+        filtered server-side by audience evaluated against the
+        Principal's sectors + realm roles + beneficiary type.
+      - New page `/snippets` with sidebar list and a markdown-rendered
+        body pane. Admin gets `+ New`, edit, delete affordances.
+      - Endpoints: `GET /snippets`, `GET /snippets/<id>`,
+        `POST /snippets`, `PATCH /snippets/<id>`, `DELETE /snippets/<id>`.
+- [x] **TICKET_VIEWED audit event** (2026-05-11) — new constant
+      `TICKET_VIEWED` in `src/audit/events.py`. `api/tickets.py::get_ticket`
+      writes the audit row after a successful visibility-checked load,
+      so 404'd hidden tickets never produce a row. No dedupe; metadata
+      captures the ticket's current status for forensic context. IP /
+      user-agent / correlation-id come from the existing
+      `audit_service.record` plumbing.
+- [ ] **Comment write-side: no change** — current rule (active assignee
+      OR beneficiary / creator / external requester-by-email) already
+      matches the user's intent ("only assigned users + beneficiary's
+      voice"). This item is a no-op; kept here for traceability.
+
+### Build order
+
+1. **System auto-comments on status change** — foundational; later items
+   reuse the helper for "endorsement requested / approved / rejected".
+2. **INTERN / EXTERN tag column** — trivial; bundle with (1).
+3. **TICKET_VIEWED audit** — single hook on the detail handler.
+4. **Categories / Subcategories / fields** — schema + admin CRUD + create
+   form. Largest piece.
+5. **Mark-done / close approval UX + reopen-reason auto-comment.**
+6. **Avizare suplimentară** — model, endpoints, `/avizator` page,
+   close-blocker wired in.
+7. **/snippets** — schema, endpoints, page.
+
+---
+
 ## Phase 10 - Internalization and Wrapping Up
 
 - [x] add useful indices on often used columns from tables and generate seed.sql in scripts/ to create (with indices) tables and populate the DB
@@ -315,11 +452,11 @@ status flag here so the next session can pick up cleanly.
 - [x] Playwright E2E smoke (`tests/e2e/`) — auth setup + golden paths for
       tickets, ticket detail, admin overview, monitor (no hooks-order
       regression). Run after `npm install` in `tests/e2e/`.
-- [ ] Comment / attachment / SLA service-level integration **execution**
+- [ ] Comment / attachment integration **execution**
       requires `make` integration target with testcontainers.
 - [ ] Production-grade chaos drills (real Postgres restart, Kafka kill)
       remain a staging exercise.
-- [ ] Comment / attachment / SLA service-level integration tests.
+- [ ] Comment / attachment integration tests.
 - [ ] Acceptance tests beyond workflow.
 - [ ] E2E (Playwright) smoke for the golden paths.
 - [ ] k6 perf + load tests against the 30M seed.

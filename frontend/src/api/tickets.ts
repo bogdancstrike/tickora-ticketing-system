@@ -23,8 +23,12 @@ export interface TicketDto {
   ticket_code: string
   status: string
   priority: string
-  category?: string | null
-  type?: string | null
+  category_id?: string | null
+  subcategory_id?: string | null
+  category_code?: string | null
+  category_name?: string | null
+  subcategory_code?: string | null
+  subcategory_name?: string | null
   beneficiary_type: 'internal' | 'external'
   title?: string | null
   txt?: string
@@ -62,6 +66,9 @@ export interface ListTicketParams {
   priority?: string | string[]
   current_sector_code?: string
   assignee_user_id?: string
+  beneficiary_type?: 'internal' | 'external'
+  category_id?: string
+  subcategory_id?: string
   search?: string
   sort_by?: string
   sort_dir?: 'asc' | 'desc'
@@ -81,8 +88,9 @@ export interface CreateTicketPayload {
   txt: string
   beneficiary_type?: 'internal' | 'external'
   priority?: string
-  category?: string
-  type?: string
+  category_id?: string | null
+  subcategory_id?: string | null
+  metadata?: Record<string, string | null>
   requester_first_name?: string
   requester_last_name?: string
   requester_email?: string
@@ -93,19 +101,44 @@ export interface CreateTicketPayload {
 export interface ReviewTicketPayload {
   sector_code: string
   priority: string
-  category?: string
-  type?: string
+  category_id?: string | null
+  subcategory_id?: string | null
   assignee_user_id?: string
   private_comment?: string
   reason?: string
   close?: boolean
 }
 
+export interface SubcategoryFieldDto {
+  id: string
+  key: string
+  label: string
+  value_type: string
+  options?: string[] | null
+  is_required: boolean
+  display_order: number
+  description?: string | null
+}
+
+export interface SubcategoryDto {
+  id: string
+  code: string
+  name: string
+  description?: string | null
+}
+
+export interface CategoryDto {
+  id: string
+  code: string
+  name: string
+  description?: string | null
+  subcategories: SubcategoryDto[]
+}
+
 export interface TicketOptionsDto {
-  sectors: Array<{ code: string; name: string }>
+  sectors: Array<{ id: string; code: string; name: string }>
   priorities: string[]
-  categories: string[]
-  types: string[]
+  categories: CategoryDto[]
   metadata_keys: Array<{
     key: string
     label: string
@@ -113,6 +146,11 @@ export interface TicketOptionsDto {
     options?: string[] | null
     description?: string | null
   }>
+}
+
+export const listSubcategoryFields = async (subcategoryId: string): Promise<{ items: SubcategoryFieldDto[] }> => {
+  const { data } = await apiClient.get(`/api/reference/subcategories/${subcategoryId}/fields`)
+  return data
 }
 
 export interface TicketMetadataDto {

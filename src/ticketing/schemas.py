@@ -25,13 +25,25 @@ class CreateTicketIn(BaseModel):
     title:                 str | None = Field(default=None, max_length=500)
     txt:                   str        = Field(min_length=5, max_length=20000)
 
+    # Classification — both are FK ids into the new taxonomy tables.
+    # The subcategory drives which dynamic metadata fields appear on the
+    # form; whether they're required is configured per field definition.
+    category_id:           str | None = None
+    subcategory_id:        str | None = None
+    priority:              PRIORITY | None = None
+    # Free-form key/value pairs the create form collects for subcategory
+    # field definitions. The service validates each key against the
+    # subcategory's catalogue (required, type, options) before insert.
+    metadata:              dict[str, str | None] | None = None
+
 
 class ListTicketsQuery(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     status:               str | list[str] | None = None
     priority:             str | list[str] | None = None
-    category:             str | None = None
+    category_id:          str | None = None
+    subcategory_id:       str | None = None
     beneficiary_type:     Literal["internal", "external"] | None = None
     assignee_user_id:     str | None = None
     current_sector_code:  str | None = None

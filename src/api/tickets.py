@@ -8,6 +8,8 @@ from src.common.db import get_db
 from src.common.errors import ValidationError
 from src.iam.decorators import require_authenticated
 from src.iam.principal import Principal
+from src.audit import events as audit_events
+from src.audit import service as audit_service
 from src.ticketing.schemas import CreateTicketIn, ListTicketsQuery
 from src.ticketing.serializers import list_response, serialize_ticket
 from src.ticketing.service import ticket_service
@@ -80,6 +82,20 @@ def get_ticket(app, operation, request, *, principal: Principal, **kwargs):
     ticket_id = kwargs.get("ticket_id") or flask_request.view_args.get("ticket_id")
     with get_db() as db:
         t = ticket_service.get(db, principal, ticket_id)
+        # Audit every successful detail view. `ticket_service.get` already
+        # enforces visibility (404 on hidden tickets), so an event here is
+        # guaranteed to belong to a viewer that was actually allowed to
+        # read the row. No client-side dedupe — the user wants every view
+        # recorded for forensics.
+        audit_service.record(
+            db,
+            actor=principal,
+            action=audit_events.TICKET_VIEWED,
+            entity_type="ticket",
+            entity_id=t.id,
+            ticket_id=t.id,
+            metadata={"status": t.status},
+        )
         return (serialize_ticket(t, principal), 200)
 
 

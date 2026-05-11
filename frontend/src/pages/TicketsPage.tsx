@@ -30,6 +30,7 @@ import {
 import { useSessionStore } from '@/stores/sessionStore'
 import { StatusTag, STATUS_OPTIONS } from '@/components/common/StatusTag'
 import { PriorityTag } from '@/components/common/PriorityTag'
+import { BeneficiaryTypeTag, BENEFICIARY_TYPE_OPTIONS } from '@/components/common/BeneficiaryTypeTag'
 import { StatusChanger } from '@/components/common/StatusChanger'
 import { fmtDateTime, fmtBytes } from '@/components/common/format'
 import { AuditTimeline } from '@/components/common/AuditTimeline'
@@ -321,6 +322,64 @@ function authorInitials(name: string): string {
   return name.split(/[\s.@]+/).filter(Boolean).slice(0, 2).map(s => s[0]?.toUpperCase()).join('') || '?'
 }
 
+interface SystemCommentPayload {
+  kind: string
+  actor_user_id?: string
+  actor_username?: string
+  old_status?: string
+  new_status?: string
+  reason?: string
+  [k: string]: unknown
+}
+
+function parseSystemComment(body: string): SystemCommentPayload | null {
+  try {
+    const parsed = JSON.parse(body)
+    if (parsed && typeof parsed === 'object' && typeof parsed.kind === 'string') {
+      return parsed as SystemCommentPayload
+    }
+  } catch {
+    // Older system rows or hand-written ones may not be JSON — fall back to raw body.
+  }
+  return null
+}
+
+function SystemCommentRow({ body, createdAt }: { body: string; createdAt: string }) {
+  const { t } = useTranslation()
+  const payload = parseSystemComment(body)
+
+  // Render the structured payload through i18n so EN/RO read naturally;
+  // fall back to the raw body for anything we don't recognise.
+  let rendered: React.ReactNode = body
+  if (payload?.kind === 'status_changed') {
+    rendered = t('tickets.comments.system.status_changed', {
+      actor: payload.actor_username || t('tickets.comments.system.unknown_actor'),
+      old: t(`status.${payload.old_status}`, { defaultValue: payload.old_status || '' }),
+      new: t(`status.${payload.new_status}`, { defaultValue: payload.new_status || '' }),
+    })
+  }
+
+  return (
+    <div style={{
+      display: 'flex', gap: 10, padding: '6px 12px', alignItems: 'center',
+      borderLeft: '2px solid rgba(0,0,0,0.12)', background: 'rgba(0,0,0,0.02)', borderRadius: 4,
+    }}>
+      <Typography.Text type="secondary" italic style={{ flex: 1, fontSize: 12 }}>
+        {rendered}
+        {payload?.reason && (
+          <>
+            {' '}
+            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+              — {payload.reason}
+            </Typography.Text>
+          </>
+        )}
+      </Typography.Text>
+      <Typography.Text type="secondary" style={{ fontSize: 11 }}>{fmt(createdAt)}</Typography.Text>
+    </div>
+  )
+}
+
 function CommentBox({
   ticketId, disabled, ticket,
 }: {
@@ -334,25 +393,36 @@ function CommentBox({
   const user = useSessionStore((s) => s.user)
   const [fileList, setFileList] = useState<UploadFile[]>([])
 
-  // Operators (staff working on the ticket) can post private comments;
-  // beneficiaries / external requesters are public-only.
+  // Mirror the backend rules in `src/iam/rbac.py`:
+  //   can_post_public_comment  = admin || active-assignee || requester-side
+  //   can_post_private_comment = admin || distributor (triage) || active-assignee
+  // The frontend used to also show the form to chiefs and bystander
+  // sector members — those submissions then 403'd from the backend.
+  // Now the form only renders for principals the backend actually
+  // accepts, and every other staff member sees a clear "assign to me
+  // first" affordance.
   const isAdmin = !!user?.roles.includes('tickora_admin')
-  const isAuditor = !!user?.roles.includes('tickora_auditor')
   const isDistributor = !!user?.roles.includes('tickora_distributor')
-  const inSector = !!(ticket?.current_sector_code && user?.sectors?.some(s => s.sectorCode === ticket.current_sector_code))
-  const isStaff = isAdmin || isAuditor || isDistributor || inSector
-  const canPostPrivate = isStaff
-
-  // Only assigned operators (or chiefs/admins) can post at all when staff;
-  // requesters always retain public commenting on their own tickets.
-  const isAssignee = !!ticket && ticket.assignee_user_id === user?.id
-  const isChiefOfTicket = !!(ticket?.current_sector_code && user?.sectors?.some(s => s.sectorCode === ticket.current_sector_code && s.role === 'chief'))
+  // `isAssignee` covers both the legacy `assignee_user_id` field and the
+  // multi-assignee list so a secondary assignee can also comment.
+  const isAssignee = !!user?.id && (
+    ticket?.assignee_user_id === user.id
+    || (ticket?.assignee_user_ids || []).includes(user.id)
+  )
   const isRequester = !!ticket && (
     (ticket.beneficiary_type === 'external' && !!user?.email && ticket.requester_email === user?.email)
     || ticket.created_by_user_id === user?.id
     || (!!user?.id && ticket.beneficiary_user_id === user.id)
   )
-  const canPostAtAll = isAdmin || isChiefOfTicket || isAssignee || isRequester || isDistributor
+
+  const canPostPublic   = isAdmin || isAssignee || isRequester
+  const canPostPrivate  = isAdmin || isAssignee || isDistributor
+  const canPostAtAll    = canPostPublic || canPostPrivate
+  // When *only* private posting is available (a distributor leaving a
+  // triage note before the ticket is picked up), pin the form to
+  // private so they can't accidentally submit a public comment that the
+  // backend will reject.
+  const forcePrivate    = canPostPrivate && !canPostPublic
 
   const comments = useQuery({
     queryKey: ['comments', ticketId],
@@ -373,7 +443,14 @@ function CommentBox({
      * private comments can download them. Backend re-checks every time.
      */
     mutationFn: async (values: { body: string; is_public?: boolean }) => {
-      const visibility = (canPostPrivate ? values.is_public !== false : true) ? 'public' : 'private'
+      // Three cases:
+      //   forcePrivate  -> distributor leaving a triage note; pin private.
+      //   public-only   -> a beneficiary; pin public.
+      //   both allowed  -> honour the visibility checkbox.
+      let visibility: 'public' | 'private'
+      if (forcePrivate)            visibility = 'private'
+      else if (!canPostPrivate)    visibility = 'public'
+      else                         visibility = values.is_public === false ? 'private' : 'public'
       const comment = await createComment(ticketId, values.body, visibility)
 
       const failures: string[] = []
@@ -421,6 +498,19 @@ function CommentBox({
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['comments', ticketId] })
       await queryClient.invalidateQueries({ queryKey: ['attachments', ticketId] })
+    },
+    onError: (err) => msg.error(err.message),
+  })
+
+  // Self-assign shortcut for sector bystanders. Lives at the component
+  // root so the hooks order stays stable even when the read-only banner
+  // unmounts/remounts.
+  const claim = useMutation({
+    mutationFn: () => assignToMe(ticketId),
+    onSuccess: async () => {
+      msg.success('Assigned to you')
+      await queryClient.invalidateQueries({ queryKey: ['ticket', ticketId] })
+      await queryClient.invalidateQueries({ queryKey: ['comments', ticketId] })
     },
     onError: (err) => msg.error(err.message),
   })
@@ -483,7 +573,12 @@ function CommentBox({
             </div>
 
             <Flex justify="space-between" align="center">
-              {canPostPrivate ? (
+              {forcePrivate ? (
+                <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                  <Tag color="orange">private</Tag>
+                  Triage note — only staff can see this.
+                </Typography.Text>
+              ) : canPostPrivate ? (
                 <Form.Item name="is_public" valuePropName="checked" style={{ marginBottom: 0 }}>
                   <Checkbox>Visible to requester (public)</Checkbox>
                 </Form.Item>
@@ -499,14 +594,31 @@ function CommentBox({
       )}
       {disabled && <Alert type="info" message="Comments are disabled for closed tickets." />}
       {!disabled && !canPostAtAll && (
-        <Alert type="info" showIcon
-               message="You can read this conversation but only assigned operators (or the requester) can post."  />
+        <Alert
+          type="info"
+          showIcon
+          message="You can read this conversation."
+          description={
+            !!ticket && canAssignToMe(ticket, user)
+              ? 'Assign the ticket to yourself to comment or move it forward.'
+              : 'Only the active assignee, the requester, or an admin can post.'
+          }
+          action={!!ticket && canAssignToMe(ticket, user) ? (
+            <Button size="small" type="primary" loading={claim.isPending} onClick={() => claim.mutate()}>
+              Assign to me
+            </Button>
+          ) : undefined}
+        />
       )}
       {(comments.data?.items || []).length === 0 && !comments.isLoading && (
         <Empty description="No comments yet" image={Empty.PRESENTED_IMAGE_SIMPLE} />
       )}
       <div style={{ display: 'grid', gap: 8 }}>
         {(comments.data?.items || []).map((item) => {
+          if (item.comment_type === 'system') {
+            return <SystemCommentRow key={item.id} body={item.body} createdAt={item.created_at} />
+          }
+
           const display = item.author_display || item.author_username || item.author_email || 'user'
           const isMine = !!user?.id && item.author_user_id === user.id
           const itemAttachments = (allAttachments?.items || []).filter(a => a.comment_id === item.id)
@@ -678,8 +790,8 @@ function TicketSidebar({ ticket }: { ticket: TicketDto }) {
               {sectors.length === 0 && '—'}
             </Space>
           </Descriptions.Item>
-          <Descriptions.Item label="Category">{ticket.category || '—'}</Descriptions.Item>
-          <Descriptions.Item label="Type">{ticket.type || '—'}</Descriptions.Item>
+          <Descriptions.Item label="Category">{ticket.category_name || '—'}</Descriptions.Item>
+          <Descriptions.Item label="Subcategory">{ticket.subcategory_name || '—'}</Descriptions.Item>
           <Descriptions.Item label="Assignees">
             <Space wrap size={[0, 4]}>
               {(ticket.assignee_usernames || []).map((name, idx) => (
@@ -696,7 +808,7 @@ function TicketSidebar({ ticket }: { ticket: TicketDto }) {
             {[ticket.requester_first_name, ticket.requester_last_name].filter(Boolean).join(' ') || '—'}
           </Descriptions.Item>
           <Descriptions.Item label="Email">{ticket.requester_email || '—'}</Descriptions.Item>
-          <Descriptions.Item label="Type"><Tag>{ticket.beneficiary_type}</Tag></Descriptions.Item>
+          <Descriptions.Item label="Type"><BeneficiaryTypeTag type={ticket.beneficiary_type} /></Descriptions.Item>
         </Descriptions>
       </Card>
       <Card size="small" title="Timeline">
@@ -851,6 +963,7 @@ export function TicketsPage() {
   const [status, setStatus] = useState<string | undefined>()
   const [priority, setPriority] = useState<string | undefined>()
   const [sector, setSector] = useState<string | undefined>()
+  const [beneficiaryType, setBeneficiaryType] = useState<'internal' | 'external' | undefined>()
   const [search, setSearch] = useState<string>('')
   const [sortBy, setSortBy] = useState<'created_at' | 'updated_at' | 'ticket_code' | 'priority' | 'status' | 'title'>('created_at')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
@@ -864,9 +977,10 @@ export function TicketsPage() {
   // navigation feels instant. The backend endpoint is RBAC-aware, so we
   // never have to filter visibility client-side.
   const tickets = useQuery({
-    queryKey: ['tickets', status, priority, sector, search, sortBy, sortDir, pagination],
+    queryKey: ['tickets', status, priority, sector, beneficiaryType, search, sortBy, sortDir, pagination],
     queryFn: () => listTickets({
       status, priority, current_sector_code: sector,
+      beneficiary_type: beneficiaryType,
       search: search || undefined,
       sort_by: sortBy, sort_dir: sortDir,
       limit: pagination.pageSize,
@@ -950,6 +1064,15 @@ export function TicketsPage() {
       filterSearch: true,
     },
     {
+      title: t('beneficiary_type.label'),
+      dataIndex: 'beneficiary_type',
+      width: 130,
+      render: (value: string) => <BeneficiaryTypeTag type={value} />,
+      filters: BENEFICIARY_TYPE_OPTIONS.map(o => ({ text: t(`beneficiary_type.${o.value}`), value: o.value })),
+      filteredValue: beneficiaryType ? [beneficiaryType] : null,
+      filterMultiple: false,
+    },
+    {
       title: 'Assigned users',
       dataIndex: 'assignee_usernames',
       width: 180,
@@ -988,7 +1111,7 @@ export function TicketsPage() {
       render: fmt,
       sorter: { multiple: 0 },
     },
-  ], [status, priority, sector, sectorFilterOptions, priorityFilterOptions])
+  ], [status, priority, sector, beneficiaryType, sectorFilterOptions, priorityFilterOptions, t])
 
   return (
     <div style={{ padding: 24, display: 'grid', gap: 16 }}>
@@ -1008,8 +1131,8 @@ export function TicketsPage() {
                     value={search} onChange={(e) => setSearch(e.target.value)}
                     onSearch={setSearch} style={{ width: 280 }} />
           </span>
-          {(status || priority || sector) && (
-            <Button data-tour-id="tickets-filters" onClick={() => { setStatus(undefined); setPriority(undefined); setSector(undefined) }}>
+          {(status || priority || sector || beneficiaryType) && (
+            <Button data-tour-id="tickets-filters" onClick={() => { setStatus(undefined); setPriority(undefined); setSector(undefined); setBeneficiaryType(undefined) }}>
               Clear filters
             </Button>
           )}
@@ -1051,6 +1174,8 @@ export function TicketsPage() {
             setStatus(pickFirst('status'))
             setPriority(pickFirst('priority'))
             setSector(pickFirst('current_sector_code'))
+            const bt = pickFirst('beneficiary_type')
+            setBeneficiaryType(bt === 'internal' || bt === 'external' ? bt : undefined)
           }}
           onRow={(record) => ({ onClick: () => navigate(`/tickets/${record.id}`) })}
           locale={{ emptyText: <Empty description="No tickets match the current filters" /> }}

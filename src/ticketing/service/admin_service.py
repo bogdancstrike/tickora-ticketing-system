@@ -30,10 +30,13 @@ from src.iam.principal import (
 from src.audit import events
 from src.ticketing.models import (
     AuditEvent,
+    Category,
     MetadataKeyDefinition,
     Notification,
     Sector,
     SectorMembership,
+    Subcategory,
+    SubcategoryFieldDefinition,
     SystemSetting,
     Ticket,
     TicketMetadata,
@@ -752,3 +755,255 @@ def _today_start() -> datetime:
 
 def _dt(value) -> str | None:
     return value.isoformat() if value else None
+
+
+# ── Categories / Subcategories / Subcategory Fields ─────────────────────────
+
+def list_categories(db: Session, principal: Principal) -> list[dict[str, Any]]:
+    """Admin view: every category (active and inactive) with their subcategories
+    and the per-subcategory field catalogue. Returned as a single payload so
+    the admin UI can render the full tree without N+1 round-trips."""
+    require_admin(principal)
+    cats = list(db.scalars(select(Category).order_by(Category.name.asc())))
+    subs_by_cat: dict[str, list[Subcategory]] = {}
+    for s in db.scalars(
+        select(Subcategory).order_by(Subcategory.display_order.asc(), Subcategory.name.asc())
+    ):
+        subs_by_cat.setdefault(s.category_id, []).append(s)
+    fields_by_sub: dict[str, list[SubcategoryFieldDefinition]] = {}
+    for f in db.scalars(
+        select(SubcategoryFieldDefinition).order_by(
+            SubcategoryFieldDefinition.display_order.asc(),
+            SubcategoryFieldDefinition.label.asc(),
+        )
+    ):
+        fields_by_sub.setdefault(f.subcategory_id, []).append(f)
+    return [
+        {
+            "id":          c.id,
+            "code":        c.code,
+            "name":        c.name,
+            "description": c.description,
+            "is_active":   c.is_active,
+            "subcategories": [
+                {
+                    "id":            s.id,
+                    "code":          s.code,
+                    "name":          s.name,
+                    "description":   s.description,
+                    "display_order": s.display_order,
+                    "is_active":     s.is_active,
+                    "fields": [_serialize_subcategory_field(f) for f in fields_by_sub.get(s.id, [])],
+                }
+                for s in subs_by_cat.get(c.id, [])
+            ],
+        }
+        for c in cats
+    ]
+
+
+def upsert_category(db: Session, principal: Principal, payload: dict[str, Any]) -> dict[str, Any]:
+    require_admin(principal)
+    code = (payload.get("code") or "").strip().lower()
+    name = (payload.get("name") or "").strip()
+    if not code or not name:
+        raise ValidationError("code and name are required")
+    cat_id = payload.get("id")
+    if cat_id:
+        row = db.get(Category, cat_id)
+        if row is None:
+            raise NotFoundError("category not found")
+    else:
+        row = db.scalar(select(Category).where(Category.code == code))
+        if row is None:
+            row = Category(code=code, name=name)
+            db.add(row)
+    row.code = code
+    row.name = name
+    row.description = payload.get("description") or None
+    if "is_active" in payload:
+        row.is_active = bool(payload["is_active"])
+    try:
+        db.flush()
+    except IntegrityError as exc:
+        db.rollback()
+        raise BusinessRuleError(f"a category with code '{code}' already exists") from exc
+    audit_service.record(
+        db, actor=principal, action=events.CONFIG_CHANGED,
+        entity_type="category", entity_id=row.id,
+        new_value={"code": row.code, "name": row.name, "is_active": row.is_active},
+    )
+    return {"id": row.id, "code": row.code, "name": row.name, "description": row.description, "is_active": row.is_active}
+
+
+def delete_category(db: Session, principal: Principal, category_id: str) -> None:
+    require_admin(principal)
+    row = db.get(Category, category_id)
+    if row is None:
+        raise NotFoundError("category not found")
+    db.delete(row)
+    audit_service.record(
+        db, actor=principal, action=events.CONFIG_CHANGED,
+        entity_type="category", entity_id=category_id,
+        old_value={"code": row.code, "name": row.name},
+        metadata={"action": "delete"},
+    )
+
+
+def upsert_subcategory(db: Session, principal: Principal, payload: dict[str, Any]) -> dict[str, Any]:
+    require_admin(principal)
+    category_id = payload.get("category_id")
+    if not category_id:
+        raise ValidationError("category_id is required")
+    cat = db.get(Category, category_id)
+    if cat is None:
+        raise NotFoundError("category not found")
+    code = (payload.get("code") or "").strip().lower()
+    name = (payload.get("name") or "").strip()
+    if not code or not name:
+        raise ValidationError("code and name are required")
+    sub_id = payload.get("id")
+    if sub_id:
+        row = db.get(Subcategory, sub_id)
+        if row is None:
+            raise NotFoundError("subcategory not found")
+    else:
+        existing = db.scalar(
+            select(Subcategory).where(
+                Subcategory.category_id == category_id, Subcategory.code == code,
+            )
+        )
+        if existing is not None:
+            row = existing
+        else:
+            row = Subcategory(category_id=category_id, code=code, name=name)
+            db.add(row)
+    row.category_id   = category_id
+    row.code          = code
+    row.name          = name
+    row.description   = payload.get("description") or None
+    if "display_order" in payload:
+        row.display_order = int(payload.get("display_order") or 0)
+    if "is_active" in payload:
+        row.is_active = bool(payload["is_active"])
+    try:
+        db.flush()
+    except IntegrityError as exc:
+        db.rollback()
+        raise BusinessRuleError(
+            f"a subcategory with code '{code}' already exists in this category"
+        ) from exc
+    audit_service.record(
+        db, actor=principal, action=events.CONFIG_CHANGED,
+        entity_type="subcategory", entity_id=row.id,
+        new_value={"code": row.code, "name": row.name, "category_id": row.category_id},
+    )
+    return {
+        "id":            row.id,
+        "code":          row.code,
+        "name":          row.name,
+        "description":   row.description,
+        "display_order": row.display_order,
+        "is_active":     row.is_active,
+        "category_id":   row.category_id,
+    }
+
+
+def delete_subcategory(db: Session, principal: Principal, subcategory_id: str) -> None:
+    require_admin(principal)
+    row = db.get(Subcategory, subcategory_id)
+    if row is None:
+        raise NotFoundError("subcategory not found")
+    db.delete(row)
+    audit_service.record(
+        db, actor=principal, action=events.CONFIG_CHANGED,
+        entity_type="subcategory", entity_id=subcategory_id,
+        old_value={"code": row.code, "name": row.name},
+        metadata={"action": "delete"},
+    )
+
+
+def upsert_subcategory_field(db: Session, principal: Principal, payload: dict[str, Any]) -> dict[str, Any]:
+    require_admin(principal)
+    subcategory_id = payload.get("subcategory_id")
+    if not subcategory_id:
+        raise ValidationError("subcategory_id is required")
+    if db.get(Subcategory, subcategory_id) is None:
+        raise NotFoundError("subcategory not found")
+    key   = (payload.get("key") or "").strip().lower()
+    label = (payload.get("label") or "").strip()
+    if not key or not label:
+        raise ValidationError("key and label are required")
+    field_id = payload.get("id")
+    if field_id:
+        row = db.get(SubcategoryFieldDefinition, field_id)
+        if row is None:
+            raise NotFoundError("field not found")
+    else:
+        # Fall back to lookup-by-key so a stale UI that re-submits an
+        # existing field (without `id`) still updates instead of tripping
+        # the unique constraint with a confusing 500.
+        existing = db.scalar(
+            select(SubcategoryFieldDefinition).where(
+                SubcategoryFieldDefinition.subcategory_id == subcategory_id,
+                SubcategoryFieldDefinition.key == key,
+            )
+        )
+        if existing is not None:
+            row = existing
+        else:
+            row = SubcategoryFieldDefinition(subcategory_id=subcategory_id, key=key, label=label)
+            db.add(row)
+    row.subcategory_id = subcategory_id
+    row.key            = key
+    row.label          = label
+    row.value_type     = (payload.get("value_type") or "string").strip()
+    row.options        = payload.get("options") or None
+    row.is_required    = bool(payload.get("is_required"))
+    row.description    = payload.get("description") or None
+    if "display_order" in payload:
+        row.display_order = int(payload.get("display_order") or 0)
+    try:
+        db.flush()
+    except IntegrityError as exc:
+        db.rollback()
+        raise BusinessRuleError(
+            f"a field with key '{key}' already exists on this subcategory"
+        ) from exc
+    audit_service.record(
+        db, actor=principal, action=events.CONFIG_CHANGED,
+        entity_type="subcategory_field_definition", entity_id=row.id,
+        new_value={
+            "key": row.key, "label": row.label, "value_type": row.value_type,
+            "is_required": row.is_required, "subcategory_id": row.subcategory_id,
+        },
+    )
+    return _serialize_subcategory_field(row)
+
+
+def delete_subcategory_field(db: Session, principal: Principal, field_id: str) -> None:
+    require_admin(principal)
+    row = db.get(SubcategoryFieldDefinition, field_id)
+    if row is None:
+        raise NotFoundError("field not found")
+    db.delete(row)
+    audit_service.record(
+        db, actor=principal, action=events.CONFIG_CHANGED,
+        entity_type="subcategory_field_definition", entity_id=field_id,
+        old_value={"key": row.key, "label": row.label},
+        metadata={"action": "delete"},
+    )
+
+
+def _serialize_subcategory_field(f: SubcategoryFieldDefinition) -> dict[str, Any]:
+    return {
+        "id":            f.id,
+        "subcategory_id": f.subcategory_id,
+        "key":           f.key,
+        "label":         f.label,
+        "value_type":    f.value_type,
+        "options":       f.options,
+        "is_required":   f.is_required,
+        "display_order": f.display_order,
+        "description":   f.description,
+    }

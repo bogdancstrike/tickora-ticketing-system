@@ -15,6 +15,7 @@ TICKET_DONE                 = "TICKET_DONE"
 TICKET_CLOSED               = "TICKET_CLOSED"
 TICKET_REOPENED             = "TICKET_REOPENED"
 TICKET_CANCELLED            = "TICKET_CANCELLED"
+TICKET_VIEWED               = "TICKET_VIEWED"
 
 # ── Comments ──────────────────────────────────────────────────────────────────
 COMMENT_CREATED  = "COMMENT_CREATED"

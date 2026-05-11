@@ -77,6 +77,11 @@
     "high":     "Ridicată",
     "critical": "Critică"
   },
+  "beneficiary_type": {
+    "internal": "Intern",
+    "external": "Extern",
+    "label":    "Beneficiar"
+  },
   "tickets": {
     "title": "Tichete",
     "subtitle": "Coadă operațională cu acțiuni de flux",
@@ -140,7 +145,11 @@
       "delete": "Șterge",
       "deleted": "(șters)",
       "edit_window_expired": "Fereastra de editare a expirat",
-      "no_comments": "Niciun comentariu"
+      "no_comments": "Niciun comentariu",
+      "system": {
+        "unknown_actor": "sistem",
+        "status_changed": "{{actor}} a schimbat statusul din {{old}} în {{new}}"
+      }
     }
   },
   "review": {

@@ -4,6 +4,7 @@ The atomic-UPDATE pattern (architecture §6) prevents double-assignment under
 concurrency: if the WHERE clause doesn't match (somebody else already moved the
 ticket), the UPDATE returns 0 rows and we raise ConcurrencyConflictError.
 """
+import json
 from datetime import datetime, timezone
 
 from sqlalchemy import func, select, update
@@ -26,6 +27,7 @@ from src.ticketing.models import (
     Ticket,
     TicketAssignee,
     TicketAssignmentHistory,
+    TicketComment,
     TicketSectorAssignment,
     TicketSectorHistory,
     TicketStatusHistory,
@@ -63,10 +65,35 @@ def _check_visible(p: Principal, t: Ticket) -> None:
         raise NotFoundError("ticket not found")
 
 
-def _record_status_change(db, t_id, old, new, by, reason):
+def _record_status_change(db, t_id, old, new, p: Principal, reason: str | None = None):
+    """Write the status history row *and* the matching system auto-comment.
+
+    The auto-comment carries `comment_type='system'` and a JSON body the
+    client parses with the `comment.system.status_changed` i18n key. We pin
+    `visibility='public'` because every party on the ticket — beneficiary
+    included — should see who moved the ticket and to what state.
+    """
     db.add(TicketStatusHistory(
         ticket_id=t_id, old_status=old, new_status=new,
-        changed_by_user_id=by, reason=reason,
+        changed_by_user_id=p.user_id, reason=reason,
+    ))
+    if old == new:
+        return
+    payload: dict[str, str | None] = {
+        "kind":           "status_changed",
+        "actor_user_id":  p.user_id,
+        "actor_username": p.username,
+        "old_status":     old,
+        "new_status":     new,
+    }
+    if reason:
+        payload["reason"] = reason
+    db.add(TicketComment(
+        ticket_id=t_id,
+        author_user_id=p.user_id,
+        visibility="public",
+        comment_type="system",
+        body=json.dumps(payload, ensure_ascii=False),
     ))
 
 
@@ -219,7 +246,7 @@ def _assign_sector(db: Session, p: Principal, ticket_id: str, sector_code: str, 
         raise ConcurrencyConflictError("ticket state changed; refresh and retry")
 
     _record_sector_change(db, ticket_id, old_sector_id, sector.id, p.user_id, reason)
-    _record_status_change(db, ticket_id, t.status, new_status, p.user_id, reason)
+    _record_status_change(db, ticket_id, t.status, new_status, p, reason)
     _add_sector_assignment(db, ticket_id, sector.id, by_user_id=p.user_id, primary=True)
     audit_service.record(
         db, actor=p, action=audit_events.TICKET_ASSIGNED_TO_SECTOR,
@@ -294,7 +321,7 @@ def _assign_to_me(db: Session, p: Principal, ticket_id: str) -> Ticket:
         raise ConcurrencyConflictError("ticket already assigned or no longer assignable")
 
     _record_assignment_change(db, ticket_id, None, p.user_id, p.user_id, None)
-    _record_status_change(db, ticket_id, t.status, sm.IN_PROGRESS, p.user_id, None)
+    _record_status_change(db, ticket_id, t.status, sm.IN_PROGRESS, p, None)
     _add_user_assignment(db, ticket_id, p.user_id, by_user_id=p.user_id, primary=True)
     audit_service.record(
         db, actor=p, action=audit_events.TICKET_ASSIGNED_TO_USER,
@@ -367,7 +394,7 @@ def _assign_to_user(db: Session, p: Principal, ticket_id: str, target_user_id: s
 
     _record_assignment_change(db, ticket_id, old_assignee, target_user_id, p.user_id, reason)
     if t.status != new_status:
-        _record_status_change(db, ticket_id, t.status, new_status, p.user_id, reason)
+        _record_status_change(db, ticket_id, t.status, new_status, p, reason)
     _add_user_assignment(db, ticket_id, target_user_id, by_user_id=p.user_id, primary=True)
     audit_service.record(
         db, actor=p,
@@ -617,7 +644,7 @@ def _unassign(db: Session, p: Principal, ticket_id: str, *, reason: str | None =
 
     _record_assignment_change(db, ticket_id, old_assignee, None, p.user_id, reason)
     if t.status != new_status:
-        _record_status_change(db, ticket_id, t.status, new_status, p.user_id, reason)
+        _record_status_change(db, ticket_id, t.status, new_status, p, reason)
     audit_service.record(
         db, actor=p,
         action=audit_events.TICKET_UNASSIGNED,
@@ -668,7 +695,7 @@ def _mark_done(db: Session, p: Principal, ticket_id: str, *, resolution: str | N
     if _no_returned_row(res):
         raise ConcurrencyConflictError("ticket state changed; refresh and retry")
 
-    _record_status_change(db, ticket_id, t.status, new_status, p.user_id, None)
+    _record_status_change(db, ticket_id, t.status, new_status, p, None)
     audit_service.record(
         db, actor=p, action=audit_events.TICKET_DONE,
         entity_type="ticket", entity_id=ticket_id, ticket_id=ticket_id,
@@ -704,7 +731,7 @@ def _close(db: Session, p: Principal, ticket_id: str, *, feedback: dict | None =
     if _no_returned_row(res):
         raise ConcurrencyConflictError("ticket state changed; refresh and retry")
 
-    _record_status_change(db, ticket_id, t.status, new_status, p.user_id, None)
+    _record_status_change(db, ticket_id, t.status, new_status, p, None)
     audit_service.record(
         db, actor=p, action=audit_events.TICKET_CLOSED,
         entity_type="ticket", entity_id=ticket_id, ticket_id=ticket_id,
@@ -763,7 +790,7 @@ def _reopen(db: Session, p: Principal, ticket_id: str, *, reason: str) -> Ticket
     if _no_returned_row(res):
         raise ConcurrencyConflictError("ticket state changed; refresh and retry")
 
-    _record_status_change(db, ticket_id, t.status, new_status, p.user_id, reason)
+    _record_status_change(db, ticket_id, t.status, new_status, p, reason)
     if target_assignee != t.assignee_user_id:
         _record_assignment_change(db, ticket_id, t.assignee_user_id, target_assignee, p.user_id, "reopen")
     audit_service.record(
@@ -817,7 +844,7 @@ def _cancel(db: Session, p: Principal, ticket_id: str, *, reason: str) -> Ticket
     if _no_returned_row(res):
         raise ConcurrencyConflictError("ticket state changed; refresh and retry")
 
-    _record_status_change(db, ticket_id, t.status, new_status, p.user_id, reason)
+    _record_status_change(db, ticket_id, t.status, new_status, p, reason)
     audit_service.record(
         db, actor=p, action=audit_events.TICKET_CANCELLED,
         entity_type="ticket", entity_id=ticket_id, ticket_id=ticket_id,

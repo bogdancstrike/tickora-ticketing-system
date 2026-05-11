@@ -240,8 +240,8 @@ export function ReviewTicketPage() {
       form.setFieldsValue({
         sector_code: t.current_sector_code || undefined,
         priority: t.priority,
-        category: t.category || undefined,
-        type: t.type || undefined,
+        category_id: t.category_id || undefined,
+        subcategory_id: t.subcategory_id || undefined,
         assignee_user_id: t.assignee_user_id || undefined,
       })
     }
@@ -443,15 +443,28 @@ export function ReviewTicketPage() {
                   </Form.Item>
                 </Col>
                 <Col xs={24} sm={8}>
-                  <Form.Item name="category" label="Category">
+                  <Form.Item name="category_id" label="Category">
                     <Select allowClear showSearch optionFilterProp="label" placeholder="—"
-                            options={(options.data?.categories || []).map((v) => ({ value: v, label: v }))} />
+                            options={(options.data?.categories || []).map((c) => ({ value: c.id, label: c.name }))} />
                   </Form.Item>
                 </Col>
                 <Col xs={24} sm={8}>
-                  <Form.Item name="type" label="Type">
-                    <Select allowClear showSearch optionFilterProp="label" placeholder="—"
-                            options={(options.data?.types || []).map((v) => ({ value: v, label: v }))} />
+                  <Form.Item
+                    noStyle
+                    shouldUpdate={(prev, curr) => prev.category_id !== curr.category_id}
+                  >
+                    {({ getFieldValue }) => {
+                      const catId = getFieldValue('category_id') as string | undefined
+                      const cat = (options.data?.categories || []).find((c) => c.id === catId)
+                      const subs = cat?.subcategories || []
+                      return (
+                        <Form.Item name="subcategory_id" label="Subcategory">
+                          <Select allowClear showSearch optionFilterProp="label" placeholder="—"
+                                  disabled={!cat}
+                                  options={subs.map((s) => ({ value: s.id, label: s.name }))} />
+                        </Form.Item>
+                      )
+                    }}
                   </Form.Item>
                 </Col>
               </Row>

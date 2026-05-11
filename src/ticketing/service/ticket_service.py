@@ -14,7 +14,8 @@ from src.iam import rbac
 from src.iam.models import User
 from src.audit import events
 from src.ticketing.models import (
-    Beneficiary, Sector, Ticket, TicketAssignee, TicketSectorAssignment,
+    Beneficiary, Category, Sector, Subcategory, SubcategoryFieldDefinition,
+    Ticket, TicketAssignee, TicketMetadata, TicketSectorAssignment,
 )
 from src.audit import service as audit_service
 from src.ticketing.service import beneficiary_service
@@ -155,7 +156,15 @@ def _create(db: Session, principal: Principal, payload: dict[str, Any]) -> Ticke
     # Capture request metadata
     source_ip, user_agent = _request_metadata()
 
+    # Classification: validate FKs + dynamic fields *before* opening the
+    # row so a bad payload doesn't burn a ticket code from the sequence.
+    classification = _validate_classification(db, payload)
+
     code = _generate_ticket_code(db)
+    priority = (payload.get("priority") or "medium").strip().lower()
+    if priority not in ("low", "medium", "high", "critical"):
+        raise ValidationError("priority must be low, medium, high, or critical")
+
     ticket = Ticket(
         ticket_code      = code,
         beneficiary_id   = beneficiary.id,
@@ -175,16 +184,23 @@ def _create(db: Session, principal: Principal, payload: dict[str, Any]) -> Ticke
 
         suggested_sector_id = None,
 
-        title      = (payload.get("title") or txt[:120]).strip()[:500],
-        txt        = txt,
-        category   = None,
-        type       = None,
-        priority   = "medium",
-        status     = "pending",
+        title          = (payload.get("title") or txt[:120]).strip()[:500],
+        txt            = txt,
+        category_id    = classification["category_id"],
+        subcategory_id = classification["subcategory_id"],
+        priority       = priority,
+        status         = "pending",
     )
     db.add(ticket)
     db.flush()
     set_ticket_id(ticket.id)
+
+    # Persist subcategory field values as TicketMetadata rows so the
+    # existing metadata UI/audit path keeps working unchanged.
+    for key, label, value in classification["metadata_rows"]:
+        db.add(TicketMetadata(
+            ticket_id=ticket.id, key=key, label=label, value=value,
+        ))
 
     audit_service.record(
         db,
@@ -225,6 +241,7 @@ def get(db: Session, principal: Principal, ticket_id: str) -> Ticket:
         setattr(t, "beneficiary_user_id", _beneficiary_user_id(db, t.beneficiary_id))
         setattr(t, "sector_codes", _sector_codes_for_ticket(db, t.id))
         setattr(t, "assignee_users", _assignees_for_ticket(db, t.id))
+        _hydrate_classification(db, t)
         _hydrate_requester_fallback(db, t)
         set_attr(current, "ticket.found", True)
         set_attr(current, "ticket.code", t.ticket_code)
@@ -359,8 +376,10 @@ def _list(
     if (priority := filters.get("priority")):
         priorities = priority if isinstance(priority, list) else [priority]
         stmt = stmt.where(Ticket.priority.in_(priorities))
-    if (category := filters.get("category")):
-        stmt = stmt.where(Ticket.category == category)
+    if (category_id := filters.get("category_id")):
+        stmt = stmt.where(Ticket.category_id == category_id)
+    if (subcategory_id := filters.get("subcategory_id")):
+        stmt = stmt.where(Ticket.subcategory_id == subcategory_id)
     if (btype := filters.get("beneficiary_type")):
         stmt = stmt.where(Ticket.beneficiary_type == btype)
     if (assignee := filters.get("assignee_user_id")):
@@ -478,11 +497,19 @@ def _list(
     ben_user_ids = _beneficiary_user_ids_map(db, [r.beneficiary_id for r in rows if r.beneficiary_id])
     multi_sectors = _sector_codes_per_ticket(db, [r.id for r in rows])
     multi_assignees = _assignees_per_ticket(db, [r.id for r in rows])
+    cats = _categories_map(db, [r.category_id    for r in rows if r.category_id])
+    subs = _subcategories_map(db, [r.subcategory_id for r in rows if r.subcategory_id])
     for r in rows:
         setattr(r, "current_sector_code", sector_codes.get(r.current_sector_id))
         setattr(r, "beneficiary_user_id", ben_user_ids.get(r.beneficiary_id))
         setattr(r, "sector_codes", multi_sectors.get(r.id, []))
         setattr(r, "assignee_users", multi_assignees.get(r.id, []))
+        cat = cats.get(r.category_id)
+        sub = subs.get(r.subcategory_id)
+        setattr(r, "category_code",    cat[0] if cat else None)
+        setattr(r, "category_name",    cat[1] if cat else None)
+        setattr(r, "subcategory_code", sub[0] if sub else None)
+        setattr(r, "subcategory_name", sub[1] if sub else None)
     return rows, next_token, total_count
 
 
@@ -495,14 +522,85 @@ def _request_metadata() -> tuple[str | None, str | None]:
     return request_metadata()
 
 
+def _validate_classification(db: Session, payload: dict[str, Any]) -> dict[str, Any]:
+    """Validate ``category_id`` / ``subcategory_id`` and the dynamic field
+    payload against the subcategory's field catalogue.
+
+    Returns a dict with the resolved ``category_id``, ``subcategory_id``, and
+    a list of ``(key, label, value)`` rows ready to insert into
+    ``ticket_metadatas``. Raises ``ValidationError`` if anything is wrong —
+    bad FKs, missing required fields, unknown keys, or option-list mismatches.
+    """
+    category_id    = payload.get("category_id") or None
+    subcategory_id = payload.get("subcategory_id") or None
+    metadata_in    = payload.get("metadata") or {}
+
+    # Mark unused references so callers can't sneak in stale fields.
+    if subcategory_id and not category_id:
+        raise ValidationError("subcategory_id requires category_id")
+
+    category: Category | None = None
+    if category_id:
+        category = db.get(Category, category_id)
+        if category is None or not category.is_active:
+            raise ValidationError("category_id is unknown or inactive")
+
+    subcategory: Subcategory | None = None
+    if subcategory_id:
+        subcategory = db.get(Subcategory, subcategory_id)
+        if subcategory is None or not subcategory.is_active:
+            raise ValidationError("subcategory_id is unknown or inactive")
+        if category and subcategory.category_id != category.id:
+            raise ValidationError("subcategory does not belong to the chosen category")
+
+    metadata_rows: list[tuple[str, str | None, str]] = []
+    if subcategory:
+        fields = list(db.scalars(
+            select(SubcategoryFieldDefinition)
+            .where(SubcategoryFieldDefinition.subcategory_id == subcategory.id)
+        ))
+        by_key = {f.key: f for f in fields}
+
+        # Reject keys the subcategory doesn't define.
+        unknown = set(metadata_in.keys()) - set(by_key.keys())
+        if unknown:
+            raise ValidationError(
+                f"unknown metadata keys for subcategory: {sorted(unknown)}"
+            )
+
+        # Required-field gate + option validation.
+        for field in fields:
+            raw = metadata_in.get(field.key)
+            value = (str(raw).strip() if raw is not None else "")
+            if not value:
+                if field.is_required:
+                    raise ValidationError(
+                        f"field '{field.label}' is required"
+                    )
+                continue
+            if field.options and value not in field.options:
+                raise ValidationError(
+                    f"field '{field.label}' must be one of {field.options}"
+                )
+            metadata_rows.append((field.key, field.label, value))
+    elif metadata_in:
+        raise ValidationError("metadata supplied without a subcategory")
+
+    return {
+        "category_id":    category_id,
+        "subcategory_id": subcategory_id,
+        "metadata_rows":  metadata_rows,
+    }
+
+
 def _ticket_audit_snapshot(t: Ticket) -> dict[str, Any]:
     return {
         "id":                  t.id,
         "ticket_code":         t.ticket_code,
         "status":              t.status,
         "priority":            t.priority,
-        "category":            t.category,
-        "type":                t.type,
+        "category_id":         t.category_id,
+        "subcategory_id":      t.subcategory_id,
         "beneficiary_type":    t.beneficiary_type,
         "current_sector_id":   t.current_sector_id,
         "suggested_sector_id": t.suggested_sector_id,
@@ -524,6 +622,46 @@ def _sector_codes_map(db: Session, ids: Iterable[str]) -> dict[str, str]:
         return {}
     rows = db.execute(select(Sector.id, Sector.code).where(Sector.id.in_(ids))).all()
     return {sid: code for sid, code in rows}
+
+
+def _categories_map(db: Session, ids: Iterable[str]) -> dict[str, tuple[str, str]]:
+    ids = [i for i in ids if i]
+    if not ids:
+        return {}
+    rows = db.execute(
+        select(Category.id, Category.code, Category.name).where(Category.id.in_(ids))
+    ).all()
+    return {cid: (code, name) for cid, code, name in rows}
+
+
+def _subcategories_map(db: Session, ids: Iterable[str]) -> dict[str, tuple[str, str]]:
+    ids = [i for i in ids if i]
+    if not ids:
+        return {}
+    rows = db.execute(
+        select(Subcategory.id, Subcategory.code, Subcategory.name).where(Subcategory.id.in_(ids))
+    ).all()
+    return {sid: (code, name) for sid, code, name in rows}
+
+
+def _hydrate_classification(db: Session, t: Ticket) -> None:
+    """Attach `category_code`/`category_name`/`subcategory_code`/`subcategory_name`
+    to a single ticket so the serializer can render the human-friendly labels
+    without a join in the API layer."""
+    if t.category_id:
+        cat = db.execute(
+            select(Category.code, Category.name).where(Category.id == t.category_id)
+        ).first()
+        if cat:
+            setattr(t, "category_code", cat[0])
+            setattr(t, "category_name", cat[1])
+    if t.subcategory_id:
+        sub = db.execute(
+            select(Subcategory.code, Subcategory.name).where(Subcategory.id == t.subcategory_id)
+        ).first()
+        if sub:
+            setattr(t, "subcategory_code", sub[0])
+            setattr(t, "subcategory_name", sub[1])
 
 
 def _beneficiary_user_id(db: Session, beneficiary_id: str | None) -> str | None:

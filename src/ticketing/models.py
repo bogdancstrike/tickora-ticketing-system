@@ -57,6 +57,69 @@ class SectorMembership(Base):
     updated_at:        Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
 
 
+class Category(Base):
+    __tablename__ = "categories"
+    __table_args__ = (
+        Index("idx_categories_code", "code", unique=True),
+    )
+
+    id:          Mapped[str]      = mapped_column(UUID(as_uuid=False), primary_key=True, default=_uuid)
+    code:        Mapped[str]      = mapped_column(String(50), nullable=False, unique=True)
+    name:        Mapped[str]      = mapped_column(String(255), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text)
+    is_active:   Mapped[bool]     = mapped_column(Boolean, nullable=False, default=True, server_default=text("true"))
+    created_at:  Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at:  Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
+
+    subcategories: Mapped[list["Subcategory"]] = relationship(
+        "Subcategory", backref="category", cascade="all, delete-orphan",
+        order_by="Subcategory.display_order, Subcategory.name",
+    )
+
+
+class Subcategory(Base):
+    __tablename__ = "subcategories"
+    __table_args__ = (
+        UniqueConstraint("category_id", "code", name="uq_subcategory_code"),
+        Index("idx_subcategories_category", "category_id"),
+    )
+
+    id:             Mapped[str]      = mapped_column(UUID(as_uuid=False), primary_key=True, default=_uuid)
+    category_id:    Mapped[str]      = mapped_column(UUID(as_uuid=False), ForeignKey("categories.id", ondelete="CASCADE"), nullable=False)
+    code:           Mapped[str]      = mapped_column(String(50), nullable=False)
+    name:           Mapped[str]      = mapped_column(String(255), nullable=False)
+    description:    Mapped[str | None] = mapped_column(Text)
+    display_order:  Mapped[int]      = mapped_column(Integer, nullable=False, default=0, server_default=text("0"))
+    is_active:      Mapped[bool]     = mapped_column(Boolean, nullable=False, default=True, server_default=text("true"))
+    created_at:     Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at:     Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
+
+    fields: Mapped[list["SubcategoryFieldDefinition"]] = relationship(
+        "SubcategoryFieldDefinition", backref="subcategory", cascade="all, delete-orphan",
+        order_by="SubcategoryFieldDefinition.display_order, SubcategoryFieldDefinition.label",
+    )
+
+
+class SubcategoryFieldDefinition(Base):
+    __tablename__ = "subcategory_field_definitions"
+    __table_args__ = (
+        UniqueConstraint("subcategory_id", "key", name="uq_subcategory_field_key"),
+        Index("idx_subcategory_fields_subcategory", "subcategory_id"),
+    )
+
+    id:             Mapped[str]      = mapped_column(UUID(as_uuid=False), primary_key=True, default=_uuid)
+    subcategory_id: Mapped[str]      = mapped_column(UUID(as_uuid=False), ForeignKey("subcategories.id", ondelete="CASCADE"), nullable=False)
+    key:            Mapped[str]      = mapped_column(String(100), nullable=False)
+    label:          Mapped[str]      = mapped_column(String(255), nullable=False)
+    value_type:     Mapped[str]      = mapped_column(String(20), nullable=False, default="string", server_default="string")
+    options:        Mapped[list[str] | None] = mapped_column(JSONB)
+    is_required:    Mapped[bool]     = mapped_column(Boolean, nullable=False, default=False, server_default=text("false"))
+    display_order:  Mapped[int]      = mapped_column(Integer, nullable=False, default=0, server_default=text("0"))
+    description:    Mapped[str | None] = mapped_column(Text)
+    created_at:     Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at:     Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
+
+
 class Beneficiary(Base):
     __tablename__ = "beneficiaries"
     __table_args__ = (
@@ -89,8 +152,8 @@ class Ticket(Base):
     __table_args__ = (
         Index("idx_tickets_status",            "status"),
         Index("idx_tickets_priority",          "priority"),
-        Index("idx_tickets_category",          "category"),
-        Index("idx_tickets_type",              "type"),
+        Index("idx_tickets_category_id",       "category_id"),
+        Index("idx_tickets_subcategory_id",    "subcategory_id"),
         Index("idx_tickets_beneficiary_type",  "beneficiary_type"),
         Index("idx_tickets_current_sector_status", "current_sector_id", "status"),
         Index("idx_tickets_assignee_status",   "assignee_user_id", "status"),
@@ -135,8 +198,8 @@ class Ticket(Base):
     txt:        Mapped[str]        = mapped_column(Text, nullable=False)
     resolution: Mapped[str | None] = mapped_column(Text)
 
-    category: Mapped[str | None] = mapped_column(String(100))
-    type:     Mapped[str | None] = mapped_column(String(100))
+    category_id:    Mapped[str | None] = mapped_column(UUID(as_uuid=False), ForeignKey("categories.id", ondelete="SET NULL"))
+    subcategory_id: Mapped[str | None] = mapped_column(UUID(as_uuid=False), ForeignKey("subcategories.id", ondelete="SET NULL"))
     priority: Mapped[str]        = mapped_column(String(50), nullable=False, default="medium")
     status:   Mapped[str]        = mapped_column(String(50), nullable=False, default="pending")
 

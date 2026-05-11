@@ -6,12 +6,11 @@ from sqlalchemy.orm import Session
 
 from src.iam.models import User
 from src.ticketing.models import (
-    MetadataKeyDefinition, Sector, SectorMembership, Ticket, TicketMetadata,
+    Category, MetadataKeyDefinition, Sector, SectorMembership, Subcategory,
+    SubcategoryFieldDefinition, Ticket, TicketMetadata,
 )
 
 DEFAULT_PRIORITIES = ("low", "medium", "high", "critical")
-DEFAULT_CATEGORIES = ("access", "hardware", "network", "software", "facilities")
-DEFAULT_TYPES = ("request", "incident", "task", "question")
 
 
 def ticket_options(db: Session) -> dict:
@@ -20,16 +19,70 @@ def ticket_options(db: Session) -> dict:
         .where(Sector.is_active.is_(True))
         .order_by(Sector.code.asc())
     ))
+    cats = list(db.scalars(
+        select(Category)
+        .where(Category.is_active.is_(True))
+        .order_by(Category.name.asc())
+    ))
+    subs_by_cat: dict[str, list[Subcategory]] = {}
+    for sub in db.scalars(
+        select(Subcategory)
+        .where(Subcategory.is_active.is_(True))
+        .order_by(Subcategory.display_order.asc(), Subcategory.name.asc())
+    ):
+        subs_by_cat.setdefault(sub.category_id, []).append(sub)
+
     return {
         "sectors": [
             {"id": s.id, "code": s.code, "name": s.name}
             for s in sectors
         ],
         "priorities": _values(db, Ticket.priority, DEFAULT_PRIORITIES),
-        "categories": _values(db, Ticket.category, DEFAULT_CATEGORIES),
-        "types": _values(db, Ticket.type, DEFAULT_TYPES),
+        "categories": [
+            {
+                "id":   c.id,
+                "code": c.code,
+                "name": c.name,
+                "description": c.description,
+                "subcategories": [
+                    {"id": s.id, "code": s.code, "name": s.name, "description": s.description}
+                    for s in subs_by_cat.get(c.id, [])
+                ],
+            }
+            for c in cats
+        ],
         "metadata_keys": _metadata_keys(db),
     }
+
+
+def subcategory_fields(db: Session, subcategory_id: str) -> list[dict]:
+    """Return the ordered field catalogue for a given subcategory.
+
+    Used by the create-ticket form: when the user picks a subcategory, the
+    UI fetches this list and renders one form item per field, marking the
+    required ones with a red `*`.
+    """
+    rows = list(db.scalars(
+        select(SubcategoryFieldDefinition)
+        .where(SubcategoryFieldDefinition.subcategory_id == subcategory_id)
+        .order_by(
+            SubcategoryFieldDefinition.display_order.asc(),
+            SubcategoryFieldDefinition.label.asc(),
+        )
+    ))
+    return [
+        {
+            "id":            f.id,
+            "key":           f.key,
+            "label":         f.label,
+            "value_type":    f.value_type,
+            "options":       f.options,
+            "is_required":   f.is_required,
+            "display_order": f.display_order,
+            "description":   f.description,
+        }
+        for f in rows
+    ]
 
 
 def _metadata_keys(db: Session) -> list[dict]:

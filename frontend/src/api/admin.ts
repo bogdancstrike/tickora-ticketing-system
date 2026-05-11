@@ -261,3 +261,69 @@ export const getAdminTask = async (taskId: string): Promise<AdminTask> => {
 export const syncAdminWidgets = async (): Promise<void> => {
   await apiClient.post('/api/admin/widget-definitions/sync')
 }
+
+// ── Taxonomy (categories / subcategories / dynamic fields) ──────────────────
+
+export interface AdminSubcategoryField {
+  id?: string
+  subcategory_id?: string
+  key: string
+  label: string
+  value_type: string
+  options?: string[] | null
+  is_required: boolean
+  display_order?: number
+  description?: string | null
+}
+
+export interface AdminSubcategory {
+  id?: string
+  category_id?: string
+  code: string
+  name: string
+  description?: string | null
+  display_order?: number
+  is_active: boolean
+  fields: AdminSubcategoryField[]
+}
+
+export interface AdminCategory {
+  id?: string
+  code: string
+  name: string
+  description?: string | null
+  is_active: boolean
+  subcategories: AdminSubcategory[]
+}
+
+export const listAdminCategories = async (): Promise<{ items: AdminCategory[] }> => {
+  const { data } = await apiClient.get('/api/admin/categories')
+  return data
+}
+
+export const upsertAdminCategory = async (payload: Partial<AdminCategory>): Promise<AdminCategory> => {
+  const { data } = await apiClient.post('/api/admin/categories', payload)
+  return data
+}
+
+export const deleteAdminCategory = async (categoryId: string): Promise<void> => {
+  await apiClient.delete(`/api/admin/categories/${categoryId}`)
+}
+
+export const upsertAdminSubcategory = async (payload: Partial<AdminSubcategory>): Promise<AdminSubcategory> => {
+  const { data } = await apiClient.post('/api/admin/subcategories', payload)
+  return data
+}
+
+export const deleteAdminSubcategory = async (subcategoryId: string): Promise<void> => {
+  await apiClient.delete(`/api/admin/subcategories/${subcategoryId}`)
+}
+
+export const upsertAdminSubcategoryField = async (payload: Partial<AdminSubcategoryField>): Promise<AdminSubcategoryField> => {
+  const { data } = await apiClient.post('/api/admin/subcategory-fields', payload)
+  return data
+}
+
+export const deleteAdminSubcategoryField = async (fieldId: string): Promise<void> => {
+  await apiClient.delete(`/api/admin/subcategory-fields/${fieldId}`)
+}

@@ -199,6 +199,56 @@ def sync_widget_catalogue(app, operation, request, *, principal: Principal, **kw
         return ({"status": "synchronized"}, 200)
 
 
+# ── Categories / Subcategories / Subcategory fields ────────────────────────
+
+@require_authenticated
+def list_categories(app, operation, request, *, principal: Principal, **kwargs):
+    with get_db() as db:
+        return ({"items": admin_service.list_categories(db, principal)}, 200)
+
+
+@require_authenticated
+def upsert_category(app, operation, request, *, principal: Principal, **kwargs):
+    with get_db() as db:
+        return (admin_service.upsert_category(db, principal, _payload()), 200)
+
+
+@require_authenticated
+def delete_category(app, operation, request, *, principal: Principal, **kwargs):
+    category_id = kwargs.get("category_id") or flask_request.view_args.get("category_id")
+    with get_db() as db:
+        admin_service.delete_category(db, principal, category_id)
+        return ("", 204)
+
+
+@require_authenticated
+def upsert_subcategory(app, operation, request, *, principal: Principal, **kwargs):
+    with get_db() as db:
+        return (admin_service.upsert_subcategory(db, principal, _payload()), 200)
+
+
+@require_authenticated
+def delete_subcategory(app, operation, request, *, principal: Principal, **kwargs):
+    subcategory_id = kwargs.get("subcategory_id") or flask_request.view_args.get("subcategory_id")
+    with get_db() as db:
+        admin_service.delete_subcategory(db, principal, subcategory_id)
+        return ("", 204)
+
+
+@require_authenticated
+def upsert_subcategory_field(app, operation, request, *, principal: Principal, **kwargs):
+    with get_db() as db:
+        return (admin_service.upsert_subcategory_field(db, principal, _payload()), 200)
+
+
+@require_authenticated
+def delete_subcategory_field(app, operation, request, *, principal: Principal, **kwargs):
+    field_id = kwargs.get("field_id") or flask_request.view_args.get("field_id")
+    with get_db() as db:
+        admin_service.delete_subcategory_field(db, principal, field_id)
+        return ("", 204)
+
+
 def _serialize_widget_definition(wd: WidgetDefinition) -> dict:
     return {
         "type": wd.type,

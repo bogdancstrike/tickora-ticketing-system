@@ -15,6 +15,15 @@ def ticket_options(app, operation, request, *, principal: Principal, **kwargs):
 
 
 @require_authenticated
+def subcategory_fields(app, operation, request, *, principal: Principal, **kwargs):
+    """Return the ordered field catalogue for a subcategory so the create
+    form can render the dynamic metadata block."""
+    subcategory_id = kwargs.get("subcategory_id") or flask_request.view_args.get("subcategory_id")
+    with get_db() as db:
+        return ({"items": reference_service.subcategory_fields(db, subcategory_id)}, 200)
+
+
+@require_authenticated
 def assignable_users(app, operation, request, *, principal: Principal, **kwargs):
     sector_code = flask_request.args.get("sector_code")
     if not (principal.is_admin or principal.is_distributor or principal.chief_sectors or principal.member_sectors):

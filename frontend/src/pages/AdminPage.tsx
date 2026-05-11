@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ProductTour, TourInfoButton } from '@/components/common/ProductTour'
 import ReactECharts from 'echarts-for-react'
 import {
-  Alert, Button, Col, Empty, Flex, Form, Input, List, Modal, Row, Select, Space,
+  Alert, Button, Col, Empty, Flex, Form, Input, List, Modal, Popconfirm, Row, Select, Space,
   Statistic, Table, Tag, Typography, theme as antTheme, Switch, message, Tabs, Spin,
 } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
@@ -27,6 +27,10 @@ import {
   type AdminMembership, type AdminMetadataKey, type AdminSector,
   type AdminUser, type AdminWidgetDefinition, type SystemSetting,
   listAdminTicketMetadatas, upsertAdminTicketMetadata, deleteAdminTicketMetadata,
+  listAdminCategories, upsertAdminCategory, deleteAdminCategory,
+  upsertAdminSubcategory, deleteAdminSubcategory,
+  upsertAdminSubcategoryField, deleteAdminSubcategoryField,
+  type AdminCategory, type AdminSubcategory, type AdminSubcategoryField,
 } from '@/api/admin'
 import type { MonitorBreakdown, AdminTicketMetadata } from '@/api/tickets'
 import { fmtDateTime } from '@/components/common/format'
@@ -342,6 +346,200 @@ function SectorsTab() {
   )
 }
 
+function CategoriesPanel() {
+  const qc = useQueryClient()
+  const categories = useQuery({
+    queryKey: ['adminCategories'],
+    queryFn: listAdminCategories,
+    staleTime: 60_000,
+  })
+
+  const [editingCat, setEditingCat] = useState<Partial<AdminCategory> | null>(null)
+  const [editingSub, setEditingSub] = useState<(Partial<AdminSubcategory> & { category_id?: string }) | null>(null)
+  const [editingField, setEditingField] = useState<(Partial<AdminSubcategoryField> & { subcategory_id?: string }) | null>(null)
+
+  const refresh = () => qc.invalidateQueries({ queryKey: ['adminCategories'] })
+
+  const saveCat = useMutation({
+    mutationFn: upsertAdminCategory,
+    onSuccess: () => { message.success('Category saved'); setEditingCat(null); refresh() },
+    onError: (e) => message.error((e as Error).message),
+  })
+  const deleteCat = useMutation({
+    mutationFn: (id: string) => deleteAdminCategory(id),
+    onSuccess: () => { message.success('Category deleted'); refresh() },
+    onError: (e) => message.error((e as Error).message),
+  })
+  const saveSub = useMutation({
+    mutationFn: upsertAdminSubcategory,
+    onSuccess: () => { message.success('Subcategory saved'); setEditingSub(null); refresh() },
+    onError: (e) => message.error((e as Error).message),
+  })
+  const deleteSub = useMutation({
+    mutationFn: (id: string) => deleteAdminSubcategory(id),
+    onSuccess: () => { message.success('Subcategory deleted'); refresh() },
+    onError: (e) => message.error((e as Error).message),
+  })
+  const saveField = useMutation({
+    mutationFn: (payload: Partial<AdminSubcategoryField>) => upsertAdminSubcategoryField({
+      ...payload,
+      // The form serialises options as a comma-separated string; convert
+      // before the request so the backend gets a real JSON array.
+      options: typeof payload.options === 'string'
+        ? String(payload.options).split(',').map((v) => v.trim()).filter(Boolean)
+        : (payload.options || null),
+    }),
+    onSuccess: () => { message.success('Field saved'); setEditingField(null); refresh() },
+    onError: (e) => message.error((e as Error).message),
+  })
+  const deleteField = useMutation({
+    mutationFn: (id: string) => deleteAdminSubcategoryField(id),
+    onSuccess: () => { message.success('Field deleted'); refresh() },
+    onError: (e) => message.error((e as Error).message),
+  })
+
+  return (
+    <Panel title="Categories & dynamic fields" icon={<DatabaseOutlined />}>
+      <Flex justify="end" style={{ marginBottom: 12 }}>
+        <Button type="primary" icon={<PlusOutlined />}
+                onClick={() => setEditingCat({ code: '', name: '', is_active: true })}>
+          New category
+        </Button>
+      </Flex>
+
+      {(categories.data?.items || []).map((cat) => (
+        <div key={cat.id} style={{ marginBottom: 14, padding: 12, border: '1px solid rgba(0,0,0,0.06)', borderRadius: 8 }}>
+          <Flex justify="space-between" align="center" wrap="wrap" gap={8}>
+            <Space>
+              <Typography.Text strong>{cat.name}</Typography.Text>
+              <Tag>{cat.code}</Tag>
+              {!cat.is_active && <Tag color="default">inactive</Tag>}
+            </Space>
+            <Space size={4}>
+              <Button size="small" onClick={() => setEditingCat(cat)}>Edit</Button>
+              <Popconfirm title="Delete category? Subcategories and fields are removed." onConfirm={() => cat.id && deleteCat.mutate(cat.id)}>
+                <Button size="small" danger>Delete</Button>
+              </Popconfirm>
+              <Button size="small" type="primary" icon={<PlusOutlined />}
+                      onClick={() => setEditingSub({ category_id: cat.id, code: '', name: '', is_active: true, display_order: 0, fields: [] })}>
+                Subcategory
+              </Button>
+            </Space>
+          </Flex>
+          {cat.description && <Typography.Paragraph type="secondary" style={{ marginTop: 4, marginBottom: 0 }}>{cat.description}</Typography.Paragraph>}
+
+          {(cat.subcategories || []).map((sub) => (
+            <div key={sub.id} style={{ marginTop: 10, marginLeft: 16, padding: 10, borderLeft: '2px solid rgba(0,0,0,0.06)' }}>
+              <Flex justify="space-between" align="center" wrap="wrap" gap={8}>
+                <Space>
+                  <Typography.Text>{sub.name}</Typography.Text>
+                  <Tag>{sub.code}</Tag>
+                  {!sub.is_active && <Tag color="default">inactive</Tag>}
+                  <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                    {sub.fields.length} field{sub.fields.length === 1 ? '' : 's'}
+                  </Typography.Text>
+                </Space>
+                <Space size={4}>
+                  <Button size="small" onClick={() => setEditingSub({ ...sub, category_id: cat.id })}>Edit</Button>
+                  <Popconfirm title="Delete subcategory? Fields are removed." onConfirm={() => sub.id && deleteSub.mutate(sub.id)}>
+                    <Button size="small" danger>Delete</Button>
+                  </Popconfirm>
+                  <Button size="small" icon={<PlusOutlined />}
+                          onClick={() => setEditingField({
+                            subcategory_id: sub.id, key: '', label: '',
+                            value_type: 'string', is_required: false, display_order: 0,
+                          })}>
+                    Field
+                  </Button>
+                </Space>
+              </Flex>
+              {sub.fields.length > 0 && (
+                <Table
+                  size="small"
+                  rowKey="id"
+                  style={{ marginTop: 8 }}
+                  pagination={false}
+                  dataSource={sub.fields}
+                  columns={[
+                    { title: 'Key', dataIndex: 'key', width: 160 },
+                    { title: 'Label', dataIndex: 'label' },
+                    { title: 'Type', dataIndex: 'value_type', width: 90 },
+                    { title: 'Required', dataIndex: 'is_required', width: 100,
+                      render: (v: boolean) => v ? <Tag color="red">required</Tag> : <Tag>optional</Tag> },
+                    { title: 'Options', dataIndex: 'options',
+                      render: (opts: string[] | null) => (opts || []).map((o) => <Tag key={o}>{o}</Tag>) },
+                    { title: '', width: 130,
+                      render: (_, row: AdminSubcategoryField) => (
+                        <Space size={4}>
+                          <Button size="small" onClick={() => setEditingField({ ...row, subcategory_id: sub.id })}>Edit</Button>
+                          <Popconfirm title="Delete field?" onConfirm={() => row.id && deleteField.mutate(row.id)}>
+                            <Button size="small" danger>×</Button>
+                          </Popconfirm>
+                        </Space>
+                      ),
+                    },
+                  ]}
+                />
+              )}
+            </div>
+          ))}
+        </div>
+      ))}
+
+      <Modal title={editingCat?.id ? 'Edit category' : 'New category'}
+             open={!!editingCat} onCancel={() => setEditingCat(null)} footer={null} destroyOnHidden>
+        <Form key={editingCat?.id || 'new'} layout="vertical" initialValues={editingCat || undefined} onFinish={(v) => saveCat.mutate({ ...editingCat, ...v })}>
+          <Form.Item name="code" label="Code" rules={[{ required: true }]}><Input disabled={!!editingCat?.id} /></Form.Item>
+          <Form.Item name="name" label="Name" rules={[{ required: true }]}><Input /></Form.Item>
+          <Form.Item name="description" label="Description"><Input.TextArea rows={2} /></Form.Item>
+          <Form.Item name="is_active" label="Active" valuePropName="checked"><Switch /></Form.Item>
+          <Button type="primary" htmlType="submit" loading={saveCat.isPending}>Save</Button>
+        </Form>
+      </Modal>
+
+      <Modal title={editingSub?.id ? 'Edit subcategory' : 'New subcategory'}
+             open={!!editingSub} onCancel={() => setEditingSub(null)} footer={null} destroyOnHidden>
+        <Form key={editingSub?.id || 'new'} layout="vertical" initialValues={editingSub || undefined} onFinish={(v) => saveSub.mutate({ ...editingSub, ...v })}>
+          <Form.Item name="code" label="Code" rules={[{ required: true }]}><Input disabled={!!editingSub?.id} /></Form.Item>
+          <Form.Item name="name" label="Name" rules={[{ required: true }]}><Input /></Form.Item>
+          <Form.Item name="description" label="Description"><Input.TextArea rows={2} /></Form.Item>
+          <Form.Item name="display_order" label="Display order"><Input type="number" /></Form.Item>
+          <Form.Item name="is_active" label="Active" valuePropName="checked"><Switch /></Form.Item>
+          <Button type="primary" htmlType="submit" loading={saveSub.isPending}>Save</Button>
+        </Form>
+      </Modal>
+
+      <Modal title={editingField?.id ? 'Edit field' : 'New field'}
+             open={!!editingField} onCancel={() => setEditingField(null)} footer={null} destroyOnHidden>
+        <Form key={editingField?.id || `${editingField?.subcategory_id || 'sub'}-new`}
+              layout="vertical"
+              initialValues={editingField ? {
+                ...editingField,
+                options: Array.isArray(editingField.options) ? editingField.options.join(', ') : editingField.options,
+              } : undefined}
+              onFinish={(v) => saveField.mutate({ ...editingField, ...v })}>
+          <Form.Item name="key" label="Key" rules={[{ required: true }]}><Input disabled={!!editingField?.id} /></Form.Item>
+          <Form.Item name="label" label="Label" rules={[{ required: true }]}><Input /></Form.Item>
+          <Form.Item name="value_type" label="Value type" rules={[{ required: true }]}>
+            <Select options={[
+              { value: 'string', label: 'string' },
+              { value: 'enum',   label: 'enum (options below)' },
+            ]} />
+          </Form.Item>
+          <Form.Item name="options" label="Options (comma separated, only for enum)">
+            <Input placeholder="e.g. low, medium, high" />
+          </Form.Item>
+          <Form.Item name="is_required" label="Required" valuePropName="checked"><Switch /></Form.Item>
+          <Form.Item name="display_order" label="Display order"><Input type="number" /></Form.Item>
+          <Form.Item name="description" label="Description"><Input.TextArea rows={2} /></Form.Item>
+          <Button type="primary" htmlType="submit" loading={saveField.isPending}>Save</Button>
+        </Form>
+      </Modal>
+    </Panel>
+  )
+}
+
+
 function TicketMetadatasPanel() {
   const qc = useQueryClient()
   const [editing, setEditing] = useState<Partial<AdminTicketMetadata> | null>(null)
@@ -450,6 +648,7 @@ function ConfigTab() {
           ]}
         />
       </Panel>
+      <CategoriesPanel />
       <TicketMetadatasPanel />
       <WidgetCataloguePanel />
       <Modal title="Metadata key" open={!!editing} onCancel={() => setEditing(null)} footer={null}>

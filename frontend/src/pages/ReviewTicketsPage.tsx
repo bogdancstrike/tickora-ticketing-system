@@ -7,11 +7,14 @@ import { ReloadOutlined, UserOutlined } from '@ant-design/icons'
 import { listTickets, type TicketDto } from '@/api/tickets'
 import { StatusTag } from '@/components/common/StatusTag'
 import { PriorityTag } from '@/components/common/PriorityTag'
+import { BeneficiaryTypeTag, BENEFICIARY_TYPE_OPTIONS } from '@/components/common/BeneficiaryTypeTag'
 import { fmtDateTime, fmtRelative } from '@/components/common/format'
 import { ProductTour, TourInfoButton } from '@/components/common/ProductTour'
+import { useTranslation } from 'react-i18next'
 
 export function ReviewTicketsPage() {
   const navigate = useNavigate()
+  const { t } = useTranslation()
   const { token } = antTheme.useToken()
   const [modalUsers, setModalUsers] = useState<string[] | null>(null)
   
@@ -83,6 +86,15 @@ export function ReviewTicketsPage() {
       onFilter: (val, row) => row.priority === val,
     },
     {
+      title: t('beneficiary_type.label'),
+      dataIndex: 'beneficiary_type',
+      width: 130,
+      render: (value: string) => <BeneficiaryTypeTag type={value} />,
+      filters: BENEFICIARY_TYPE_OPTIONS.map(o => ({ text: t(`beneficiary_type.${o.value}`), value: o.value })),
+      onFilter: (val, row) => row.beneficiary_type === val,
+      filterMultiple: false,
+    },
+    {
       title: 'Sector',
       dataIndex: 'sector_codes',
       width: 180,
@@ -137,7 +149,7 @@ export function ReviewTicketsPage() {
       sorter: (a, b) => (a.updated_at || '').localeCompare(b.updated_at || ''),
       defaultSortOrder: 'descend',
     },
-  ], [])
+  ], [allTickets, t])
 
   const tablePanel = (
     title: string, 
