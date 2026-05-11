@@ -162,9 +162,9 @@ class TestCloseAndReopen:
         assert fn(p, t) is False
 
     @pytest.mark.parametrize("fn", [rbac.can_close, rbac.can_reopen])
-    def test_admin_can(self, fn):
+    def test_admin_cannot_without_beneficiary_link(self, fn):
         p = make_principal(roles=(ROLE_ADMIN,))
-        assert fn(p, FakeTicket()) is True
+        assert fn(p, FakeTicket()) is False
 
     @pytest.mark.parametrize("fn", [rbac.can_close, rbac.can_reopen])
     def test_external_requester_email_can(self, fn):

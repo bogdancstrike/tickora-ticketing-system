@@ -334,6 +334,7 @@ function EndorsementsCard({ ticket }: { ticket: TicketDto }) {
   const [reqForm] = Form.useForm<{ reason?: string; assigned_to_user_id?: string }>()
   const [decideForm] = Form.useForm<{ reason?: string }>()
 
+  const isAdmin = !!user?.roles.includes('tickora_admin')
   const isAvizator = !!user?.roles.includes('tickora_avizator')
   const assigneeIds = ticketAssigneeIds(ticket)
   const isAssignee = !!user?.id && assigneeIds.includes(user.id)

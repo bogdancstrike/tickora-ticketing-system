@@ -18,8 +18,8 @@ class _ReviewTicketIn(BaseModel):
     sector_code: str | None = Field(default=None, max_length=50)
     assignee_user_id: str | None = None
     priority: str | None = Field(default=None, max_length=50)
-    category: str | None = Field(default=None, max_length=100)
-    type: str | None = Field(default=None, max_length=100)
+    category_id: str | None = None
+    subcategory_id: str | None = None
     private_comment: str | None = Field(default=None, max_length=10000)
     reason: str | None = Field(default=None, max_length=1000)
     close: bool = False

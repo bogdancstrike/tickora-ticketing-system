@@ -290,6 +290,6 @@ class TestReviewMatrix:
             monkeypatch=monkeypatch,
             db=db_session,
             view_args={"ticket_id": ticket.id},
-            json={"category": "general"},
+            json={},
         )
         assert _status(result) == expected_status

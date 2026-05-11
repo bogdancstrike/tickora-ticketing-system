@@ -150,7 +150,7 @@ def _chief_blocked(db_session: Session, ctx):
 def _route(db_session: Session, ctx):
     review_service.review(
         db_session, ctx["distributor"], ctx["ticket_id"],
-        {"sector_code": "s10", "category": "general"},
+        {"sector_code": "s10"},
     )
 
 
