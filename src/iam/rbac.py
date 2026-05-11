@@ -308,6 +308,36 @@ def can_view_audit_tab(p: Principal, t: _TicketLike) -> bool:
     return False
 
 
+# ── Endorsements (avizare suplimentară) ─────────────────────────────────────
+
+def can_request_endorsement(p: Principal, t: _TicketLike) -> bool:
+    """Only the active assignee (or admin) can ask for a supplementary
+    endorsement. Bystander chiefs/members must self-assign first — same
+    policy as comment writes and operator-side status transitions."""
+    if p.is_admin:
+        return True
+    if _is_assigned_to(p, t):
+        return True
+    return False
+
+
+class _EndorsementLike(Protocol):
+    assigned_to_user_id: str | None
+    status: str
+
+
+def can_decide_endorsement(p: Principal, e: _EndorsementLike) -> bool:
+    """Admin override, plus any avizator on a pool request, plus the
+    specific avizator a direct request targets."""
+    if p.is_admin:
+        return True
+    if not p.is_avizator:
+        return False
+    if e.assigned_to_user_id is None:           # pool request
+        return True
+    return e.assigned_to_user_id == p.user_id
+
+
 def is_super_admin(p: Principal) -> bool:
     """Super-admin gate for sensitive operations (e.g. permanent deletion).
 

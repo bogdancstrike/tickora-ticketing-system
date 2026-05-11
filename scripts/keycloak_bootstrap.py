@@ -41,6 +41,7 @@ REALM_ROLES = [
     "tickora_admin",
     "tickora_auditor",
     "tickora_distributor",
+    "tickora_avizator",
     "tickora_internal_user",
     "tickora_external_user",
     "tickora_service_account",

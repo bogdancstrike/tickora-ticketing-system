@@ -264,16 +264,54 @@ Design decisions confirmed by the user on 2026-05-11 inlined below.
         Integration tests referencing the old free-text `category` field
         (`test_http_role_matrix.py`, `test_comments_and_review_acceptance.py`)
         will need a fixture update before they run again; flagged below.
-- [ ] **Post-mark-done approval flow + auto-comment on reopen reason**
-      - When operator hits `mark_done`, the beneficiary's view shows
-        "Approve closure" → `close` and "Reopen with reason" → `reopen`.
-      - Reopen reason becomes a mandatory public auto-comment.
-      - **Block:** `mark_done` AND `close` raise `BusinessRuleError`
-        while any endorsement row is `status='pending'` (resolved by
-        approve **or** reject — either decision unblocks).
-      - **Confirm with user:** is requirement #1 exactly this, or is
-        there an additional post-`closed` beneficiary approval step?
-- [ ] **Avizare suplimentară (supplementary endorsement)**
+- [x] **Post-mark-done approval flow + auto-comment on reopen reason** (2026-05-11)
+      - **Backend:** `workflow_service._reopen` now inserts a
+        `TicketComment(comment_type='reopen_reason', visibility='public',
+        author_user_id=beneficiary)` in the same transaction as the
+        status flip. The reason ends up on the public timeline as a
+        real comment attributed to the requester (not buried in a
+        system note).
+      - **Frontend:** new `ClosureApprovalBanner` on the ticket detail
+        page renders when `status == 'done'` and the current user is
+        the beneficiary/creator (or admin). Two CTAs: **Approve
+        closure** (calls `close`) and **Reopen…** (Modal with a
+        required-reason textarea, calls `reopen`).
+      - Reopen-reason comments render with a red `reopen reason` tag
+        and a subtle red-tinted background so the operator picking the
+        ticket back up can find them instantly.
+      - Endorsement-driven close blocker is deferred to item 6 where
+        the endorsement model lands.
+- [x] **Avizare suplimentară (supplementary endorsement)** (2026-05-11)
+      - New realm role `tickora_avizator` (Keycloak bootstrap),
+        `Principal.is_avizator`, listed in `ADMIN_ROLES` and front-end
+        `ADMIN_ROLES` so admins can grant/revoke it.
+      - Migration `20260511_endorsements` (table
+        `ticket_endorsements(ticket_id, requested_by, assigned_to NULL,
+        status, request_reason, decided_by, decided_at,
+        decision_reason)` + indexes inc. partial index on pending).
+      - `endorsement_service` — `request` / `decide` / `list_for_ticket`
+        / `inbox` / `has_pending` / `avizator_can_view_ticket`. Every
+        state change writes audit + system comment so the timeline
+        explains itself.
+      - RBAC: `can_request_endorsement` (active assignee + admin),
+        `can_decide_endorsement` (admin OR avizator on pool OR direct
+        target). Avizators also gain read-through visibility on
+        tickets that have an endorsement they can act on (handled in
+        `ticket_service.get`).
+      - Workflow gate: `_mark_done` and `_close` now call
+        `_require_no_pending_endorsements` and raise
+        `BusinessRuleError` until every endorsement is decided.
+      - Endpoints: `POST /api/tickets/<id>/endorsements`,
+        `GET  /api/tickets/<id>/endorsements`,
+        `POST /api/endorsements/<id>/decide`,
+        `GET  /api/endorsements` (avizator inbox).
+      - Frontend: `EndorsementsCard` on the ticket detail (request +
+        list + pending warning + decide buttons) and a dedicated
+        `/avizator` page (status tabs, inline approve/reject modals).
+        Both gated by `RequireRole([admin, avizator])` for the page;
+        the card adapts based on `isAssignee`/`isAvizator`.
+      - New audit constants: `ENDORSEMENT_REQUESTED`,
+        `ENDORSEMENT_APPROVED`, `ENDORSEMENT_REJECTED`.
       - New realm role `tickora_avizator` (added to
         `scripts/keycloak_bootstrap.py`); a sibling sector-style group
         `/tickora/avizatori` so the requester can target "the avizator
@@ -299,7 +337,7 @@ Design decisions confirmed by the user on 2026-05-11 inlined below.
         only while at least one endorsement is `pending`.
       - Both request and decision write audit events + system comments
         on the ticket timeline.
-- [ ] **/snippets procedures page**
+- [~] **/snippets procedures page**
       - New tables `snippets(id, title, body, created_by_user_id,
         created_at, updated_at)` and `snippet_audiences(id, snippet_id,
         audience_kind, audience_value)` where `audience_kind ∈

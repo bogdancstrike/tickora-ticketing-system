@@ -31,6 +31,9 @@ import { useSessionStore } from '@/stores/sessionStore'
 import { StatusTag, STATUS_OPTIONS } from '@/components/common/StatusTag'
 import { PriorityTag } from '@/components/common/PriorityTag'
 import { BeneficiaryTypeTag, BENEFICIARY_TYPE_OPTIONS } from '@/components/common/BeneficiaryTypeTag'
+import {
+  listEndorsementsForTicket, requestEndorsement, decideEndorsement,
+} from '@/api/endorsements'
 import { StatusChanger } from '@/components/common/StatusChanger'
 import { fmtDateTime, fmtBytes } from '@/components/common/format'
 import { AuditTimeline } from '@/components/common/AuditTimeline'
@@ -318,8 +321,320 @@ function WorkflowActions({ ticket }: { ticket: TicketDto }) {
   )
 }
 
+/**
+ * Endorsement panel on the ticket detail page.
+ *
+ * - The active assignee (or admin) sees a "Request endorsement…" button.
+ *   The modal lets them target a specific avizator or the pool, with a
+ *   short rationale.
+ * - Any visible endorsement is listed with its status. Avizators see
+ *   inline Approve / Reject actions on the pending ones they can act on.
+ * - While at least one endorsement is `pending`, an info banner spells
+ *   out that `mark_done` / `close` are blocked.
+ */
+function EndorsementsCard({ ticket }: { ticket: TicketDto }) {
+  const queryClient = useQueryClient()
+  const user = useSessionStore((s) => s.user)
+  const [msg, holder] = message.useMessage()
+  const [requestOpen, setRequestOpen] = useState(false)
+  const [decideTarget, setDecideTarget] = useState<{ id: string; decision: 'approved' | 'rejected' } | null>(null)
+  const [reqForm] = Form.useForm<{ reason?: string; assigned_to_user_id?: string }>()
+  const [decideForm] = Form.useForm<{ reason?: string }>()
+
+  const isAdmin = !!user?.roles.includes('tickora_admin')
+  const isAvizator = !!user?.roles.includes('tickora_avizator')
+  const assigneeIds = ticketAssigneeIds(ticket)
+  const isAssignee = !!user?.id && assigneeIds.includes(user.id)
+  const canRequest = isAdmin || isAssignee
+
+  const endorsements = useQuery({
+    queryKey: ['endorsements', ticket.id],
+    queryFn: () => listEndorsementsForTicket(ticket.id),
+    staleTime: 30_000,
+  })
+  const items = endorsements.data?.items || []
+  const hasPending = items.some((i) => i.status === 'pending')
+
+  // Avizator pickers can pin the request to a specific user. The list is
+  // derived from the existing assignable-users surface, filtered to
+  // those carrying the `tickora_avizator` role server-side… we don't
+  // have a dedicated endpoint yet, so we just let the requester type a
+  // username/email or leave it blank for the pool.
+  const refresh = async () => {
+    await queryClient.invalidateQueries({ queryKey: ['endorsements', ticket.id] })
+    await queryClient.invalidateQueries({ queryKey: ['ticket', ticket.id] })
+    await queryClient.invalidateQueries({ queryKey: ['comments', ticket.id] })
+  }
+
+  const requestM = useMutation({
+    mutationFn: (vars: { reason?: string; assigned_to_user_id?: string | null }) =>
+      requestEndorsement(ticket.id, vars),
+    onSuccess: async () => {
+      msg.success('Endorsement requested')
+      setRequestOpen(false)
+      reqForm.resetFields()
+      await refresh()
+    },
+    onError: (err) => msg.error(err.message),
+  })
+
+  const decideM = useMutation({
+    mutationFn: (vars: { id: string; decision: 'approved' | 'rejected'; reason?: string }) =>
+      decideEndorsement(vars.id, { decision: vars.decision, reason: vars.reason }),
+    onSuccess: async (_data, vars) => {
+      msg.success(`Endorsement ${vars.decision}`)
+      setDecideTarget(null)
+      decideForm.resetFields()
+      await refresh()
+    },
+    onError: (err) => msg.error(err.message),
+  })
+
+  if (!canRequest && items.length === 0 && !isAvizator) {
+    // Nothing to show — not a participant, no endorsements posted yet.
+    return null
+  }
+
+  return (
+    <Card
+      title="Supplementary endorsement"
+      size="small"
+      extra={canRequest ? (
+        <Button size="small" type="primary" onClick={() => setRequestOpen(true)}>
+          Request endorsement…
+        </Button>
+      ) : null}
+    >
+      {holder}
+      {hasPending && (
+        <Alert
+          showIcon
+          type="warning"
+          style={{ marginBottom: 12 }}
+          message="Pending endorsement"
+          description="Mark-done and close are blocked until every endorsement is decided."
+        />
+      )}
+      {items.length === 0 && (
+        <Empty description="No endorsements requested yet" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+      )}
+      <div style={{ display: 'grid', gap: 8 }}>
+        {items.map((it) => {
+          const statusColor =
+            it.status === 'approved' ? 'green' :
+            it.status === 'rejected' ? 'red'   : 'gold'
+          const canIDecide = it.status === 'pending' && (
+            isAdmin || (isAvizator && (!it.assigned_to_user_id || it.assigned_to_user_id === user?.id))
+          )
+          return (
+            <div key={it.id} style={{
+              padding: 10, border: '1px solid rgba(0,0,0,0.06)', borderRadius: 6,
+              background: it.status === 'pending' ? 'rgba(250,173,20,0.04)' : undefined,
+            }}>
+              <Flex justify="space-between" align="center" wrap="wrap" gap={8}>
+                <Space size={6}>
+                  <Tag color={statusColor}>{it.status}</Tag>
+                  <Tag color={it.assigned_to_user_id ? 'blue' : 'purple'}>
+                    {it.assigned_to_user_id ? 'direct' : 'pool'}
+                  </Tag>
+                  <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                    requested {fmt(it.created_at)}
+                  </Typography.Text>
+                  {it.decided_at && (
+                    <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                      · decided {fmt(it.decided_at)}
+                    </Typography.Text>
+                  )}
+                </Space>
+                {canIDecide && (
+                  <Space size={4}>
+                    <Button size="small" type="primary"
+                            onClick={() => setDecideTarget({ id: it.id, decision: 'approved' })}>
+                      Approve
+                    </Button>
+                    <Button size="small" danger
+                            onClick={() => setDecideTarget({ id: it.id, decision: 'rejected' })}>
+                      Reject
+                    </Button>
+                  </Space>
+                )}
+              </Flex>
+              {it.request_reason && (
+                <Typography.Paragraph style={{ marginTop: 6, marginBottom: 0, whiteSpace: 'pre-wrap' }}>
+                  <Typography.Text type="secondary">Reason: </Typography.Text>{it.request_reason}
+                </Typography.Paragraph>
+              )}
+              {it.decision_reason && (
+                <Typography.Paragraph style={{ marginTop: 4, marginBottom: 0, whiteSpace: 'pre-wrap' }}>
+                  <Typography.Text type="secondary">Decision note: </Typography.Text>{it.decision_reason}
+                </Typography.Paragraph>
+              )}
+            </div>
+          )
+        })}
+      </div>
+
+      {/* Request modal */}
+      <Modal
+        title="Request supplementary endorsement"
+        open={requestOpen}
+        okText="Request"
+        confirmLoading={requestM.isPending}
+        onCancel={() => { setRequestOpen(false); reqForm.resetFields() }}
+        onOk={async () => {
+          const values = await reqForm.validateFields()
+          requestM.mutate({
+            reason: values.reason?.trim() || undefined,
+            assigned_to_user_id: values.assigned_to_user_id?.trim() || null,
+          })
+        }}
+        destroyOnHidden
+      >
+        <Form form={reqForm} layout="vertical">
+          <Alert
+            type="info" showIcon style={{ marginBottom: 12 }}
+            message="The ticket stays workable — this is non-blocking."
+            description="However, mark-done and close are blocked until every endorsement is decided (approved OR rejected)."
+          />
+          <Form.Item
+            name="reason"
+            label="What needs a second opinion?"
+            rules={[{ required: true, min: 3 }]}
+          >
+            <Input.TextArea rows={3} placeholder="Briefly describe what you want the avizator to look at." />
+          </Form.Item>
+          <Form.Item
+            name="assigned_to_user_id"
+            label="Target avizator (optional)"
+            extra="Leave empty to fan the request out to the whole avizator pool. To target a specific person, paste their user id."
+          >
+            <Input placeholder="Pool (any avizator)" />
+          </Form.Item>
+        </Form>
+      </Modal>
+
+      {/* Decide modal */}
+      <Modal
+        title={decideTarget?.decision === 'approved' ? 'Approve endorsement' : 'Reject endorsement'}
+        open={!!decideTarget}
+        okText={decideTarget?.decision === 'approved' ? 'Approve' : 'Reject'}
+        okButtonProps={{ danger: decideTarget?.decision === 'rejected', type: 'primary' }}
+        confirmLoading={decideM.isPending}
+        onCancel={() => { setDecideTarget(null); decideForm.resetFields() }}
+        onOk={async () => {
+          const values = await decideForm.validateFields()
+          decideM.mutate({
+            id: decideTarget!.id,
+            decision: decideTarget!.decision,
+            reason: values.reason?.trim() || undefined,
+          })
+        }}
+        destroyOnHidden
+      >
+        <Form form={decideForm} layout="vertical">
+          <Form.Item name="reason" label="Decision note (optional)"
+                     extra="Posted as a system comment on the ticket timeline.">
+            <Input.TextArea rows={3} />
+          </Form.Item>
+        </Form>
+      </Modal>
+    </Card>
+  )
+}
+
 function authorInitials(name: string): string {
   return name.split(/[\s.@]+/).filter(Boolean).slice(0, 2).map(s => s[0]?.toUpperCase()).join('') || '?'
+}
+
+/**
+ * Banner shown to the beneficiary (or admin) after the operator marked
+ * the ticket as `done`. Forces a clear decision: confirm closure or
+ * reopen with a reason that becomes a public comment on the timeline.
+ */
+function ClosureApprovalBanner({ ticket }: { ticket: TicketDto }) {
+  const user = useSessionStore((s) => s.user)
+  const queryClient = useQueryClient()
+  const [msg, holder] = message.useMessage()
+  const [reopenOpen, setReopenOpen] = useState(false)
+  const [form] = Form.useForm<{ reason: string }>()
+
+  const showClose = canClose(ticket, user)
+  const showReopen = canReopen(ticket, user)
+  const visible = ticket.status === 'done' && (showClose || showReopen)
+
+  const refresh = async () => {
+    await queryClient.invalidateQueries({ queryKey: ['ticket', ticket.id] })
+    await queryClient.invalidateQueries({ queryKey: ['tickets'] })
+    await queryClient.invalidateQueries({ queryKey: ['comments', ticket.id] })
+    await queryClient.invalidateQueries({ queryKey: ['ticketAudit', ticket.id] })
+  }
+
+  const approve = useMutation({
+    mutationFn: () => closeTicket(ticket.id),
+    onSuccess: async () => { msg.success('Ticket closed'); await refresh() },
+    onError: (err) => msg.error(err.message),
+  })
+  const reopenIt = useMutation({
+    mutationFn: (reason: string) => reopenTicket(ticket.id, reason),
+    onSuccess: async () => {
+      msg.success('Ticket reopened')
+      setReopenOpen(false)
+      form.resetFields()
+      await refresh()
+    },
+    onError: (err) => msg.error(err.message),
+  })
+
+  if (!visible) return null
+
+  return (
+    <>
+      {holder}
+      <Alert
+        type="success"
+        showIcon
+        message="The operator marked this ticket as done."
+        description="Please approve the closure or reopen the ticket with a reason."
+        action={
+          <Space>
+            {showReopen && (
+              <Button danger onClick={() => setReopenOpen(true)}>Reopen…</Button>
+            )}
+            {showClose && (
+              <Button type="primary" loading={approve.isPending}
+                      onClick={() => approve.mutate()}>
+                Approve closure
+              </Button>
+            )}
+          </Space>
+        }
+      />
+      <Modal
+        title="Reopen ticket"
+        open={reopenOpen}
+        okText="Reopen"
+        okButtonProps={{ danger: true }}
+        confirmLoading={reopenIt.isPending}
+        onCancel={() => { setReopenOpen(false); form.resetFields() }}
+        onOk={async () => {
+          const values = await form.validateFields()
+          reopenIt.mutate(values.reason.trim())
+        }}
+        destroyOnHidden
+      >
+        <Form form={form} layout="vertical">
+          <Form.Item
+            name="reason"
+            label="Reason"
+            rules={[{ required: true, min: 3, message: 'A reason of at least 3 characters is required.' }]}
+            extra="Your reason will appear as a public comment on the ticket so the operator knows what to revisit."
+          >
+            <Input.TextArea rows={4} placeholder="What still needs to be fixed?" autoFocus />
+          </Form.Item>
+        </Form>
+      </Modal>
+    </>
+  )
 }
 
 interface SystemCommentPayload {
@@ -622,12 +937,15 @@ function CommentBox({
           const display = item.author_display || item.author_username || item.author_email || 'user'
           const isMine = !!user?.id && item.author_user_id === user.id
           const itemAttachments = (allAttachments?.items || []).filter(a => a.comment_id === item.id)
+          const isReopenReason = item.comment_type === 'reopen_reason'
 
           return (
             <div key={item.id} style={{
               display: 'flex', gap: 12, padding: 12,
               border: '1px solid rgba(0,0,0,0.06)', borderRadius: 8,
-              background: item.visibility === 'private' ? 'rgba(255,180,0,0.04)' : undefined,
+              background: isReopenReason
+                ? 'rgba(255,77,79,0.05)'
+                : item.visibility === 'private' ? 'rgba(255,180,0,0.04)' : undefined,
             }}>
               <div style={{
                 width: 36, height: 36, flexShrink: 0,
@@ -643,7 +961,9 @@ function CommentBox({
                     {item.author_username && item.author_display && item.author_username !== item.author_display && (
                       <Typography.Text type="secondary" style={{ fontSize: 12 }}>@{item.author_username}</Typography.Text>
                     )}
-                    <Tag color={item.visibility === 'private' ? 'orange' : 'green'}>{item.visibility}</Tag>
+                    {isReopenReason
+                      ? <Tag color="red">reopen reason</Tag>
+                      : <Tag color={item.visibility === 'private' ? 'orange' : 'green'}>{item.visibility}</Tag>}
                   </Space>
                   <Space size={6}>
                     <Typography.Text type="secondary" style={{ fontSize: 12 }}>{fmt(item.created_at)}</Typography.Text>
@@ -902,6 +1222,8 @@ function TicketDetails({ ticketId }: { ticketId?: string }) {
         <WorkflowActions ticket={ticket} />
       </div>
 
+      <ClosureApprovalBanner ticket={ticket} />
+
       {/* Two-column body */}
       <Row gutter={[16, 16]}>
         <Col xs={24} xl={16}>
@@ -915,6 +1237,8 @@ function TicketDetails({ ticketId }: { ticketId?: string }) {
             <Card title="Conversation" size="small">
               <CommentBox ticketId={ticket.id} disabled={isClosed} ticket={ticket} />
             </Card>
+            <EndorsementsCard ticket={ticket} />
+
             <Card title="Attachments" size="small">
               <AttachmentList ticketId={ticket.id} />
             </Card>

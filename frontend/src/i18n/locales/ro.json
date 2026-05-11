@@ -52,10 +52,12 @@
     "tickets": "Tichete",
     "monitor": "Monitorizare",
     "review": "Triere",
+    "avizator": "Avizări",
     "admin": "Administrare",
     "profile": "Profil",
     "audit": "Audit",
-    "create_ticket": "Tichet nou"
+    "create_ticket": "Tichet nou",
+    "snippets": "Proceduri"
   },
   "language": {
     "label": "Limbă",

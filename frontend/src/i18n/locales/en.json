@@ -52,10 +52,12 @@
     "tickets": "Tickets",
     "monitor": "Monitor",
     "review": "Review",
+    "avizator": "Endorsements",
     "admin": "Administration",
     "profile": "Profile",
     "audit": "Audit",
-    "create_ticket": "Create Ticket"
+    "create_ticket": "Create Ticket",
+    "snippets": "Procedures"
   },
   "language": {
     "label": "Language",

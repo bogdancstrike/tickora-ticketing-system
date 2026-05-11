@@ -17,6 +17,11 @@ TICKET_REOPENED             = "TICKET_REOPENED"
 TICKET_CANCELLED            = "TICKET_CANCELLED"
 TICKET_VIEWED               = "TICKET_VIEWED"
 
+# ── Endorsements (avizare suplimentară) ─────────────────────────────────────
+ENDORSEMENT_REQUESTED       = "ENDORSEMENT_REQUESTED"
+ENDORSEMENT_APPROVED        = "ENDORSEMENT_APPROVED"
+ENDORSEMENT_REJECTED        = "ENDORSEMENT_REJECTED"
+
 # ── Comments ──────────────────────────────────────────────────────────────────
 COMMENT_CREATED  = "COMMENT_CREATED"
 COMMENT_EDITED   = "COMMENT_EDITED"

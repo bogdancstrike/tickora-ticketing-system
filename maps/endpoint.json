@@ -495,6 +495,38 @@
     },
     {
       "namespace": "tickora",
+      "operation_name": "endorsements_request",
+      "model_name": "Empty",
+      "request_method": ["POST"],
+      "api_url": "/api/tickets/<ticket_id>/endorsements",
+      "exec_method": { "module_name": "api.endorsements", "method_name": "request_endorsement" }
+    },
+    {
+      "namespace": "tickora",
+      "operation_name": "endorsements_list_for_ticket",
+      "model_name": "Empty",
+      "request_method": ["GET"],
+      "api_url": "/api/tickets/<ticket_id>/endorsements",
+      "exec_method": { "module_name": "api.endorsements", "method_name": "list_for_ticket" }
+    },
+    {
+      "namespace": "tickora",
+      "operation_name": "endorsements_decide",
+      "model_name": "Empty",
+      "request_method": ["POST"],
+      "api_url": "/api/endorsements/<endorsement_id>/decide",
+      "exec_method": { "module_name": "api.endorsements", "method_name": "decide" }
+    },
+    {
+      "namespace": "tickora",
+      "operation_name": "endorsements_inbox",
+      "model_name": "Empty",
+      "request_method": ["GET"],
+      "api_url": "/api/endorsements",
+      "exec_method": { "module_name": "api.endorsements", "method_name": "inbox" }
+    },
+    {
+      "namespace": "tickora",
       "operation_name": "monitor_overview",
       "model_name": "Empty",
       "request_method": ["GET"],

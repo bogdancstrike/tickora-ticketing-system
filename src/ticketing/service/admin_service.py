@@ -21,6 +21,7 @@ from src.iam.models import User
 from src.iam.principal import (
     ROLE_ADMIN,
     ROLE_AUDITOR,
+    ROLE_AVIZATOR,
     ROLE_DISTRIBUTOR,
     ROLE_INTERNAL_USER,
     ROLE_EXTERNAL_USER,
@@ -49,6 +50,7 @@ ADMIN_ROLES = {
     ROLE_ADMIN,
     ROLE_AUDITOR,
     ROLE_DISTRIBUTOR,
+    ROLE_AVIZATOR,
     ROLE_INTERNAL_USER,
     ROLE_EXTERNAL_USER,
     ROLE_SERVICE,

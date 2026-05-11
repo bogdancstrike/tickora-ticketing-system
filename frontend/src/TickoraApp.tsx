@@ -8,7 +8,7 @@ import {
 import {
   LineChartOutlined, UnorderedListOutlined, CheckSquareOutlined, AuditOutlined, SettingOutlined,
   BgColorsOutlined, MenuFoldOutlined, MenuUnfoldOutlined, UserOutlined, LogoutOutlined,
-  IdcardOutlined, AppstoreOutlined, MenuOutlined,
+  IdcardOutlined, AppstoreOutlined, MenuOutlined, SafetyCertificateOutlined,
 } from '@ant-design/icons'
 import { useQuery, QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { useKeycloak } from '@react-keycloak/web'
@@ -23,6 +23,7 @@ import { MonitorPage } from '@/pages/MonitorPage'
 import { DashboardPage } from '@/pages/DashboardPage'
 import { ProfilePage } from '@/pages/ProfilePage'
 import { AdminPage } from '@/pages/AdminPage'
+import { AvizatorPage } from '@/pages/AvizatorPage'
 import { RequireRole } from '@/auth/RequireRole'
 import { NotificationDropdown } from '@/components/common/NotificationDropdown'
 import { LanguageSwitcher } from '@/components/common/LanguageSwitcher'
@@ -39,6 +40,7 @@ const queryClient = new QueryClient({
 const ROLE_ADMIN = 'tickora_admin'
 const ROLE_AUDITOR = 'tickora_auditor'
 const ROLE_DISTRIBUTOR = 'tickora_distributor'
+const ROLE_AVIZATOR = 'tickora_avizator'
 
 /**
  * `labelKey` references a translation in `frontend/src/i18n/locales/*.json`.
@@ -53,6 +55,13 @@ const NAV_ITEMS = [
     labelKey: 'nav.review',
     icon: <CheckSquareOutlined />,
     roles: [ROLE_ADMIN, ROLE_DISTRIBUTOR],
+    section: 'ticketing',
+  },
+  {
+    key: '/avizator',
+    labelKey: 'nav.avizator',
+    icon: <SafetyCertificateOutlined />,
+    roles: [ROLE_ADMIN, ROLE_AVIZATOR],
     section: 'ticketing',
   },
 
@@ -343,6 +352,10 @@ function Shell() {
               <Route
                 path="/review/:ticketId"
                 element={<RequireRole roles={[ROLE_ADMIN, ROLE_DISTRIBUTOR]}><ReviewTicketPage /></RequireRole>}
+              />
+              <Route
+                path="/avizator"
+                element={<RequireRole roles={[ROLE_ADMIN, ROLE_AVIZATOR]}><AvizatorPage /></RequireRole>}
               />
               <Route
                 path="/audit"

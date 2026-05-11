@@ -124,6 +124,20 @@ def _no_returned_row(result) -> bool:
     return result.first() is None
 
 
+def _require_no_pending_endorsements(db: Session, ticket_id: str) -> None:
+    """Block `mark_done` / `close` while any endorsement is pending.
+
+    The endorsement service owns the predicate so the lookup stays in
+    one place; we import it lazily to dodge the import cycle (endorsement
+    service uses ticket_service, which is a peer here).
+    """
+    from src.ticketing.service import endorsement_service
+    if endorsement_service.has_pending(db, ticket_id):
+        raise BusinessRuleError(
+            "this ticket has a pending endorsement — wait for a decision"
+        )
+
+
 # ── Multi-assignment helpers ─────────────────────────────────────────────────
 
 def _add_sector_assignment(db: Session, ticket_id: str, sector_id: str,
@@ -674,6 +688,8 @@ def _mark_done(db: Session, p: Principal, ticket_id: str, *, resolution: str | N
     if not rbac.can_mark_done(p, t):
         _denied(sm.ACTION_MARK_DONE, p, ticket_id, db, "not the assignee")
 
+    _require_no_pending_endorsements(db, ticket_id)
+
     new_status = sm.target_status(sm.ACTION_MARK_DONE, t.status)
     if new_status is None:
         raise BusinessRuleError(f"cannot mark done while status is {t.status}")
@@ -717,6 +733,8 @@ def _close(db: Session, p: Principal, ticket_id: str, *, feedback: dict | None =
     _check_visible(p, t)
     if not (rbac.can_close(p, t) or rbac.can_drive_status(p, t)):
         _denied(sm.ACTION_CLOSE, p, ticket_id, db, "only the beneficiary, admin or assignee can close")
+
+    _require_no_pending_endorsements(db, ticket_id)
 
     new_status = sm.target_status(sm.ACTION_CLOSE, t.status)
     if new_status is None:
@@ -793,6 +811,17 @@ def _reopen(db: Session, p: Principal, ticket_id: str, *, reason: str) -> Ticket
     _record_status_change(db, ticket_id, t.status, new_status, p, reason)
     if target_assignee != t.assignee_user_id:
         _record_assignment_change(db, ticket_id, t.assignee_user_id, target_assignee, p.user_id, "reopen")
+    # The reopen reason becomes a real public comment attributed to the
+    # beneficiary so the operator picking the ticket back up sees *why*
+    # without having to expand the system note. Body is the raw reason,
+    # not JSON — this is a normal user_comment, not a structured system row.
+    db.add(TicketComment(
+        ticket_id=ticket_id,
+        author_user_id=p.user_id,
+        visibility="public",
+        comment_type="reopen_reason",
+        body=reason.strip(),
+    ))
     audit_service.record(
         db, actor=p, action=audit_events.TICKET_REOPENED,
         entity_type="ticket", entity_id=ticket_id, ticket_id=ticket_id,

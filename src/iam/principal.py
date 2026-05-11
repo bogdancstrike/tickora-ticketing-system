@@ -9,6 +9,7 @@ from typing import Iterable
 ROLE_ADMIN          = "tickora_admin"
 ROLE_AUDITOR        = "tickora_auditor"
 ROLE_DISTRIBUTOR    = "tickora_distributor"
+ROLE_AVIZATOR       = "tickora_avizator"
 ROLE_INTERNAL_USER  = "tickora_internal_user"
 ROLE_EXTERNAL_USER  = "tickora_external_user"
 ROLE_SECTOR_MEMBER  = "tickora_sector_member"
@@ -42,6 +43,8 @@ class Principal:
     def is_auditor(self) -> bool:      return ROLE_AUDITOR     in self.global_roles
     @property
     def is_distributor(self) -> bool:  return ROLE_DISTRIBUTOR in self.global_roles
+    @property
+    def is_avizator(self) -> bool:     return ROLE_AVIZATOR    in self.global_roles
     @property
     def is_internal(self) -> bool:     return self.user_type   == "internal"
     @property

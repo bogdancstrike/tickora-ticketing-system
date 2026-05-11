@@ -247,7 +247,15 @@ def get(db: Session, principal: Principal, ticket_id: str) -> Ticket:
         set_attr(current, "ticket.code", t.ticket_code)
         set_attr(current, "ticket.status", t.status)
 
-        if not rbac.can_view_ticket(principal, t):
+        visible = rbac.can_view_ticket(principal, t)
+        if not visible and principal.is_avizator:
+            # Avizators get scoped read-through visibility: they can open a
+            # ticket if there is (or was) an endorsement on it that they
+            # could act on. Lazy import dodges the ticketing ↔ endorsement
+            # cycle.
+            from src.ticketing.service import endorsement_service
+            visible = endorsement_service.avizator_can_view_ticket(db, principal, t.id)
+        if not visible:
             set_attr(current, "ticket.visible", False)
             raise NotFoundError("ticket not found")
         set_attr(current, "ticket.visible", True)

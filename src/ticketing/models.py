@@ -425,6 +425,36 @@ class MetadataKeyDefinition(Base):
 
 # ── Watchers (Phase 7) ─────────────────────────────────────────────────────
 
+class TicketEndorsement(Base):
+    """Supplementary endorsement ("avizare suplimentară").
+
+    Created by the active assignee while working a ticket. Targets either
+    a specific avizator (``assigned_to_user_id`` set) or the avizator
+    pool (``assigned_to_user_id IS NULL`` — any user with the
+    ``tickora_avizator`` realm role can decide). A pending row blocks the
+    ticket from moving to ``done`` / ``closed``; once a decision is
+    recorded (approved or rejected, either is fine) the block lifts.
+    """
+    __tablename__ = "ticket_endorsements"
+    __table_args__ = (
+        Index("idx_endorsements_ticket",   "ticket_id"),
+        Index("idx_endorsements_status",   "status"),
+        Index("idx_endorsements_assignee", "assigned_to_user_id", "status"),
+    )
+
+    id:                   Mapped[str]      = mapped_column(UUID(as_uuid=False), primary_key=True, default=_uuid)
+    ticket_id:            Mapped[str]      = mapped_column(UUID(as_uuid=False), ForeignKey("tickets.id", ondelete="CASCADE"), nullable=False)
+    requested_by_user_id: Mapped[str]      = mapped_column(UUID(as_uuid=False), ForeignKey("users.id"), nullable=False)
+    assigned_to_user_id:  Mapped[str | None] = mapped_column(UUID(as_uuid=False), ForeignKey("users.id"))
+    status:               Mapped[str]      = mapped_column(String(20), nullable=False, default="pending", server_default="pending")
+    request_reason:       Mapped[str | None] = mapped_column(Text)
+    decided_by_user_id:   Mapped[str | None] = mapped_column(UUID(as_uuid=False), ForeignKey("users.id"))
+    decision_reason:      Mapped[str | None] = mapped_column(Text)
+    decided_at:           Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at:           Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at:           Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
+
+
 class TicketWatcher(Base):
     """Users who subscribed to a ticket without being assigned.
 
@@ -525,6 +555,44 @@ class WidgetDefinition(Base):
     required_roles: Mapped[list[str] | None] = mapped_column(JSONB)
     created_at:   Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at:   Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
+
+
+class Snippet(Base):
+    """Admin-authored procedure (markdown). See `snippet_audiences` for
+    visibility scoping. Read-only for non-admins, filtered server-side."""
+    __tablename__ = "snippets"
+    __table_args__ = (
+        Index("idx_snippets_title", "title"),
+    )
+
+    id:                 Mapped[str]      = mapped_column(UUID(as_uuid=False), primary_key=True, default=_uuid)
+    title:              Mapped[str]      = mapped_column(String(255), nullable=False)
+    body:               Mapped[str]      = mapped_column(Text, nullable=False)
+    created_by_user_id: Mapped[str | None] = mapped_column(UUID(as_uuid=False), ForeignKey("users.id"))
+    created_at:         Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at:         Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
+
+    audiences: Mapped[list["SnippetAudience"]] = relationship(
+        "SnippetAudience", backref="snippet", cascade="all, delete-orphan",
+    )
+
+
+class SnippetAudience(Base):
+    """One row per (kind, value) the snippet should be visible to. Zero
+    rows on a snippet ⇒ everyone with an account can see it."""
+    __tablename__ = "snippet_audiences"
+    __table_args__ = (
+        UniqueConstraint("snippet_id", "audience_kind", "audience_value", name="uq_snippet_audience"),
+        Index("idx_snippet_audiences_snippet", "snippet_id"),
+        Index("idx_snippet_audiences_kv", "audience_kind", "audience_value"),
+    )
+
+    id:             Mapped[str] = mapped_column(UUID(as_uuid=False), primary_key=True, default=_uuid)
+    snippet_id:     Mapped[str] = mapped_column(UUID(as_uuid=False), ForeignKey("snippets.id", ondelete="CASCADE"), nullable=False)
+    # `sector` -> a sector code; `role` -> a Keycloak realm role name;
+    # `beneficiary_type` -> `internal` or `external`.
+    audience_kind:  Mapped[str] = mapped_column(String(20), nullable=False)
+    audience_value: Mapped[str] = mapped_column(String(100), nullable=False)
 
 
 class SystemSetting(Base):
