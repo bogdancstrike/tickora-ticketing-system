@@ -310,6 +310,9 @@ def main() -> int:
     for r in DEPRECATED_REALM_ROLES:
         delete_realm_role_if_exists(kc, r)
     ensure_group(kc, "/tickora")
+    ensure_group(kc, "/tickora/beneficiaries")
+    ensure_group(kc, "/tickora/beneficiaries/internal")
+    ensure_group(kc, "/tickora/beneficiaries/external")
     ensure_group(kc, "/tickora/sectors")
     for code in SECTORS:
         ensure_group(kc, f"/tickora/sectors/{code}")

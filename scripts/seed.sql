@@ -76,6 +76,53 @@ SET name = EXCLUDED.name,
     is_active = true,
     updated_at = now();
 
+CREATE TABLE IF NOT EXISTS categories (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    code varchar(50) UNIQUE NOT NULL,
+    name varchar(255) NOT NULL,
+    description text,
+    is_active boolean NOT NULL DEFAULT true,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    updated_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS subcategories (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    category_id uuid NOT NULL REFERENCES categories(id) ON DELETE CASCADE,
+    code varchar(50) NOT NULL,
+    name varchar(255) NOT NULL,
+    description text,
+    display_order integer NOT NULL DEFAULT 0,
+    is_active boolean NOT NULL DEFAULT true,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    updated_at timestamptz NOT NULL DEFAULT now(),
+    CONSTRAINT uq_subcategory_code UNIQUE (category_id, code)
+);
+
+CREATE INDEX IF NOT EXISTS idx_categories_code ON categories(code);
+CREATE INDEX IF NOT EXISTS idx_subcategories_category ON subcategories(category_id);
+
+INSERT INTO categories (code, name) VALUES
+    ('infra', 'Infrastructure'),
+    ('apps', 'Applications'),
+    ('security', 'Security')
+ON CONFLICT (code) DO UPDATE SET name = EXCLUDED.name, updated_at = now();
+
+INSERT INTO subcategories (category_id, code, name)
+SELECT c.id, s.code, s.name
+FROM (VALUES
+    ('infra', 'network', 'Network Connectivity'),
+    ('infra', 'hardware', 'Hardware Failure'),
+    ('infra', 'datacenter', 'Datacenter Access'),
+    ('apps', 'bug', 'Software Bug'),
+    ('apps', 'access', 'Access Request'),
+    ('apps', 'feature', 'Feature Request'),
+    ('security', 'incident', 'Security Incident'),
+    ('security', 'audit', 'Audit Request')
+) AS s(cat_code, code, name)
+JOIN categories c ON c.code = s.cat_code
+ON CONFLICT (category_id, code) DO UPDATE SET name = EXCLUDED.name, updated_at = now();
+
 INSERT INTO users (keycloak_subject, username, email, first_name, last_name, user_type) VALUES
     ('00000000-0000-0000-0000-000000000001', 'admin',       'admin@tickora.local',       'Ana',    'Admin',       'internal'),
     ('00000000-0000-0000-0000-000000000002', 'auditor',     'auditor@tickora.local',     'Alex',   'Auditor',     'internal'),
@@ -83,7 +130,12 @@ INSERT INTO users (keycloak_subject, username, email, first_name, last_name, use
     ('00000000-0000-0000-0000-000000000004', 'chief.s10',   'chief.s10@tickora.local',   'Mihai',  'Chief',       'internal'),
     ('00000000-0000-0000-0000-000000000005', 'member.s10',  'member.s10@tickora.local',  'Ioana',  'Member',      'internal'),
     ('00000000-0000-0000-0000-000000000006', 'member.s2',   'member.s2@tickora.local',   'Radu',   'Network',     'internal'),
-    ('00000000-0000-0000-0000-000000000007', 'beneficiary', 'beneficiary@tickora.local', 'Bianca', 'Beneficiary', 'internal')
+    ('00000000-0000-0000-0000-000000000007', 'beneficiary', 'beneficiary@tickora.local', 'Bianca', 'Beneficiary', 'internal'),
+    ('00000000-0000-0000-0000-000000000008', 'ben.int.1',   'ben.int.1@tickora.local',   'Ion',    'Vasile',      'internal'),
+    ('00000000-0000-0000-0000-000000000009', 'ben.int.2',   'ben.int.2@tickora.local',   'Maria',  'Ionescu',     'internal'),
+    ('00000000-0000-0000-0000-000000000010', 'external.user', 'external.user@example.test', 'Eric', 'External', 'external'),
+    ('00000000-0000-0000-0000-000000000011', 'ben.ext.1',   'ben.ext.1@example.test',    'George', 'Popescu',     'external'),
+    ('00000000-0000-0000-0000-000000000012', 'ben.ext.2',   'ben.ext.2@example.test',    'Elena',  'Radu',        'external')
 ON CONFLICT (keycloak_subject) DO UPDATE
 SET username = EXCLUDED.username,
     email = EXCLUDED.email,
@@ -97,7 +149,6 @@ INSERT INTO sector_memberships (user_id, sector_id, membership_role)
 SELECT u.id, s.id, role
 FROM (VALUES
     ('chief.s10',  's10', 'chief'),
-    ('chief.s10',  's10', 'member'),
     ('member.s10', 's10', 'member'),
     ('member.s2',  's2',  'member')
 ) AS seed(username, sector_code, role)

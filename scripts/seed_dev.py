@@ -43,12 +43,14 @@ from src.core.db import get_db, get_engine
 from src.iam.models import User
 from src.ticketing.models import (
     Beneficiary,
+    Category,
     CustomDashboard,
     DashboardWidget,
     MetadataKeyDefinition,
     Notification,
     Sector,
     SectorMembership,
+    Subcategory,
     Ticket,
     TicketAssignmentHistory,
     TicketComment,
@@ -89,7 +91,7 @@ USERS = [
      "groups": []},
     {"username": "chief.s10",     "email": "chief.s10@tickora.local",     "first_name": "Mihai",   "last_name": "Chief",        "type": "internal",
      "roles": ["tickora_internal_user"],
-     "groups": ["/tickora/sectors/s10/chiefs", "/tickora/sectors/s10/members"]},
+     "groups": ["/tickora/sectors/s10"]},
     {"username": "member.s10",    "email": "member.s10@tickora.local",    "first_name": "Ioana",   "last_name": "Member",       "type": "internal",
      "roles": ["tickora_internal_user"],
      "groups": ["/tickora/sectors/s10/members"]},
@@ -98,10 +100,22 @@ USERS = [
      "groups": ["/tickora/sectors/s2/members"]},
     {"username": "beneficiary",   "email": "beneficiary@tickora.local",   "first_name": "Bianca",  "last_name": "Beneficiar",   "type": "internal",
      "roles": ["tickora_internal_user"],
-     "groups": []},
+     "groups": ["/tickora/beneficiaries/internal"]},
+    {"username": "ben.int.1",     "email": "ben.int.1@tickora.local",     "first_name": "Ion",     "last_name": "Vasile",       "type": "internal",
+     "roles": ["tickora_internal_user"],
+     "groups": ["/tickora/beneficiaries/internal"]},
+    {"username": "ben.int.2",     "email": "ben.int.2@tickora.local",     "first_name": "Maria",   "last_name": "Ionescu",      "type": "internal",
+     "roles": ["tickora_internal_user"],
+     "groups": ["/tickora/beneficiaries/internal"]},
     {"username": "external.user", "email": "external.user@example.test",  "first_name": "Eric",    "last_name": "External",     "type": "external",
      "roles": ["tickora_external_user"],
-     "groups": []},
+     "groups": ["/tickora/beneficiaries/external"]},
+    {"username": "ben.ext.1",     "email": "ben.ext.1@example.test",      "first_name": "George",  "last_name": "Popescu",      "type": "external",
+     "roles": ["tickora_external_user"],
+     "groups": ["/tickora/beneficiaries/external"]},
+    {"username": "ben.ext.2",     "email": "ben.ext.2@example.test",      "first_name": "Elena",   "last_name": "Radu",         "type": "external",
+     "roles": ["tickora_external_user"],
+     "groups": ["/tickora/beneficiaries/external"]},
 ]
 
 
@@ -239,6 +253,8 @@ def seed_database(subjects: dict[str, str]) -> None:
             "beneficiaries",
             "sector_memberships",
             "sectors",
+            "subcategories",
+            "categories",
             "users",
         ])
 
@@ -251,6 +267,46 @@ def seed_database(subjects: dict[str, str]) -> None:
                                      label="Environment",
                                      value_type="enum",
                                      options=["prod", "stage", "dev"]))
+
+        # Categories
+        categories_spec = [
+            {
+                "code": "infra",
+                "name": "Infrastructure",
+                "subcategories": [
+                    {"code": "network", "name": "Network Connectivity"},
+                    {"code": "hardware", "name": "Hardware Failure"},
+                    {"code": "datacenter", "name": "Datacenter Access"},
+                ]
+            },
+            {
+                "code": "apps",
+                "name": "Applications",
+                "subcategories": [
+                    {"code": "bug", "name": "Software Bug"},
+                    {"code": "access", "name": "Access Request"},
+                    {"code": "feature", "name": "Feature Request"},
+                ]
+            },
+            {
+                "code": "security",
+                "name": "Security",
+                "subcategories": [
+                    {"code": "incident", "name": "Security Incident"},
+                    {"code": "audit", "name": "Audit Request"},
+                ]
+            }
+        ]
+        all_subcategories = []
+        for c_spec in categories_spec:
+            c = Category(code=c_spec["code"], name=c_spec["name"])
+            db.add(c)
+            db.flush()
+            for s_spec in c_spec["subcategories"]:
+                s = Subcategory(category_id=c.id, code=s_spec["code"], name=s_spec["name"])
+                db.add(s)
+                all_subcategories.append(s)
+        db.flush()
 
         # Sectors keyed by code so memberships can look them up.
         sectors = {code: Sector(code=code, name=name, description=f"Seeded {name}", is_active=True)
@@ -303,12 +359,11 @@ def seed_database(subjects: dict[str, str]) -> None:
                     if sector is None:
                         continue
                     if len(parts) == 3:
-                        # Bare /tickora/sectors/<code> → both roles.
-                        for role in ("chief", "member"):
-                            db.add(SectorMembership(
-                                user_id=user.id, sector_id=sector.id,
-                                membership_role=role, is_active=True,
-                            ))
+                        # Bare /tickora/sectors/<code> → chief role only.
+                        db.add(SectorMembership(
+                            user_id=user.id, sector_id=sector.id,
+                            membership_role="chief", is_active=True,
+                        ))
                     else:
                         role = "chief" if parts[3].startswith("chief") else "member"
                         db.add(SectorMembership(
@@ -321,12 +376,12 @@ def seed_database(subjects: dict[str, str]) -> None:
         now = datetime.now(timezone.utc)
         internal_users = [u for u in users if u.user_type == "internal"]
         priorities = ["low", "medium", "high", "critical"]
-        categories = ["network", "hardware", "software", "access", "other"]
 
         for i in range(1, n_tickets + 1):
             created_at = now - timedelta(days=random.randint(0, 90), hours=random.randint(0, 23))
             status = random.choice(list(ALL_STATUSES))
             ben = random.choice(beneficiaries)
+            subcat = random.choice(all_subcategories)
 
             t = Ticket(
                 ticket_code=f"TK-SEED-{i:06d}",
@@ -334,7 +389,8 @@ def seed_database(subjects: dict[str, str]) -> None:
                 txt=fake.paragraph(nb_sentences=3),
                 status=status,
                 priority=random.choice(priorities),
-                category=random.choice(categories),
+                category_id=subcat.category_id,
+                subcategory_id=subcat.id,
                 beneficiary_id=ben.id,
                 beneficiary_type=ben.beneficiary_type,
                 requester_first_name=ben.first_name,

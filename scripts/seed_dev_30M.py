@@ -50,6 +50,7 @@ from src.ticketing.models import (
     Beneficiary,
     Notification,
     Sector,
+    Subcategory,
     Ticket,
     TicketComment,
     TicketStatusHistory,
@@ -97,7 +98,7 @@ def _next_xp_offset(db) -> int:
         return 0
 
 
-def generate_batch(start_idx, count, users, sectors, beneficiaries, all_statuses):
+def generate_batch(start_idx, count, users, sectors, beneficiaries, all_statuses, subcategories):
     """Build a list of dicts ready for `db.execute(insert(Ticket), rows)`."""
     now = datetime.now(timezone.utc)
     batch_tickets:       list[dict] = []
@@ -107,7 +108,6 @@ def generate_batch(start_idx, count, users, sectors, beneficiaries, all_statuses
 
     internal_users = [u for u in users if u["type"] == "internal"] or users
     priorities = ["low", "medium", "high", "critical"]
-    categories = ["network", "hardware", "software", "access", "other"]
 
     for i in range(count):
         idx = start_idx + i
@@ -117,6 +117,7 @@ def generate_batch(start_idx, count, users, sectors, beneficiaries, all_statuses
         )
         status = random.choice(all_statuses)
         ben = random.choice(beneficiaries)
+        subcat = random.choice(subcategories)
         creator = random.choice(internal_users) if ben["type"] == "internal" else None
 
         ticket_id = str(uuid.uuid4())
@@ -135,7 +136,8 @@ def generate_batch(start_idx, count, users, sectors, beneficiaries, all_statuses
             "txt": "Extreme scale data point for performance verification.",
             "status": status,
             "priority": random.choice(priorities),
-            "category": random.choice(categories),
+            "category_id": subcat["category_id"],
+            "subcategory_id": subcat["id"],
             "beneficiary_id": ben["id"],
             "beneficiary_type": ben["type"],
             "created_by_user_id": creator["id"] if creator else None,
@@ -222,10 +224,14 @@ def main() -> int:
              "first_name": b.first_name, "last_name": b.last_name}
             for b in db.scalars(select(Beneficiary)).all()
         ]
+        subcategories = [
+            {"id": s.id, "category_id": s.category_id}
+            for s in db.scalars(select(Subcategory)).all()
+        ]
 
-        if not users or not beneficiaries:
+        if not users or not beneficiaries or not subcategories:
             print(
-                "[seed_dev_30M] no users / beneficiaries present — run "
+                "[seed_dev_30M] no users / beneficiaries / subcategories present — run "
                 "`scripts/seed_dev.py` first.",
                 file=sys.stderr,
             )
@@ -242,7 +248,7 @@ def main() -> int:
         try:
             for batch_start in range(offset, offset + total, batch_size):
                 tkts, hist, comms, notifs = generate_batch(
-                    batch_start, batch_size, users, sectors, beneficiaries, all_statuses,
+                    batch_start, batch_size, users, sectors, beneficiaries, all_statuses, subcategories,
                 )
                 db.execute(insert(Ticket),               tkts)
                 db.execute(insert(TicketStatusHistory),  hist)

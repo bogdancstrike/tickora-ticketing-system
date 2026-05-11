@@ -14,8 +14,7 @@ sys.path.insert(0, str(ROOT))
 
 from sqlalchemy import select, text
 from src.core.db import get_db
-from src.ticketing.models import MetadataKeyDefinition, SystemSetting
-from src.ticketing.service import dashboard_service
+from src.ticketing.models import Category, MetadataKeyDefinition, Subcategory, SystemSetting
 
 def seed_system_settings(db) -> None:
     settings = [
@@ -44,18 +43,64 @@ def seed_metadata_keys(db) -> None:
     db.flush()
     print("[prod:metadata] default metadata keys seeded")
 
+def seed_categories(db) -> None:
+    categories = [
+        {
+            "code": "infra",
+            "name": "Infrastructure",
+            "subcategories": [
+                {"code": "network", "name": "Network Connectivity"},
+                {"code": "hardware", "name": "Hardware Failure"},
+                {"code": "datacenter", "name": "Datacenter Access"},
+            ]
+        },
+        {
+            "code": "apps",
+            "name": "Applications",
+            "subcategories": [
+                {"code": "bug", "name": "Software Bug"},
+                {"code": "access", "name": "Access Request"},
+                {"code": "feature", "name": "Feature Request"},
+            ]
+        },
+        {
+            "code": "security",
+            "name": "Security",
+            "subcategories": [
+                {"code": "incident", "name": "Security Incident"},
+                {"code": "audit", "name": "Audit Request"},
+            ]
+        }
+    ]
+    for c_spec in categories:
+        c = db.scalar(select(Category).where(Category.code == c_spec["code"]))
+        if not c:
+            c = Category(code=c_spec["code"], name=c_spec["name"])
+            db.add(c)
+            db.flush()
+
+        for s_spec in c_spec["subcategories"]:
+            s = db.scalar(select(Subcategory).where(Subcategory.category_id == c.id, Subcategory.code == s_spec["code"]))
+            if not s:
+                db.add(Subcategory(category_id=c.id, code=s_spec["code"], name=s_spec["name"]))
+    db.flush()
+    print("[prod:categories] default categories and subcategories seeded")
+
 def main() -> int:
     with get_db() as db:
         # 1. Sync Widget Catalogue
         dashboard_service.sync_widget_catalogue(db)
         print("[prod:widgets] widget catalogue synchronized")
-        
+
         # 2. Seed System Settings
         seed_system_settings(db)
-        
+
         # 3. Seed Metadata Keys
         seed_metadata_keys(db)
-        
+
+        # 4. Seed Categories
+        seed_categories(db)
+
         db.commit()
     print("production seeding complete.")
     return 0

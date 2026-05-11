@@ -40,7 +40,6 @@ def _sector_membership_from_parts(parts: list[str]) -> list[SectorMembership]:
         code = _normalize_sector_code(parts[0])
         return [
             SectorMembership(sector_code=code, role="chief"),
-            SectorMembership(sector_code=code, role="member"),
         ]
     if len(parts) != 2:
         return []
