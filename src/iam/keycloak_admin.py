@@ -46,6 +46,13 @@ class KeycloakAdminClient:
     def set_user_enabled(self, user_id: str, enabled: bool) -> None:
         self._kc.update_user(user_id=user_id, payload={"enabled": enabled})
 
+    def reset_password(self, user_id: str, password: str, *, temporary: bool = True) -> None:
+        """Reset user password and force update on next login if temporary."""
+        self._kc.set_user_password(user_id, password, temporary=temporary)
+        if temporary:
+            # Force update password action
+            self._kc.update_user(user_id, payload={"requiredActions": ["UPDATE_PASSWORD"]})
+
     def get_user_groups(self, user_id: str) -> list[dict]:
         return self._kc.get_user_groups(user_id=user_id)
 

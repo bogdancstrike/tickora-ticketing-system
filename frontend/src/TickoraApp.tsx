@@ -81,7 +81,7 @@ const NAV_ITEMS = [
     key: '/admin',
     labelKey: 'nav.admin',
     icon: <SettingOutlined />,
-    rootOnly: true,
+    rootOrChief: true,
     section: 'admin',
   },
 ]
@@ -93,7 +93,10 @@ function useNavigationItems() {
 
   const visibleItems = useMemo(() => {
     return NAV_ITEMS.filter((item) => {
-      if ('rootOnly' in item && item.rootOnly) return !!user?.hasRootGroup
+      if ('rootOnly' in item && (item as any).rootOnly) return !!user?.hasRootGroup
+      if ('rootOrChief' in item && (item as any).rootOrChief) {
+        return !!user?.hasRootGroup || (user?.sectors || []).some(s => s.role === 'chief')
+      }
       if (item.key === '/dashboard' && user?.roles.includes('tickora_beneficiary') && !user?.roles.some(r => [ROLE_ADMIN, ROLE_DISTRIBUTOR, ROLE_AUDITOR].includes(r))) {
           // Hide customizable dashboard for pure beneficiaries
           return false
@@ -214,10 +217,11 @@ function AppSidebar() {
   )
 }
 
-function RequireRootGroup({ children }: { children: ReactNode }) {
+function RequireAdminAccess({ children }: { children: ReactNode }) {
   const user = useSessionStore((s) => s.user)
-  if (!user?.hasRootGroup) {
-    return <Typography.Title level={3} style={{ padding: 24 }}>403 · Root Tickora access required</Typography.Title>
+  const isChief = (user?.sectors || []).some(s => s.role === 'chief')
+  if (!user?.hasRootGroup && !isChief) {
+    return <Typography.Title level={3} style={{ padding: 24 }}>403 · Admin or Chief access required</Typography.Title>
   }
   return <>{children}</>
 }
@@ -363,7 +367,7 @@ function Shell() {
               />
               <Route
                 path="/admin"
-                element={<RequireRootGroup><AdminPage /></RequireRootGroup>}
+                element={<RequireAdminAccess><AdminPage /></RequireAdminAccess>}
               />
               <Route path="*"          element={<Navigate to="/tickets" replace />} />
             </Routes>

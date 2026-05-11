@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ProductTour, TourInfoButton } from '@/components/common/ProductTour'
 import ReactECharts from 'echarts-for-react'
+import { useSessionStore } from '@/stores/sessionStore'
 import {
   Alert, Button, Col, Empty, Flex, Form, Input, List, Modal, Popconfirm, Row, Select, Space,
   Statistic, Table, Tag, Typography, theme as antTheme, Switch, message, Tabs, Spin,
@@ -11,7 +12,7 @@ import type { ColumnsType } from 'antd/es/table'
 import {
   ApartmentOutlined, AppstoreOutlined, AuditOutlined, BarChartOutlined,
   CarryOutOutlined, DatabaseOutlined, FieldTimeOutlined, HistoryOutlined,
-  LineChartOutlined, MessageOutlined, PieChartOutlined, PlusOutlined,
+  KeyOutlined, LineChartOutlined, MessageOutlined, PieChartOutlined, PlusOutlined,
   ReloadOutlined, SafetyCertificateOutlined, SendOutlined, SettingOutlined, SmileOutlined, TeamOutlined,
   UnorderedListOutlined, UserOutlined, ClockCircleOutlined,
   DashboardOutlined, InfoCircleOutlined,
@@ -31,6 +32,7 @@ import {
   upsertAdminSubcategory, deleteAdminSubcategory,
   upsertAdminSubcategoryField, deleteAdminSubcategoryField,
   type AdminCategory, type AdminSubcategory, type AdminSubcategoryField,
+  resetAdminPassword,
 } from '@/api/admin'
 import type { MonitorBreakdown, AdminTicketMetadata } from '@/api/tickets'
 import { fmtDateTime } from '@/components/common/format'
@@ -247,12 +249,33 @@ function UsersTab() {
     mutationFn: ({ id, roles, is_active }: { id: string; roles?: AdminUser['roles']; is_active?: boolean }) => updateAdminUser(id, { roles, is_active }),
     onSuccess: () => { message.success('User updated'); qc.invalidateQueries({ queryKey: ['adminUsers'] }) },
   })
+  const resetPwd = useMutation({
+    mutationFn: (id: string) => resetAdminPassword(id, 'Parola123@'),
+    onSuccess: () => message.success('Password reset to Parola123@ (temporary)'),
+    onError: (e: any) => message.error(e.response?.data?.error || 'Reset failed'),
+  })
+
+  const handleResetPassword = (u: AdminUser) => {
+    Modal.confirm({
+      title: `Reset password for ${u.username || u.email}?`,
+      content: 'This will set the password to "Parola123@" and force the user to change it on their next login.',
+      okText: 'Reset Password',
+      okType: 'danger',
+      onOk: () => resetPwd.mutateAsync(u.id),
+    })
+  }
+
   const columns: ColumnsType<AdminUser> = [
     { title: 'User', key: 'user', render: (_, u) => <Space orientation="vertical" size={0}><Typography.Text strong>{u.username || u.email || u.id}</Typography.Text><Typography.Text type="secondary">{u.email}</Typography.Text></Space> },
     { title: 'Roles', dataIndex: 'roles', render: (roles: string[]) => <Space wrap>{roles.map((r) => <Tag key={r}>{r.replace('tickora_', '')}</Tag>)}</Space> },
     { title: 'Groups', dataIndex: 'memberships', render: (memberships: AdminMembership[]) => <Space wrap>{memberships.map((m) => <Tag key={m.id} color={m.role === 'chief' ? 'gold' : 'blue'}>{m.sector_code} · {m.role}</Tag>)}</Space> },
     { title: 'Active', dataIndex: 'is_active', width: 90, render: (active, u) => <Switch checked={active} onChange={(checked) => update.mutate({ id: u.id, is_active: checked })} /> },
-    { title: 'Edit', width: 90, render: (_, u) => <Button size="small" onClick={() => setSelected(u)}>Manage</Button> },
+    { title: 'Action', width: 180, render: (_, u) => (
+      <Space>
+        <Button size="small" onClick={() => setSelected(u)}>Manage</Button>
+        <Button size="small" icon={<KeyOutlined />} onClick={() => handleResetPassword(u)}>Reset password</Button>
+      </Space>
+    )},
   ]
   return (
     <div style={{ display: 'grid', gap: 12 }}>
@@ -935,19 +958,21 @@ function BackgroundTasksWidget() {
 
 export function AdminPage() {
   const { t } = useTranslation()
+  const user = useSessionStore((s) => s.user)
+  const isChief = (user?.sectors || []).some((s) => s.role === 'chief')
+  const isAdmin = !!user?.hasRootGroup
+
   const overview = useQuery({
     queryKey: ['adminOverview'],
     queryFn: getAdminOverview,
     staleTime: 30_000,
-    // Refresh every 30s so the "Active sessions" widget reflects users
-    // logging in/out without a manual reload. The backend keeps a 5-minute
-    // presence window, so this cadence is well below that.
     refetchInterval: 30_000,
+    // Only fetch if admin; chiefs don't have permission for full overview
+    enabled: isAdmin,
   })
-  if (overview.isLoading) return <div style={{ padding: 100, textAlign: 'center' }}><Spin size="large" /></div>
 
-  // Top-level KPI strip — sourced from /api/admin/overview kpis, including
-  // the new `active_sessions` (users currently signed in, presence-tracked).
+  if (isAdmin && overview.isLoading) return <div style={{ padding: 100, textAlign: 'center' }}><Spin size="large" /></div>
+
   const kpis = overview.data?.kpis || {}
   const headlineKpis: Array<[string, number | null | undefined]> = [
     [t('admin.kpis.active_sessions'), kpis.active_sessions],
@@ -957,28 +982,39 @@ export function AdminPage() {
     [t('admin.kpis.new_today'),       kpis.new_today],
   ]
 
+  const tabItems = [
+    { key: 'users', label: <Space><TeamOutlined />Users & roles</Space>, children: <UsersTab /> },
+  ]
+
+  if (isAdmin) {
+    tabItems.push(
+      { key: 'sectors', label: <Space><ApartmentOutlined />Sectors & groups</Space>, children: <SectorsTab /> },
+      { key: 'config', label: <Space><DatabaseOutlined />Configuration</Space>, children: <ConfigTab /> },
+      { key: 'system', label: <Space><SafetyCertificateOutlined />System</Space>, children: <SystemTab /> },
+    )
+  }
+
   return (
     <div style={{ padding: 24 }}>
       <Flex align="center" gap={8} style={{ marginBottom: 8 }}>
         <Typography.Title level={2} style={{ margin: 0 }}>{t('admin.title')}</Typography.Title>
         <TourInfoButton pageKey="admin" />
       </Flex>
-      <Row gutter={[12, 12]} style={{ marginBottom: 16 }} data-tour-id="admin-kpis">
-        {headlineKpis.map(([label, value]) => (
-          <Col key={label} xs={12} md={4}>
-            <KpiTile label={label} value={value ?? '-'} />
-          </Col>
-        ))}
-      </Row>
+      
+      {isAdmin && (
+        <Row gutter={[12, 12]} style={{ marginBottom: 16 }} data-tour-id="admin-kpis">
+          {headlineKpis.map(([label, value]) => (
+            <Col key={label} xs={12} md={4}>
+              <KpiTile label={label} value={value ?? '-'} />
+            </Col>
+          ))}
+        </Row>
+      )}
+
       <div data-tour-id="admin-tabs">
         <Tabs
           defaultActiveKey="users"
-          items={[
-            { key: 'users', label: <Space><TeamOutlined />Users & roles</Space>, children: <UsersTab /> },
-            { key: 'sectors', label: <Space><ApartmentOutlined />Sectors & groups</Space>, children: <SectorsTab /> },
-            { key: 'config', label: <Space><DatabaseOutlined />Configuration</Space>, children: <ConfigTab /> },
-            { key: 'system', label: <Space><SafetyCertificateOutlined />System</Space>, children: <SystemTab /> },
-          ]}
+          items={tabItems}
         />
       </div>
       <ProductTour

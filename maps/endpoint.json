@@ -715,6 +715,14 @@
     },
     {
       "namespace": "tickora",
+      "operation_name": "admin_reset_password",
+      "model_name": "Empty",
+      "request_method": ["POST"],
+      "api_url": "/api/admin/users/<user_id>/reset-password",
+      "exec_method": { "module_name": "api.admin", "method_name": "reset_password" }
+    },
+    {
+      "namespace": "tickora",
       "operation_name": "admin_sectors_list",
       "model_name": "Empty",
       "request_method": ["GET"],

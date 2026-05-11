@@ -131,7 +131,11 @@ def overview(db: Session, principal: Principal) -> dict[str, Any]:
 
 
 def list_users(db: Session, principal: Principal, *, search: str | None = None, limit: int = 100) -> list[dict[str, Any]]:
-    require_admin(principal)
+    # Allow admins or chiefs. If chief, we might want to filter results to their sector
+    # in the future, but for now we follow the "visible users" pattern.
+    if not principal.has_root_group and not principal.chief_sectors:
+        raise PermissionDeniedError("admin or sector chief required")
+
     limit = max(1, min(limit, 250))
     stmt = select(User).order_by(User.username.asc().nulls_last(), User.email.asc().nulls_last()).limit(limit)
     if search:
@@ -144,7 +148,7 @@ def list_users(db: Session, principal: Principal, *, search: str | None = None, 
 
 
 def get_user(db: Session, principal: Principal, user_id: str) -> dict[str, Any]:
-    require_admin(principal)
+    require_admin_or_chief(db, principal, user_id)
     user = db.get(User, user_id)
     if user is None:
         raise NotFoundError("user not found")
@@ -152,7 +156,7 @@ def get_user(db: Session, principal: Principal, user_id: str) -> dict[str, Any]:
 
 
 def update_user(db: Session, principal: Principal, user_id: str, payload: dict[str, Any]) -> dict[str, Any]:
-    require_admin(principal)
+    require_admin_or_chief(db, principal, user_id)
     user = db.get(User, user_id)
     if user is None:
         raise NotFoundError("user not found")
@@ -181,6 +185,51 @@ def update_user(db: Session, principal: Principal, user_id: str, payload: dict[s
         metadata={"operation": "admin_update_user"},
     )
     return new
+
+
+def reset_password(db: Session, principal: Principal, user_id: str, password: str) -> None:
+    require_admin_or_chief(db, principal, user_id)
+    user = db.get(User, user_id)
+    if user is None:
+        raise NotFoundError("user not found")
+
+    _try_keycloak(
+        lambda kc: kc.reset_password(user.keycloak_subject, password, temporary=True),
+        "reset_password",
+    )
+    audit_service.record(
+        db,
+        actor=principal,
+        action=events.CONFIG_CHANGED,
+        entity_type="user",
+        entity_id=user.id,
+        metadata={"operation": "admin_reset_password"},
+    )
+
+
+def require_admin_or_chief(db: Session, principal: Principal, target_user_id: str) -> None:
+    """True if principal is global admin or chief of a sector the target user is in."""
+    if principal.has_root_group:
+        return
+
+    # Check if principal is chief of ANY sector the target user belongs to.
+    target_memberships = db.scalars(
+        select(SectorMembership.sector_id)
+        .where(SectorMembership.user_id == target_user_id, SectorMembership.is_active.is_(True))
+    ).all()
+    
+    if not target_memberships:
+        raise PermissionDeniedError("insufficient permissions to manage this user")
+
+    # Get sector codes for these IDs
+    target_sector_codes = db.scalars(
+        select(Sector.code).where(Sector.id.in_(target_memberships))
+    ).all()
+
+    if any(principal.is_chief_of(code) for code in target_sector_codes):
+        return
+
+    raise PermissionDeniedError("insufficient permissions to manage this user")
 
 
 def list_sectors(db: Session, principal: Principal) -> list[dict[str, Any]]:
