@@ -14,7 +14,28 @@ sys.path.insert(0, str(ROOT))
 
 from sqlalchemy import select, text
 from src.core.db import get_db
-from src.ticketing.models import Category, MetadataKeyDefinition, Subcategory, SystemSetting
+from src.ticketing.models import Category, MetadataKeyDefinition, Sector, Subcategory, SystemSetting
+from src.ticketing.service import dashboard_service
+
+def seed_sectors(db) -> None:
+    sectors = [
+        ("s1",  "Service Desk"),
+        ("s2",  "Network Operations"),
+        ("s3",  "Infrastructure"),
+        ("s4",  "Applications"),
+        ("s5",  "Security"),
+        ("s6",  "Database Administration"),
+        ("s7",  "Cloud Services"),
+        ("s8",  "DevOps & CI/CD"),
+        ("s9",  "Quality Assurance"),
+        ("s10", "Field Operations"),
+    ]
+    for code, name in sectors:
+        s = db.scalar(select(Sector).where(Sector.code == code))
+        if not s:
+            db.add(Sector(code=code, name=name, description=f"Production {name}"))
+    db.flush()
+    print("[prod:sectors] default sectors seeded")
 
 def seed_system_settings(db) -> None:
     settings = [
@@ -100,6 +121,9 @@ def main() -> int:
 
         # 4. Seed Categories
         seed_categories(db)
+
+        # 5. Seed Sectors
+        seed_sectors(db)
 
         db.commit()
     print("production seeding complete.")

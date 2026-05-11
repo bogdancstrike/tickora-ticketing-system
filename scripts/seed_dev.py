@@ -69,6 +69,10 @@ SECTORS = [
     ("s3",  "Infrastructure"),
     ("s4",  "Applications"),
     ("s5",  "Security"),
+    ("s6",  "Database Administration"),
+    ("s7",  "Cloud Services"),
+    ("s8",  "DevOps & CI/CD"),
+    ("s9",  "Quality Assurance"),
     ("s10", "Field Operations"),
 ]
 
@@ -94,10 +98,10 @@ USERS = [
      "groups": ["/tickora/sectors/s10"]},
     {"username": "member.s10",    "email": "member.s10@tickora.local",    "first_name": "Ioana",   "last_name": "Member",       "type": "internal",
      "roles": ["tickora_internal_user"],
-     "groups": ["/tickora/sectors/s10/members"]},
+     "groups": ["/tickora/sectors/s10/member"]},
     {"username": "member.s2",     "email": "member.s2@tickora.local",     "first_name": "Radu",    "last_name": "Network",      "type": "internal",
      "roles": ["tickora_internal_user"],
-     "groups": ["/tickora/sectors/s2/members"]},
+     "groups": ["/tickora/sectors/s2/member"]},
     {"username": "beneficiary",   "email": "beneficiary@tickora.local",   "first_name": "Bianca",  "last_name": "Beneficiar",   "type": "internal",
      "roles": ["tickora_internal_user"],
      "groups": ["/tickora/beneficiaries/internal"]},

@@ -316,8 +316,8 @@ def main() -> int:
     ensure_group(kc, "/tickora/sectors")
     for code in SECTORS:
         ensure_group(kc, f"/tickora/sectors/{code}")
-        ensure_group(kc, f"/tickora/sectors/{code}/members")
-        ensure_group(kc, f"/tickora/sectors/{code}/chiefs")
+        ensure_group(kc, f"/tickora/sectors/{code}/member")
+        ensure_group(kc, f"/tickora/sectors/{code}/chief")
     api_uuid = ensure_client(kc, client_id=Config.KEYCLOAK_API_CLIENT_ID, public=False)
     ensure_api_service_account_access(kc, api_uuid=api_uuid)
     spa_uuid = ensure_client(kc, client_id=Config.KEYCLOAK_SPA_CLIENT_ID, public=True)

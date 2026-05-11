@@ -69,6 +69,10 @@ INSERT INTO sectors (code, name, description) VALUES
     ('s3',  'Infrastructure',      'Servers, storage, virtualization, and operating systems'),
     ('s4',  'Applications',        'Business applications and integrations'),
     ('s5',  'Security',            'Identity, endpoint security, and incident response'),
+    ('s6',  'Database Administration', 'Database maintenance and performance optimization'),
+    ('s7',  'Cloud Services',      'Cloud infrastructure management and deployment'),
+    ('s8',  'DevOps & CI/CD',      'Automation pipelines and developer experience'),
+    ('s9',  'Quality Assurance',   'Testing frameworks and quality control'),
     ('s10', 'Field Operations',    'On-site and field support work')
 ON CONFLICT (code) DO UPDATE
 SET name = EXCLUDED.name,
