@@ -584,3 +584,49 @@ acceptance tests where a chief drives status without first self-assigning.
 Re-run `tests/integration/test_workflow_acceptance.py` and
 `tests/integration/test_rbac_new.py` after the migration; update fixtures
 if any test relied on chief-as-default-actor.
+
+
+---
+
+- dupa ce un ticket este inchis, utilizatorul va trebui sa aprobe inchiderea sau sa il redeschida (si sa completeze un motiv care va aparea automat ca si comentariu)
+
+- orice modificare a unui status a unui ticket => sa apara un comentariu automat, de tipul "admin a modificat statusul ticketului din X in Y"
+
+-----
+
+Un sef de structura poate cere in Keycloak update-ul de parola (din Administration/Users & Roles) (astfel, utilizatorul va fi promptat sa isi updateze parola data viitoare cand acceseaza pagina, parola temporara fiind Tickora123!).
+De exemplu, un utilizator din grupul tickora/sectors/s15 poate cere automat update-ul de parola pentru utilizatorii din grupultickora/sectors/s15/members
+
+-----
+
+adauga si grupuri pentru beneficiari
+	tickora_beneficiary/internal
+	tickora_beneficiary/external
+
+Utilizatorii (beneficiarii) sunt arondati intr-un grup din panoul de administrator (/admin)
+
+-----
+
+on the sidebar, the procedures (snippets) and additional approve (/avizator) should be in the same "region" as tickets and review
+
+-----
+
+CreateTicketPage.tsx:128 Warning: [antd: Alert] `message` is deprecated. Please use `title` instead.
+
+AdminPage.tsx:392 Warning: [antd: message] Static function can not consume context like dynamic theme. Please use 'App' component instead.
+
+-----
+
+-----------------------
+
+
+  7. /procedures (snippets) page — admin CRUD; audience-scoped read.
+    - snippets + snippet_audiences(audience_kind ∈ {sector, role, beneficiary_type}, audience_value).
+    - Admin-only create/update/delete; everyone else read-only filtered server-side.
+    - Page with sidebar + markdown body.
+    - Zero audience rows ⇒ visible to all authenticated users.
+
+    Aceasta este pagina de proceduri (/procedures) (doar adminul are rol de create si edit) => CRUD titlu + descriere. Aici vor aparea "proceduri" pe care alti useri le vor putea vizualiza a.i. sa inteleaga cum sa foloseasca aplicatia / ce categorii si subcategorii sa aleaga, etc. Cand se creeaza o procedura se aleg si grupurile care o pot vizualiza (de exemplu s3 nu poate vedea procedurile lui s4, alte proceduri sunt doar pentru beneficiar, etc)
+
+
+
