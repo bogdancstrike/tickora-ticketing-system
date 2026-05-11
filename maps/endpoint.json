@@ -511,6 +511,30 @@
     },
     {
       "namespace": "tickora",
+      "operation_name": "endorsements_claim",
+      "model_name": "Empty",
+      "request_method": ["POST"],
+      "api_url": "/api/endorsements/<endorsement_id>/claim",
+      "exec_method": { "module_name": "api.endorsements", "method_name": "claim" }
+    },
+    {
+      "namespace": "tickora",
+      "operation_name": "endorsements_approve",
+      "model_name": "Empty",
+      "request_method": ["POST"],
+      "api_url": "/api/endorsements/<endorsement_id>/approve",
+      "exec_method": { "module_name": "api.endorsements", "method_name": "approve" }
+    },
+    {
+      "namespace": "tickora",
+      "operation_name": "endorsements_reject",
+      "model_name": "Empty",
+      "request_method": ["POST"],
+      "api_url": "/api/endorsements/<endorsement_id>/reject",
+      "exec_method": { "module_name": "api.endorsements", "method_name": "reject" }
+    },
+    {
+      "namespace": "tickora",
       "operation_name": "endorsements_decide",
       "model_name": "Empty",
       "request_method": ["POST"],

@@ -22,7 +22,7 @@ import {
   addAssignee, addSector, assignSector, assignToMe, assignToUser, cancelTicket, changePriority, closeTicket,
   createComment, deleteAttachment, deleteComment, downloadAttachmentUrl, getMe,
   getTicket, getTicketOptions, listAssignableUsers, listAttachments, listComments,
-  listTicketAudit, listTickets, markDone, registerAttachment, reopenTicket, requestAttachmentUpload,
+  listTickets, markDone, registerAttachment, reopenTicket, requestAttachmentUpload,
   deleteTicket, listTicketMetadata, removeAssignee, removeSector,
   type AttachmentDto,
   type TicketDto,
@@ -36,7 +36,6 @@ import {
 } from '@/api/endorsements'
 import { StatusChanger } from '@/components/common/StatusChanger'
 import { fmtDateTime, fmtBytes } from '@/components/common/format'
-import { AuditTimeline } from '@/components/common/AuditTimeline'
 
 const fmt = fmtDateTime
 const bytes = fmtBytes
@@ -109,35 +108,28 @@ function canAssignSector(ticket: TicketDto, user: ReturnType<typeof useSessionSt
 
 function canMarkDone(ticket: TicketDto, user: ReturnType<typeof useSessionStore.getState>['user']) {
   if (!user) return false
-  const isAdmin = user.roles.includes('tickora_admin')
-  const isChief = !!user.sectors?.some((s) => s.sectorCode === ticket.current_sector_code && s.role === 'chief')
   const isAssignee = !!user.id && ticketAssigneeIds(ticket).includes(user.id)
-  return (isAdmin || isChief || isAssignee)
-    && ['in_progress', 'reopened'].includes(ticket.status)
+  return isAssignee && ['in_progress', 'reopened'].includes(ticket.status)
 }
 
 function canClose(ticket: TicketDto, user: ReturnType<typeof useSessionStore.getState>['user']) {
   if (!user) return false
   const isRequesterEmail = ticket.beneficiary_type === 'external' && !!user.email && ticket.requester_email === user.email
   const isRequester = ticket.created_by_user_id === user.id || (!!user.id && ticket.beneficiary_user_id === user.id) || isRequesterEmail
-  return ticket.status === 'done'
-    && (user.roles.includes('tickora_admin') || isRequester)
+  return ticket.status === 'done' && isRequester
 }
 
 function canReopen(ticket: TicketDto, user: ReturnType<typeof useSessionStore.getState>['user']) {
   if (!user) return false
   const isRequesterEmail = ticket.beneficiary_type === 'external' && !!user.email && ticket.requester_email === user.email
   const isRequester = ticket.created_by_user_id === user.id || (!!user.id && ticket.beneficiary_user_id === user.id) || isRequesterEmail
-  return ['done', 'closed'].includes(ticket.status)
-    && (user.roles.includes('tickora_admin') || isRequester)
+  return ['done', 'closed'].includes(ticket.status) && isRequester
 }
 
 function canCancel(ticket: TicketDto, user: ReturnType<typeof useSessionStore.getState>['user']) {
   if (!user) return false
-  const isAdmin = user.roles.includes('tickora_admin')
-  const isDistributor = user.roles.includes('tickora_distributor')
-  const isChief = !!user.sectors?.some((s) => s.sectorCode === ticket.current_sector_code && s.role === 'chief')
-  return (isAdmin || isDistributor || isChief) && ['pending', 'assigned_to_sector'].includes(ticket.status)
+  const isAssignee = !!user.id && ticketAssigneeIds(ticket).includes(user.id)
+  return isAssignee && ['pending', 'assigned_to_sector'].includes(ticket.status)
 }
 
 function WorkflowActions({ ticket }: { ticket: TicketDto }) {
@@ -167,6 +159,7 @@ function WorkflowActions({ ticket }: { ticket: TicketDto }) {
     setModal(null)
     await queryClient.invalidateQueries({ queryKey: ['tickets'] })
     await queryClient.invalidateQueries({ queryKey: ['ticket', ticket.id] })
+    await queryClient.invalidateQueries({ queryKey: ['comments', ticket.id] })
     await queryClient.invalidateQueries({ queryKey: ['monitorOverview'] })
     await queryClient.invalidateQueries({ queryKey: ['monitorSector'] })
     await queryClient.invalidateQueries({ queryKey: ['monitorUser'] })
@@ -324,7 +317,7 @@ function WorkflowActions({ ticket }: { ticket: TicketDto }) {
 /**
  * Endorsement panel on the ticket detail page.
  *
- * - The active assignee (or admin) sees a "Request endorsement…" button.
+ * - The active assignee sees a "Request endorsement…" button.
  *   The modal lets them target a specific avizator or the pool, with a
  *   short rationale.
  * - Any visible endorsement is listed with its status. Avizators see
@@ -341,11 +334,10 @@ function EndorsementsCard({ ticket }: { ticket: TicketDto }) {
   const [reqForm] = Form.useForm<{ reason?: string; assigned_to_user_id?: string }>()
   const [decideForm] = Form.useForm<{ reason?: string }>()
 
-  const isAdmin = !!user?.roles.includes('tickora_admin')
   const isAvizator = !!user?.roles.includes('tickora_avizator')
   const assigneeIds = ticketAssigneeIds(ticket)
   const isAssignee = !!user?.id && assigneeIds.includes(user.id)
-  const canRequest = isAdmin || isAssignee
+  const canRequest = isAssignee
 
   const endorsements = useQuery({
     queryKey: ['endorsements', ticket.id],
@@ -533,7 +525,7 @@ function EndorsementsCard({ ticket }: { ticket: TicketDto }) {
       >
         <Form form={decideForm} layout="vertical">
           <Form.Item name="reason" label="Decision note (optional)"
-                     extra="Posted as a system comment on the ticket timeline.">
+                     extra="Recorded on the endorsement decision.">
             <Input.TextArea rows={3} />
           </Form.Item>
         </Form>
@@ -566,7 +558,6 @@ function ClosureApprovalBanner({ ticket }: { ticket: TicketDto }) {
     await queryClient.invalidateQueries({ queryKey: ['ticket', ticket.id] })
     await queryClient.invalidateQueries({ queryKey: ['tickets'] })
     await queryClient.invalidateQueries({ queryKey: ['comments', ticket.id] })
-    await queryClient.invalidateQueries({ queryKey: ['ticketAudit', ticket.id] })
   }
 
   const approve = useMutation({
@@ -659,6 +650,11 @@ function parseSystemComment(body: string): SystemCommentPayload | null {
   return null
 }
 
+function shouldHideSystemComment(body: string): boolean {
+  const payload = parseSystemComment(body)
+  return !!payload?.kind?.startsWith('endorsement_')
+}
+
 function SystemCommentRow({ body, createdAt }: { body: string; createdAt: string }) {
   const { t } = useTranslation()
   const payload = parseSystemComment(body)
@@ -709,15 +705,10 @@ function CommentBox({
   const [fileList, setFileList] = useState<UploadFile[]>([])
 
   // Mirror the backend rules in `src/iam/rbac.py`:
-  //   can_post_public_comment  = admin || active-assignee || requester-side
-  //   can_post_private_comment = admin || distributor (triage) || active-assignee
-  // The frontend used to also show the form to chiefs and bystander
-  // sector members — those submissions then 403'd from the backend.
-  // Now the form only renders for principals the backend actually
-  // accepts, and every other staff member sees a clear "assign to me
-  // first" affordance.
-  const isAdmin = !!user?.roles.includes('tickora_admin')
-  const isDistributor = !!user?.roles.includes('tickora_distributor')
+  //   can_post_public_comment  = active assignee || requester-side
+  //   can_post_private_comment = active assignee
+  // Admins/chiefs/distributors who want to comment must first be assigned
+  // to the ticket, same as any other operator.
   // `isAssignee` covers both the legacy `assignee_user_id` field and the
   // multi-assignee list so a secondary assignee can also comment.
   const isAssignee = !!user?.id && (
@@ -730,8 +721,8 @@ function CommentBox({
     || (!!user?.id && ticket.beneficiary_user_id === user.id)
   )
 
-  const canPostPublic   = isAdmin || isAssignee || isRequester
-  const canPostPrivate  = isAdmin || isAssignee || isDistributor
+  const canPostPublic   = isAssignee || isRequester
+  const canPostPrivate  = isAssignee
   const canPostAtAll    = canPostPublic || canPostPrivate
   // When *only* private posting is available (a distributor leaving a
   // triage note before the ticket is picked up), pin the form to
@@ -759,9 +750,9 @@ function CommentBox({
      */
     mutationFn: async (values: { body: string; is_public?: boolean }) => {
       // Three cases:
-      //   forcePrivate  -> distributor leaving a triage note; pin private.
+      //   forcePrivate  -> reserved for any future private-only actor.
       //   public-only   -> a beneficiary; pin public.
-      //   both allowed  -> honour the visibility checkbox.
+      //   both allowed  -> assigned operator; honour the visibility checkbox.
       let visibility: 'public' | 'private'
       if (forcePrivate)            visibility = 'private'
       else if (!canPostPrivate)    visibility = 'public'
@@ -796,7 +787,6 @@ function CommentBox({
       setFileList([])
       await queryClient.invalidateQueries({ queryKey: ['comments', ticketId] })
       await queryClient.invalidateQueries({ queryKey: ['attachments', ticketId] })
-      await queryClient.invalidateQueries({ queryKey: ['ticketAudit', ticketId] })
       msg.success('Comment posted')
     },
     onError: async (err) => {
@@ -834,6 +824,10 @@ function CommentBox({
     queryKey: ['attachments', ticketId],
     queryFn: () => listAttachments(ticketId),
   })
+
+  const visibleComments = (comments.data?.items || []).filter((item) => (
+    item.comment_type !== 'system' || !shouldHideSystemComment(item.body)
+  ))
 
   // Upload props are shared between the Dragger (drag-and-drop area) and
   // the inline button. `beforeUpload: false` short-circuits AntD's auto-
@@ -925,11 +919,11 @@ function CommentBox({
           ) : undefined}
         />
       )}
-      {(comments.data?.items || []).length === 0 && !comments.isLoading && (
+      {visibleComments.length === 0 && !comments.isLoading && (
         <Empty description="No comments yet" image={Empty.PRESENTED_IMAGE_SIMPLE} />
       )}
       <div style={{ display: 'grid', gap: 8 }}>
-        {(comments.data?.items || []).map((item) => {
+        {visibleComments.map((item) => {
           if (item.comment_type === 'system') {
             return <SystemCommentRow key={item.id} body={item.body} createdAt={item.created_at} />
           }
@@ -1053,14 +1047,6 @@ function AttachmentList({ ticketId }: { ticketId: string }) {
   )
 }
 
-function TicketAudit({ ticketId }: { ticketId: string }) {
-  const audit = useQuery({
-    queryKey: ['ticketAudit', ticketId],
-    queryFn: () => listTicketAudit(ticketId),
-  })
-  return <AuditTimeline events={audit.data?.items || []} loading={audit.isLoading} />
-}
-
 function TicketSidebar({ ticket }: { ticket: TicketDto }) {
   const queryClient = useQueryClient()
   const user = useSessionStore((s) => s.user)
@@ -1167,7 +1153,6 @@ function TicketDetails({ ticketId }: { ticketId?: string }) {
     enabled: !!ticketId,
   })
 
-  const user = useSessionStore(s => s.user)
   const isClosed = ticket ? ['done', 'closed', 'cancelled'].includes(ticket.status) : false
 
   if (error) {
@@ -1242,18 +1227,6 @@ function TicketDetails({ ticketId }: { ticketId?: string }) {
             <Card title="Attachments" size="small">
               <AttachmentList ticketId={ticket.id} />
             </Card>
-            {(() => {
-              const isAdmin = user?.roles.includes('tickora_admin')
-              const isAuditor = user?.roles.includes('tickora_auditor')
-              const isDistributor = user?.roles.includes('tickora_distributor')
-              const isStaff = !!user?.sectors?.some(s => s.sectorCode === ticket.current_sector_code)
-              if (!(isAdmin || isAuditor || isDistributor || isStaff)) return null
-              return (
-                <Card title="Activity" size="small">
-                  <TicketAudit ticketId={ticket.id} />
-                </Card>
-              )
-            })()}
           </div>
         </Col>
         <Col xs={24} xl={8}>

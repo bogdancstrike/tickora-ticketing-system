@@ -220,8 +220,7 @@ class TestAdminAndDashboard:
 # ── Self-assignment gate (added 2026-05-09) ──────────────────────────────────
 #
 # Comments and operator-side status transitions require the active-assignee
-# link. Admins keep an override; beneficiaries keep close/reopen; distributors
-# keep their narrow triage lane via private comments only.
+# link. Beneficiaries keep requester-side public comments and close/reopen.
 class TestSelfAssignmentGate:
     def _ticket(self, *, assignee="u-other", status="in_progress",
                creator=None, beneficiary=None, sector="s10"):
@@ -239,10 +238,10 @@ class TestSelfAssignmentGate:
         t = self._ticket(assignee="u-self")
         assert rbac.can_post_public_comment(p, t) is True
 
-    def test_admin_keeps_override_for_public_comment(self):
+    def test_admin_cannot_post_public_without_assignment(self):
         p = make_principal(roles=(ROLE_ADMIN,))
         t = self._ticket(assignee="u-other")
-        assert rbac.can_post_public_comment(p, t) is True
+        assert rbac.can_post_public_comment(p, t) is False
 
     def test_creator_can_post_public(self):
         p = make_principal(user_id="u-creator")
@@ -275,15 +274,15 @@ class TestSelfAssignmentGate:
         t = self._ticket(assignee="u-self")
         assert rbac.can_post_private_comment(p, t) is True
 
-    def test_distributor_keeps_private_during_triage(self):
+    def test_distributor_cannot_post_private_without_assignment(self):
         p = make_principal(roles=(ROLE_DISTRIBUTOR,))
         t = self._ticket(assignee="u-other", status="pending")
-        assert rbac.can_post_private_comment(p, t) is True
+        assert rbac.can_post_private_comment(p, t) is False
 
-    def test_admin_keeps_private(self):
+    def test_admin_cannot_post_private_without_assignment(self):
         p = make_principal(roles=(ROLE_ADMIN,))
         t = self._ticket(assignee="u-other")
-        assert rbac.can_post_private_comment(p, t) is True
+        assert rbac.can_post_private_comment(p, t) is False
 
     def test_unassigned_member_cannot_post_private(self):
         p = make_principal(memberships=(SectorMembership("s10", "member"),))
@@ -302,11 +301,11 @@ class TestSelfAssignmentGate:
         assert rbac.can_drive_status(p, t) is True
         assert rbac.can_mark_done(p, t) is True
 
-    def test_admin_keeps_status_override(self):
+    def test_admin_does_not_drive_status_without_assignment(self):
         p = make_principal(roles=(ROLE_ADMIN,))
         t = self._ticket(assignee="u-other")
-        assert rbac.can_drive_status(p, t) is True
-        assert rbac.can_mark_done(p, t) is True
+        assert rbac.can_drive_status(p, t) is False
+        assert rbac.can_mark_done(p, t) is False
 
     def test_chief_does_not_drive_status_without_assignment(self):
         p = make_principal(memberships=(SectorMembership("s10", "chief"),))

@@ -4,7 +4,6 @@ The atomic-UPDATE pattern (architecture §6) prevents double-assignment under
 concurrency: if the WHERE clause doesn't match (somebody else already moved the
 ticket), the UPDATE returns 0 rows and we raise ConcurrencyConflictError.
 """
-import json
 from datetime import datetime, timezone
 
 from sqlalchemy import func, select, update
@@ -68,8 +67,8 @@ def _check_visible(p: Principal, t: Ticket) -> None:
 def _record_status_change(db, t_id, old, new, p: Principal, reason: str | None = None):
     """Write the status history row *and* the matching system auto-comment.
 
-    The auto-comment carries `comment_type='system'` and a JSON body the
-    client parses with the `comment.system.status_changed` i18n key. We pin
+    The auto-comment carries `comment_type='system'` and a plain body so
+    every client renders the same readable status-change sentence. We pin
     `visibility='public'` because every party on the ticket — beneficiary
     included — should see who moved the ticket and to what state.
     """
@@ -79,21 +78,13 @@ def _record_status_change(db, t_id, old, new, p: Principal, reason: str | None =
     ))
     if old == new:
         return
-    payload: dict[str, str | None] = {
-        "kind":           "status_changed",
-        "actor_user_id":  p.user_id,
-        "actor_username": p.username,
-        "old_status":     old,
-        "new_status":     new,
-    }
-    if reason:
-        payload["reason"] = reason
+    actor = p.username or p.email or p.user_id or "system"
     db.add(TicketComment(
         ticket_id=t_id,
         author_user_id=p.user_id,
         visibility="public",
         comment_type="system",
-        body=json.dumps(payload, ensure_ascii=False),
+        body=f"{actor} changed status from {old} to {new}",
     ))
 
 

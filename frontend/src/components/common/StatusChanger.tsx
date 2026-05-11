@@ -92,25 +92,20 @@ export function StatusChanger({
 
   const transitions = useMemo<Transition[]>(() => {
     if (!user) return []
-    const isAdmin = user.roles.includes('tickora_admin')
-    const isDistributor = user.roles.includes('tickora_distributor')
-    const sectorCode = ticket.current_sector_code
-    const isChiefHere = !!sectorCode && !!user.sectors?.some((s) => s.sectorCode === sectorCode && s.role === 'chief')
-    const isAssignee = ticket.assignee_user_id === user.id
+    const isAssignee = !!user.id && (
+      ticket.assignee_user_id === user.id
+      || (ticket.assignee_user_ids || []).includes(user.id)
+    )
     const isRequester = (
       ticket.created_by_user_id === user.id
       || (!!user.id && ticket.beneficiary_user_id === user.id)
       || (ticket.beneficiary_type === 'external' && !!user.email && ticket.requester_email === user.email)
     )
 
-    // Operators must be assigned (or chief / admin) to drive the workflow.
-    const canDriveAsStaff = isAdmin || isChiefHere || isAssignee
-    if (canDriveAsStaff) return STAFF_TRANSITIONS[ticket.status] || []
-
-    // Distributors triage but only at pending/assigned_to_sector — they can cancel.
-    if (isDistributor && ['pending', 'assigned_to_sector'].includes(ticket.status)) {
-      return [{ to: 'cancelled', label: 'Cancel' }]
-    }
+    // Operators must be assigned to drive status. Admin/chief/distributor
+    // users can route or assign through explicit assignment actions, but
+    // status changes require an assignee link.
+    if (isAssignee) return STAFF_TRANSITIONS[ticket.status] || []
 
     // Requester / beneficiary path
     if (isRequester) return REQUESTER_TRANSITIONS[ticket.status] || []
@@ -130,7 +125,7 @@ export function StatusChanger({
       form.resetFields()
       await queryClient.invalidateQueries({ queryKey: ['tickets'] })
       await queryClient.invalidateQueries({ queryKey: ['ticket', ticket.id] })
-      await queryClient.invalidateQueries({ queryKey: ['ticketAudit', ticket.id] })
+      await queryClient.invalidateQueries({ queryKey: ['comments', ticket.id] })
       await queryClient.invalidateQueries({ queryKey: ['monitorOverview'] })
       await queryClient.invalidateQueries({ queryKey: ['monitorSector'] })
       await queryClient.invalidateQueries({ queryKey: ['monitorUser'] })

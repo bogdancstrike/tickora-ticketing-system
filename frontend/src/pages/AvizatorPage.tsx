@@ -6,9 +6,9 @@ import {
   message, theme as antTheme,
 } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
-import { CheckCircleOutlined, CloseCircleOutlined, ReloadOutlined } from '@ant-design/icons'
+import { CheckCircleOutlined, CloseCircleOutlined, ReloadOutlined, UserOutlined } from '@ant-design/icons'
 import {
-  listEndorsementInbox, decideEndorsement,
+  listEndorsementInbox, decideEndorsement, claimEndorsement,
   type EndorsementDto, type EndorsementStatus,
 } from '@/api/endorsements'
 import { StatusTag } from '@/components/common/StatusTag'
@@ -50,6 +50,15 @@ export function AvizatorPage() {
         await queryClient.invalidateQueries({ queryKey: ['endorsements', pending.ticket_id] })
         await queryClient.invalidateQueries({ queryKey: ['ticket', pending.ticket_id] })
       }
+    },
+    onError: (err) => msg.error(err.message),
+  })
+
+  const claim = useMutation({
+    mutationFn: (id: string) => claimEndorsement(id),
+    onSuccess: async () => {
+      msg.success('Endorsement claimed')
+      await queryClient.invalidateQueries({ queryKey: ['endorsementInbox'] })
     },
     onError: (err) => msg.error(err.message),
   })
@@ -113,11 +122,17 @@ export function AvizatorPage() {
     },
     {
       title: '',
-      width: 240,
+      width: 310,
       render: (_, row) => {
         if (row.status !== 'pending') return null
         return (
           <Space size={4} onClick={(e) => e.stopPropagation()}>
+            {!row.assigned_to_user_id && (
+              <Button size="small" icon={<UserOutlined />} loading={claim.isPending}
+                      onClick={() => claim.mutate(row.id)}>
+                Claim
+              </Button>
+            )}
             <Button size="small" type="primary" icon={<CheckCircleOutlined />}
                     onClick={() => openDecideModal(row, 'approved')}>
               Approve
@@ -197,7 +212,7 @@ export function AvizatorPage() {
           <Form.Item
             name="reason"
             label="Reason (optional)"
-            extra="Posted as a system comment on the ticket timeline."
+            extra="Recorded on the endorsement decision."
           >
             <Input.TextArea rows={3} placeholder="Short rationale for the operator." />
           </Form.Item>

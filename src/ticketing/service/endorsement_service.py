@@ -4,7 +4,8 @@ Lifecycle:
     1. Active assignee files a request, optionally targeted at a specific
        avizator user. If `assigned_to_user_id` is None, the request lands
        in the pool — every `tickora_avizator` sees it.
-    2. An avizator approves or rejects. The decision is recorded
+    2. A pool request may be claimed by an avizator. An avizator approves
+       or rejects. The decision is recorded
        (`decided_by_user_id`, `decided_at`, `decision_reason`) and the
        endorsement's `status` flips to `approved` / `rejected`.
     3. While any endorsement on a ticket is `pending`, the workflow
@@ -161,6 +162,45 @@ def decide(
             "decided_by_user_id": principal.user_id,
             "reason": row.decision_reason,
         },
+    )
+    return row
+
+
+def claim(
+    db: Session,
+    principal: Principal,
+    endorsement_id: str,
+) -> TicketEndorsement:
+    """Claim a pending pool endorsement for the current avizator/admin."""
+    row = db.get(TicketEndorsement, endorsement_id)
+    if row is None:
+        raise NotFoundError("endorsement not found")
+    if row.status != "pending":
+        raise BusinessRuleError("endorsement is no longer pending")
+    if row.assigned_to_user_id is not None:
+        raise BusinessRuleError("endorsement is already assigned")
+    if not rbac.can_decide_endorsement(principal, row):
+        audit_service.record(
+            db, actor=principal, action=audit_events.ACCESS_DENIED,
+            entity_type="ticket_endorsement", entity_id=row.id, ticket_id=row.ticket_id,
+            metadata={"attempted_action": "endorsement.claim"},
+        )
+        raise PermissionDeniedError("not allowed to claim this endorsement")
+
+    row.assigned_to_user_id = principal.user_id
+    db.flush()
+
+    _system_comment(db, principal, row.ticket_id,
+                    kind="endorsement_claimed",
+                    payload={
+                        "endorsement_id": row.id,
+                        "actor_user_id":  principal.user_id,
+                        "actor_username": principal.username,
+                    })
+    audit_service.record(
+        db, actor=principal, action=audit_events.ENDORSEMENT_CLAIMED,
+        entity_type="ticket_endorsement", entity_id=row.id, ticket_id=row.ticket_id,
+        new_value={"assigned_to_user_id": principal.user_id},
     )
     return row
 

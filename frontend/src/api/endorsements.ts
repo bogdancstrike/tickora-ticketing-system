@@ -38,7 +38,15 @@ export const decideEndorsement = async (
   endorsementId: string,
   payload: { decision: 'approved' | 'rejected'; reason?: string },
 ): Promise<EndorsementDto> => {
-  const { data } = await apiClient.post(`/api/endorsements/${endorsementId}/decide`, payload)
+  const path = payload.decision === 'approved' ? 'approve' : 'reject'
+  const { data } = await apiClient.post(`/api/endorsements/${endorsementId}/${path}`, { reason: payload.reason })
+  return data
+}
+
+export const claimEndorsement = async (
+  endorsementId: string,
+): Promise<EndorsementDto> => {
+  const { data } = await apiClient.post(`/api/endorsements/${endorsementId}/claim`)
   return data
 }
 

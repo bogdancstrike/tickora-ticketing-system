@@ -71,6 +71,38 @@ def decide(app, operation, request, *, principal: Principal, **kwargs):
 
 
 @require_authenticated
+def claim(app, operation, request, *, principal: Principal, **kwargs):
+    endorsement_id = kwargs.get("endorsement_id") or flask_request.view_args.get("endorsement_id")
+    with get_db() as db:
+        row = endorsement_service.claim(db, principal, endorsement_id)
+        return (_serialize(row), 200)
+
+
+@require_authenticated
+def approve(app, operation, request, *, principal: Principal, **kwargs):
+    endorsement_id = kwargs.get("endorsement_id") or flask_request.view_args.get("endorsement_id")
+    body = _payload()
+    with get_db() as db:
+        row = endorsement_service.decide(
+            db, principal, endorsement_id,
+            decision="approved", reason=body.get("reason"),
+        )
+        return (_serialize(row), 200)
+
+
+@require_authenticated
+def reject(app, operation, request, *, principal: Principal, **kwargs):
+    endorsement_id = kwargs.get("endorsement_id") or flask_request.view_args.get("endorsement_id")
+    body = _payload()
+    with get_db() as db:
+        row = endorsement_service.decide(
+            db, principal, endorsement_id,
+            decision="rejected", reason=body.get("reason"),
+        )
+        return (_serialize(row), 200)
+
+
+@require_authenticated
 def inbox(app, operation, request, *, principal: Principal, **kwargs):
     status = flask_request.args.get("status")
     limit = int(flask_request.args.get("limit", 100) or 100)

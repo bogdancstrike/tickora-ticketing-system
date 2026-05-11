@@ -3,9 +3,8 @@
 Covers the post-2026-05-09 self-assignment policy:
   * Active assignee can post both public and private comments.
   * Bystander chiefs/members cannot post until they self-assign.
-  * Distributors keep the private-comment lane during triage.
   * Beneficiaries can post public, never private.
-  * Admins keep the override.
+  * Admins/distributors must also be assigned before posting.
 
 Edit window (15 min) and visibility filtering on `list_` are also exercised.
 """
@@ -119,12 +118,12 @@ class TestPublicCommentRBAC:
         )
         assert c.visibility == "public"
 
-    def test_admin_override(self, db_session, world):
-        c = comment_service.create(
-            db_session, world["principals"]["admin"], world["ticket"].id,
-            body="admin note", visibility="public",
-        )
-        assert c.id is not None
+    def test_admin_cannot_post_without_assignment(self, db_session, world):
+        with pytest.raises(PermissionDeniedError):
+            comment_service.create(
+                db_session, world["principals"]["admin"], world["ticket"].id,
+                body="admin note", visibility="public",
+            )
 
     def test_beneficiary_can_post_public(self, db_session, world):
         c = comment_service.create(
@@ -156,11 +155,7 @@ class TestPrivateCommentRBAC:
         )
         assert c.visibility == "private"
 
-    def test_distributor_keeps_private_lane(self, db_session):
-        # Distributor's lane is the triage queue (`pending` /
-        # `assigned_to_sector`). They can't see in-progress tickets, so
-        # this test deliberately uses its own pending ticket fixture
-        # rather than the shared `world` (which is in_progress).
+    def test_distributor_cannot_post_private_without_assignment(self, db_session):
         sector = create_sector(db_session, code="s11")
         beneficiary_user = create_user(db_session, "ben.tdistr")
         distributor_user = create_user(db_session, "distr.tdistr")
@@ -172,11 +167,11 @@ class TestPrivateCommentRBAC:
         )
         db_session.commit()
         principal = principal_for(distributor_user, roles={ROLE_DISTRIBUTOR})
-        c = comment_service.create(
-            db_session, principal, ticket.id,
-            body="triage note", visibility="private",
-        )
-        assert c.id is not None
+        with pytest.raises(PermissionDeniedError):
+            comment_service.create(
+                db_session, principal, ticket.id,
+                body="triage note", visibility="private",
+            )
 
     def test_bystander_cannot_post_private(self, db_session, world):
         with pytest.raises(PermissionDeniedError):

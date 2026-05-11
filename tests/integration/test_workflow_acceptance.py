@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from src.iam.principal import SectorMembership
 from src.audit import events
-from src.ticketing.models import AuditEvent, TicketAssignmentHistory, TicketStatusHistory
+from src.ticketing.models import AuditEvent, TicketAssignmentHistory, TicketComment, TicketStatusHistory
 from src.ticketing.service import workflow_service
 
 from .conftest import (
@@ -159,8 +159,24 @@ def assert_closed(db_session: Session, ctx):
             select(TicketStatusHistory.new_status).where(TicketStatusHistory.ticket_id == ctx["ticket_id"])
         )
     )
+    done_comment = db_session.scalar(
+        select(TicketComment).where(
+            TicketComment.ticket_id == ctx["ticket_id"],
+            TicketComment.comment_type == "system",
+            TicketComment.body == "member changed status from in_progress to done",
+        )
+    )
+    closed_comment = db_session.scalar(
+        select(TicketComment).where(
+            TicketComment.ticket_id == ctx["ticket_id"],
+            TicketComment.comment_type == "system",
+            TicketComment.body == "beneficiary changed status from done to closed",
+        )
+    )
     assert ticket.status == "closed"
     assert {"done", "closed"}.issubset(statuses)
+    assert done_comment is not None
+    assert closed_comment is not None
 
 
 @then("the ticket is reopened for the last active assignee")

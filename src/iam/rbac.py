@@ -124,23 +124,16 @@ def can_reassign(p: Principal, t: _TicketLike) -> bool:
 def can_mark_done(p: Principal, t: _TicketLike) -> bool:
     """Operator-side "done" transition.
 
-    Policy: only the user(s) who pulled the ticket onto themselves (self-
-    assignment) can mark it done. Admins retain an override so support can
-    unstick an abandoned ticket. Chiefs deliberately do **not** get this
-    capability — if a chief wants to act on a ticket they must self-assign
-    first, which keeps the audit trail honest about who actually did the
-    work.
+    Policy: only assigned users can mark it done. Chiefs/admins who want to
+    act operationally must first be assigned to the ticket, which keeps the
+    audit trail honest about who actually did the work.
     """
-    if p.is_admin:
-        return True
     if _is_assigned_to(p, t):
         return True
     return False
 
 
 def can_close(p: Principal, t: _TicketLike) -> bool:
-    if p.is_admin:
-        return True
     if _is_requester_by_email(p, t):
         return True
     if t.created_by_user_id and t.created_by_user_id == p.user_id:
@@ -164,9 +157,7 @@ def _is_requester_by_email(p: Principal, t: _TicketLike) -> bool:
 
 
 def can_cancel(p: Principal, t: _TicketLike) -> bool:
-    if p.is_admin or p.is_distributor:
-        return True
-    if t.current_sector_code and p.is_chief_of(t.current_sector_code):
+    if _is_assigned_to(p, t):
         return True
     return False
 
@@ -183,14 +174,10 @@ def can_drive_status(p: Principal, t: _TicketLike) -> bool:
     """True if `p` may push the ticket through operator-side transitions
     (in_progress, mark_done, etc.).
 
-    Policy: only the active assignee can drive status. Self-assignment
-    (`can_assign_to_me` -> `assign_to_me`) is the gateway for sector members,
-    so a member who wants to work a ticket pulls it first. Admins retain an
-    override; distributors keep their narrow triage lane via `can_cancel`
-    and `can_assign_sector`.
+    Policy: only assigned users can drive status. Assignment
+    (`can_assign_to_me` / `can_assign_to_user`) is the gateway for anyone
+    who wants to work a ticket.
     """
-    if p.is_admin:
-        return True
     if _is_assigned_to(p, t):
         return True
     return False
@@ -214,13 +201,10 @@ def can_post_public_comment(p: Principal, t: _TicketLike) -> bool:
       * the beneficiary side — creator, internal beneficiary, or external
         requester-by-email.
 
-    Admins keep an override for support cases. Distributors and sector
-    chiefs/members who haven't self-assigned can still read but can't post —
-    if they want to participate they self-assign first, which keeps the
-    discussion attributable to the operator on the hook.
+    Admins, distributors and sector chiefs/members who aren't assigned can
+    still read according to visibility rules, but can't post. If they want to
+    participate they must be assigned first.
     """
-    if p.is_admin:
-        return True
     if _is_assigned_to(p, t):
         return True
     if t.created_by_user_id and t.created_by_user_id == p.user_id:
@@ -233,21 +217,7 @@ def can_post_public_comment(p: Principal, t: _TicketLike) -> bool:
 
 
 def can_post_private_comment(p: Principal, t: _TicketLike) -> bool:
-    """Private (staff-only) comments are restricted to:
-
-      * admins,
-      * distributors during triage (they need a place to leave routing notes
-        before any sector member touches the ticket),
-      * the active assignee — sector members who self-assigned the ticket.
-
-    Sector members who haven't self-assigned no longer qualify. This stops a
-    bystander from leaving private notes on tickets they aren't actively
-    working.
-    """
-    if p.is_admin:
-        return True
-    if p.is_distributor:
-        return True
+    """Private (staff-only) comments are restricted to assigned users."""
     if _is_assigned_to(p, t):
         return True
     return False
@@ -311,11 +281,7 @@ def can_view_audit_tab(p: Principal, t: _TicketLike) -> bool:
 # ── Endorsements (avizare suplimentară) ─────────────────────────────────────
 
 def can_request_endorsement(p: Principal, t: _TicketLike) -> bool:
-    """Only the active assignee (or admin) can ask for a supplementary
-    endorsement. Bystander chiefs/members must self-assign first — same
-    policy as comment writes and operator-side status transitions."""
-    if p.is_admin:
-        return True
+    """Only assigned users can ask for a supplementary endorsement."""
     if _is_assigned_to(p, t):
         return True
     return False

@@ -132,7 +132,7 @@ class TestViewMatrix:
 
 class TestPostPublicCommentMatrix:
     @pytest.mark.parametrize("persona,expected", [
-        ("admin", True),
+        ("admin", False),
         ("auditor", False),                # read-only oversight
         ("distributor", False),            # tightened: must self-assign first
         ("chief_s10", False),              # tightened
@@ -149,9 +149,9 @@ class TestPostPublicCommentMatrix:
 
 class TestPostPrivateCommentMatrix:
     @pytest.mark.parametrize("persona,expected", [
-        ("admin", True),
+        ("admin", False),
         ("auditor", False),                # read access only
-        ("distributor", True),             # triage lane preserved
+        ("distributor", False),
         ("chief_s10", False),              # tightened: not assigned
         ("member_s10", True),              # active assignee
         ("member_s2", False),
@@ -168,7 +168,7 @@ class TestPostPrivateCommentMatrix:
 
 class TestDriveStatusMatrix:
     @pytest.mark.parametrize("persona,expected", [
-        ("admin", True),
+        ("admin", False),
         ("auditor", False),
         ("distributor", False),             # narrow lane via cancel/assign_sector only
         ("chief_s10", False),               # tightened: must self-assign first
@@ -185,7 +185,7 @@ class TestDriveStatusMatrix:
 
 class TestMarkDoneMatrix:
     @pytest.mark.parametrize("persona,expected", [
-        ("admin", True),
+        ("admin", False),
         ("auditor", False),
         ("distributor", False),
         ("chief_s10", False),
@@ -204,7 +204,7 @@ class TestMarkDoneMatrix:
 
 class TestCloseReopenMatrix:
     @pytest.mark.parametrize("persona,expected", [
-        ("admin", True),
+        ("admin", False),
         ("auditor", False),
         ("distributor", False),
         ("chief_s10", False),
@@ -219,7 +219,7 @@ class TestCloseReopenMatrix:
         ) is expected
 
     @pytest.mark.parametrize("persona,expected", [
-        ("admin", True),
+        ("admin", False),
         ("auditor", False),
         ("distributor", False),
         ("chief_s10", False),
