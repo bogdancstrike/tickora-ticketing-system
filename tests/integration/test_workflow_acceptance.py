@@ -64,8 +64,8 @@ def in_progress_ticket(db_session: Session):
     }
 
 
-@given("a closed ticket with a last active assignee", target_fixture="ctx")
-def closed_ticket(db_session: Session):
+@given("a done ticket with a last active assignee", target_fixture="ctx")
+def done_ticket(db_session: Session):
     beneficiary_user = create_user(db_session, "beneficiary")
     member_user = create_user(db_session, "member")
     sector = create_sector(db_session, "s10")
@@ -75,7 +75,7 @@ def closed_ticket(db_session: Session):
         beneficiary,
         created_by=beneficiary_user,
         current_sector=sector,
-        status="closed",
+        status="done",
         last_active_assignee=member_user,
     )
     db_session.commit()
@@ -100,12 +100,6 @@ def mark_done(db_session: Session, ctx):
         ctx["ticket_id"],
         resolution="Restarted the upstream router and verified service recovery.",
     )
-    db_session.commit()
-
-
-@when("the beneficiary closes the ticket")
-def close_ticket(db_session: Session, ctx):
-    workflow_service.close(db_session, ctx["beneficiary"], ctx["ticket_id"])
     db_session.commit()
 
 
@@ -151,8 +145,8 @@ def assert_assignment_history(db_session: Session, ctx):
     assert audit is not None
 
 
-@then("the ticket is closed with done and closed history entries")
-def assert_closed(db_session: Session, ctx):
+@then("the ticket is done with a done history entry")
+def assert_done(db_session: Session, ctx):
     ticket = workflow_service._load(db_session, ctx["ticket_id"])
     statuses = set(
         db_session.scalars(
@@ -166,22 +160,14 @@ def assert_closed(db_session: Session, ctx):
             TicketComment.body == "member changed status from in_progress to done",
         )
     )
-    closed_comment = db_session.scalar(
-        select(TicketComment).where(
-            TicketComment.ticket_id == ctx["ticket_id"],
-            TicketComment.comment_type == "system",
-            TicketComment.body == "beneficiary changed status from done to closed",
-        )
-    )
-    assert ticket.status == "closed"
-    assert {"done", "closed"}.issubset(statuses)
+    assert ticket.status == "done"
+    assert "done" in statuses
     assert done_comment is not None
-    assert closed_comment is not None
 
 
-@then("the ticket is reopened for the last active assignee")
+@then("the ticket is in progress for the last active assignee")
 def assert_reopened(db_session: Session, ctx):
     ticket = workflow_service._load(db_session, ctx["ticket_id"])
-    assert ticket.status == "reopened"
+    assert ticket.status == "in_progress"
     assert ticket.assignee_user_id == ctx["member_user_id"]
     assert ticket.reopened_count == 1

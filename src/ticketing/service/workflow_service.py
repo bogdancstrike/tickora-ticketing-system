@@ -129,6 +129,103 @@ def _require_no_pending_endorsements(db: Session, ticket_id: str) -> None:
         )
 
 
+def _apply_status(
+    db: Session,
+    p: Principal,
+    ticket_id: str,
+    target_status: str,
+    *,
+    reason: str | None = None,
+    resolution: str | None = None,
+    audit_action: str | None = None,
+    require_drive: bool = True,
+) -> Ticket:
+    """Set any of the five ticket statuses from any current status.
+
+    `reopened` is no longer a stored status. Moving a finished/cancelled
+    ticket back to `in_progress` carries the reopen bookkeeping.
+    """
+    if target_status not in sm.ALL_STATUSES:
+        raise BusinessRuleError(f"unknown status {target_status!r}")
+
+    t = _load(db, ticket_id)
+    _check_visible(p, t)
+    if require_drive and not rbac.can_drive_status(p, t):
+        _denied(sm.ACTION_CHANGE_STATUS, p, ticket_id, db, "not allowed to change ticket status")
+
+    if target_status == sm.DONE:
+        _require_no_pending_endorsements(db, ticket_id)
+
+    old_status = t.status
+    old_assignee = t.assignee_user_id
+    if old_status == target_status:
+        if resolution and target_status == sm.DONE and resolution != t.resolution:
+            t.resolution = resolution
+            db.flush()
+        return _load(db, ticket_id)
+
+    now = datetime.now(timezone.utc)
+    values = {"status": target_status}
+    if target_status == sm.DONE:
+        values["done_at"] = now
+        values["resolution"] = resolution or t.resolution
+    else:
+        values["done_at"] = None
+
+    if target_status == sm.IN_PROGRESS:
+        values["closed_at"] = None
+        if old_status in (sm.DONE, sm.CANCELLED, "closed", "reopened"):
+            values["reopened_at"] = now
+            values["reopened_count"] = Ticket.reopened_count + 1
+    if target_status == sm.ASSIGNED_TO_SECTOR:
+        values["assignee_user_id"] = None
+
+    res = db.execute(
+        update(Ticket)
+        .where(Ticket.id == ticket_id, Ticket.is_deleted.is_(False))
+        .values(**values)
+        .returning(Ticket.id)
+    )
+    if _no_returned_row(res):
+        raise ConcurrencyConflictError("ticket state changed; refresh and retry")
+
+    _record_status_change(db, ticket_id, old_status, target_status, p, reason)
+    if target_status == sm.ASSIGNED_TO_SECTOR and old_assignee:
+        db.execute(
+            TicketAssignee.__table__.delete()
+            .where(TicketAssignee.ticket_id == ticket_id)
+        )
+        _record_assignment_change(db, ticket_id, old_assignee, None, p.user_id, reason)
+    effective_audit_action = audit_action
+    if effective_audit_action is None:
+        if target_status == sm.DONE:
+            effective_audit_action = audit_events.TICKET_DONE
+        elif target_status == sm.CANCELLED:
+            effective_audit_action = audit_events.TICKET_CANCELLED
+        elif target_status == sm.IN_PROGRESS and old_status in (sm.DONE, sm.CANCELLED, "closed", "reopened"):
+            effective_audit_action = audit_events.TICKET_REOPENED
+        else:
+            effective_audit_action = audit_events.TICKET_STATUS_CHANGED
+
+    audit_service.record(
+        db, actor=p, action=effective_audit_action,
+        entity_type="ticket", entity_id=ticket_id, ticket_id=ticket_id,
+        old_value={"status": old_status},
+        new_value={"status": target_status},
+        metadata={"reason": reason} if reason else None,
+    )
+    if target_status in (sm.DONE, sm.CANCELLED):
+        publish("notify_beneficiary", {"ticket_id": ticket_id, "actor_user_id": p.user_id})
+    publish("notify_ticket_event", {
+        "ticket_id": ticket_id,
+        "actor_user_id": p.user_id,
+        "type": "status_changed",
+        "title": "Ticket status changed",
+        "body": f"Ticket changed from {old_status} to {target_status}.",
+    })
+    return _load(db, ticket_id)
+
+
 # ── Multi-assignment helpers ─────────────────────────────────────────────────
 
 def _add_sector_assignment(db: Session, ticket_id: str, sector_id: str,
@@ -311,7 +408,7 @@ def _assign_to_me(db: Session, p: Principal, ticket_id: str) -> Ticket:
             Ticket.current_sector_id == t.current_sector_id,
             Ticket.is_deleted.is_(False),
             Ticket.assignee_user_id.is_(None),
-            Ticket.status.in_(("pending", "assigned_to_sector", "reopened")),
+            Ticket.status.in_(tuple(sm.ALL_STATUSES)),
         )
         .values(
             assignee_user_id              = p.user_id,
@@ -559,40 +656,16 @@ def change_status(
     *,
     reason: str | None = None,
 ) -> Ticket:
-    """Convenience wrapper that maps a target status to the right transition.
+    """Set any supported status directly.
 
-    The frontend can call this for any allowed transition without having to
-    pick the specific endpoint (assign-sector, mark-done, …) — easier to wire
-    up an inline status switcher.
+    The current workflow model has five statuses and permits moving from any
+    one to any other. Assignment/routing endpoints still exist for changing
+    ownership and sector metadata, but this endpoint only changes status.
     """
-    with span("workflow.change_status", username=p.username, user_id=p.user_id, ticket_id=ticket_id, target_status=target_status):
-        t = _load(db, ticket_id)
-        _check_visible(p, t)
-
-        # Operator-side transitions require the caller to actually be working
-        # the ticket (or be admin / sector chief). Close / reopen / cancel use
-        # their own predicates further down.
-        if target_status in (sm.IN_PROGRESS, sm.ASSIGNED_TO_SECTOR, sm.DONE):
-            if not rbac.can_drive_status(p, t):
-                _denied("change_status", p, ticket_id, db, "not allowed to drive ticket status")
-
-        if target_status == sm.IN_PROGRESS:
-            return _assign_to_me(db, p, ticket_id)
-        if target_status == sm.ASSIGNED_TO_SECTOR:
-            return _unassign(db, p, ticket_id, reason=reason)
-        if target_status == sm.DONE:
-            return _mark_done(db, p, ticket_id, resolution=reason)
-        if target_status == sm.CLOSED:
-            return _close(db, p, ticket_id)
-        if target_status == sm.REOPENED:
-            if not reason:
-                raise BusinessRuleError("reopen requires a reason")
-            return _reopen(db, p, ticket_id, reason=reason)
-        if target_status == sm.CANCELLED:
-            if not reason:
-                raise BusinessRuleError("cancel requires a reason")
-            return _cancel(db, p, ticket_id, reason=reason)
-        raise BusinessRuleError(f"no transition wired up for status {target_status!r}")
+    with span("workflow.change_status", username=p.username, user_id=p.user_id, ticket_id=ticket_id, target_status=target_status) as current:
+        ticket = _apply_status(db, p, ticket_id, target_status, reason=reason)
+        set_attr(current, "ticket.status", ticket.status)
+        return ticket
 
 
 def unassign(db: Session, p: Principal, ticket_id: str, *, reason: str | None = None) -> Ticket:
@@ -678,38 +751,12 @@ def _mark_done(db: Session, p: Principal, ticket_id: str, *, resolution: str | N
     _check_visible(p, t)
     if not rbac.can_mark_done(p, t):
         _denied(sm.ACTION_MARK_DONE, p, ticket_id, db, "not the assignee")
-
-    _require_no_pending_endorsements(db, ticket_id)
-
-    new_status = sm.target_status(sm.ACTION_MARK_DONE, t.status)
-    if new_status is None:
-        raise BusinessRuleError(f"cannot mark done while status is {t.status}")
-
-    res = db.execute(
-        update(Ticket)
-        .where(
-            Ticket.id == ticket_id,
-            Ticket.is_deleted.is_(False),
-            Ticket.status.in_(tuple(sm._BY_ACTION[sm.ACTION_MARK_DONE].from_statuses)),
-        )
-        .values(
-            status     = new_status,
-            done_at    = datetime.now(timezone.utc),
-            resolution = resolution or t.resolution,
-        )
-        .returning(Ticket.id)
+    ticket = _apply_status(
+        db, p, ticket_id, sm.DONE,
+        resolution=resolution, audit_action=audit_events.TICKET_DONE,
+        require_drive=False,
     )
-    if _no_returned_row(res):
-        raise ConcurrencyConflictError("ticket state changed; refresh and retry")
-
-    _record_status_change(db, ticket_id, t.status, new_status, p, None)
-    audit_service.record(
-        db, actor=p, action=audit_events.TICKET_DONE,
-        entity_type="ticket", entity_id=ticket_id, ticket_id=ticket_id,
-        old_value={"status": t.status}, new_value={"status": new_status},
-    )
-    publish("notify_beneficiary", {"ticket_id": ticket_id, "actor_user_id": p.user_id})
-    return _load(db, ticket_id)
+    return ticket
 
 
 def close(db: Session, p: Principal, ticket_id: str, *, feedback: dict | None = None) -> Ticket:
@@ -722,41 +769,29 @@ def close(db: Session, p: Principal, ticket_id: str, *, feedback: dict | None = 
 def _close(db: Session, p: Principal, ticket_id: str, *, feedback: dict | None = None) -> Ticket:
     t = _load(db, ticket_id)
     _check_visible(p, t)
-    if not (rbac.can_close(p, t) or rbac.can_drive_status(p, t)):
-        _denied(sm.ACTION_CLOSE, p, ticket_id, db, "only the beneficiary, admin or assignee can close")
+    if not rbac.can_close(p, t):
+        _denied(sm.ACTION_CLOSE, p, ticket_id, db, "only the assignee can move this ticket to done")
 
-    _require_no_pending_endorsements(db, ticket_id)
-
-    new_status = sm.target_status(sm.ACTION_CLOSE, t.status)
-    if new_status is None:
-        raise BusinessRuleError(f"cannot close while status is {t.status}")
-
-    res = db.execute(
-        update(Ticket)
-        .where(Ticket.id == ticket_id, Ticket.status == "done", Ticket.is_deleted.is_(False))
-        .values(status=new_status, closed_at=datetime.now(timezone.utc))
-        .returning(Ticket.id)
+    ticket = _apply_status(
+        db, p, ticket_id, sm.DONE,
+        audit_action=audit_events.TICKET_CLOSED,
+        require_drive=False,
     )
-    if _no_returned_row(res):
-        raise ConcurrencyConflictError("ticket state changed; refresh and retry")
-
-    _record_status_change(db, ticket_id, t.status, new_status, p, None)
-    audit_service.record(
-        db, actor=p, action=audit_events.TICKET_CLOSED,
-        entity_type="ticket", entity_id=ticket_id, ticket_id=ticket_id,
-        old_value={"status": t.status}, new_value={"status": new_status},
-        metadata={"feedback": feedback} if feedback else None,
-    )
-    publish("notify_beneficiary", {"ticket_id": ticket_id, "actor_user_id": p.user_id})
-    return _load(db, ticket_id)
+    if feedback:
+        audit_service.record(
+            db, actor=p, action=audit_events.TICKET_UPDATED,
+            entity_type="ticket", entity_id=ticket_id, ticket_id=ticket_id,
+            metadata={"feedback": feedback},
+        )
+    return ticket
 
 
 def reopen(db: Session, p: Principal, ticket_id: str, *, reason: str) -> Ticket:
-    """Reopens a 'done' or 'closed' ticket, returning it to the last active assignee.
+    """Moves a ticket back to `in_progress`, returning it to the last active assignee.
 
     Args:
         db: Database session.
-        p: Beneficiary or admin.
+        p: Assigned user.
         ticket_id: Ticket ID.
         reason: Required explanation for reopening.
 
@@ -774,32 +809,22 @@ def _reopen(db: Session, p: Principal, ticket_id: str, *, reason: str) -> Ticket
     t = _load(db, ticket_id)
     _check_visible(p, t)
     if not rbac.can_reopen(p, t):
-        _denied(sm.ACTION_REOPEN, p, ticket_id, db, "only the beneficiary or admin can reopen")
+        _denied(sm.ACTION_REOPEN, p, ticket_id, db, "only the assignee can move this ticket to in_progress")
     if not (reason or "").strip():
         raise BusinessRuleError("reason is required to reopen")
 
-    new_status = sm.target_status(sm.ACTION_REOPEN, t.status)
-    if new_status is None:
-        raise BusinessRuleError(f"cannot reopen while status is {t.status}")
-
     target_assignee = t.last_active_assignee_user_id
-    res = db.execute(
-        update(Ticket)
-        .where(Ticket.id == ticket_id, Ticket.status.in_(("done", "closed")), Ticket.is_deleted.is_(False))
-        .values(
-            status            = new_status,
-            assignee_user_id  = target_assignee,
-            reopened_at       = datetime.now(timezone.utc),
-            reopened_count    = Ticket.reopened_count + 1,
-            closed_at         = None,
-            done_at           = None,
-        )
-        .returning(Ticket.id)
+    ticket = _apply_status(
+        db, p, ticket_id, sm.IN_PROGRESS,
+        reason=reason, audit_action=audit_events.TICKET_REOPENED,
+        require_drive=False,
     )
-    if _no_returned_row(res):
-        raise ConcurrencyConflictError("ticket state changed; refresh and retry")
-
-    _record_status_change(db, ticket_id, t.status, new_status, p, reason)
+    if target_assignee and ticket.assignee_user_id != target_assignee:
+        db.execute(
+            update(Ticket)
+            .where(Ticket.id == ticket_id, Ticket.is_deleted.is_(False))
+            .values(assignee_user_id=target_assignee)
+        )
     if target_assignee != t.assignee_user_id:
         _record_assignment_change(db, ticket_id, t.assignee_user_id, target_assignee, p.user_id, "reopen")
     # The reopen reason becomes a real public comment attributed to the
@@ -813,22 +838,8 @@ def _reopen(db: Session, p: Principal, ticket_id: str, *, reason: str) -> Ticket
         comment_type="reopen_reason",
         body=reason.strip(),
     ))
-    audit_service.record(
-        db, actor=p, action=audit_events.TICKET_REOPENED,
-        entity_type="ticket", entity_id=ticket_id, ticket_id=ticket_id,
-        old_value={"status": t.status, "assignee_user_id": t.assignee_user_id},
-        new_value={"status": new_status, "assignee_user_id": target_assignee},
-        metadata={"reason": reason},
-    )
     if target_assignee:
         publish("notify_assignee", {"ticket_id": ticket_id, "user_id": target_assignee})
-    publish("notify_ticket_event", {
-        "ticket_id": ticket_id,
-        "actor_user_id": p.user_id,
-        "type": "status_changed",
-        "title": "Ticket reopened",
-        "body": "Ticket was reopened.",
-    })
     return _load(db, ticket_id)
 
 
@@ -846,33 +857,12 @@ def _cancel(db: Session, p: Principal, ticket_id: str, *, reason: str) -> Ticket
         _denied(sm.ACTION_CANCEL, p, ticket_id, db, "not allowed to cancel")
     if not (reason or "").strip():
         raise BusinessRuleError("reason is required to cancel")
-
-    new_status = sm.target_status(sm.ACTION_CANCEL, t.status)
-    if new_status is None:
-        raise BusinessRuleError(f"cannot cancel while status is {t.status}")
-
-    res = db.execute(
-        update(Ticket)
-        .where(
-            Ticket.id == ticket_id,
-            Ticket.status.in_(tuple(sm._BY_ACTION[sm.ACTION_CANCEL].from_statuses)),
-            Ticket.is_deleted.is_(False),
-        )
-        .values(status=new_status)
-        .returning(Ticket.id)
+    ticket = _apply_status(
+        db, p, ticket_id, sm.CANCELLED,
+        reason=reason, audit_action=audit_events.TICKET_CANCELLED,
+        require_drive=False,
     )
-    if _no_returned_row(res):
-        raise ConcurrencyConflictError("ticket state changed; refresh and retry")
-
-    _record_status_change(db, ticket_id, t.status, new_status, p, reason)
-    audit_service.record(
-        db, actor=p, action=audit_events.TICKET_CANCELLED,
-        entity_type="ticket", entity_id=ticket_id, ticket_id=ticket_id,
-        old_value={"status": t.status}, new_value={"status": new_status},
-        metadata={"reason": reason},
-    )
-    publish("notify_beneficiary", {"ticket_id": ticket_id, "actor_user_id": p.user_id})
-    return _load(db, ticket_id)
+    return ticket
 
 
 def change_priority(db: Session, p: Principal, ticket_id: str, priority: str, *, reason: str | None = None) -> Ticket:

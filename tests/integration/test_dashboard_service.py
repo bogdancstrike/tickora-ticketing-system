@@ -33,26 +33,25 @@ def test_global_kpis_use_live_ticket_data(db_session: Session):
     assert before["new_today"] == 1
     assert before["closed_today"] == 0
 
-    closed = create_ticket(
+    done = create_ticket(
         db_session,
         beneficiary,
         created_by=requester,
         current_sector=sector,
-        status="closed",
+        status="done",
     )
-    closed.created_at = datetime.now(timezone.utc) - timedelta(days=2)
-    closed.closed_at = datetime.now(timezone.utc)
-    closed.done_at = closed.closed_at - timedelta(hours=1)
-    closed_without_closed_at = create_ticket(
+    done.created_at = datetime.now(timezone.utc) - timedelta(days=2)
+    done.done_at = datetime.now(timezone.utc)
+    done_without_done_at = create_ticket(
         db_session,
         beneficiary,
         created_by=requester,
         current_sector=sector,
-        status="closed",
+        status="done",
     )
-    closed_without_closed_at.created_at = datetime.now(timezone.utc) - timedelta(days=2)
-    closed_without_closed_at.closed_at = None
-    closed_without_closed_at.updated_at = datetime.now(timezone.utc)
+    done_without_done_at.created_at = datetime.now(timezone.utc) - timedelta(days=2)
+    done_without_done_at.done_at = None
+    done_without_done_at.updated_at = datetime.now(timezone.utc)
     db_session.flush()
 
     after = dashboard_service.global_(db_session, admin)["kpis"]

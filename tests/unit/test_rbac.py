@@ -150,9 +150,15 @@ class TestAssignToMe:
 
 class TestCloseAndReopen:
     @pytest.mark.parametrize("fn", [rbac.can_close, rbac.can_reopen])
-    def test_creator_can(self, fn):
+    def test_creator_cannot_without_assignment(self, fn):
         p = make_principal(user_id="u-creator")
         t = FakeTicket(created_by_user_id="u-creator", status="done")
+        assert fn(p, t) is False
+
+    @pytest.mark.parametrize("fn", [rbac.can_close, rbac.can_reopen])
+    def test_assignee_can(self, fn):
+        p = make_principal(user_id="u-assignee")
+        t = FakeTicket(assignee_user_id="u-assignee", status="done")
         assert fn(p, t) is True
 
     @pytest.mark.parametrize("fn", [rbac.can_close, rbac.can_reopen])
@@ -167,10 +173,10 @@ class TestCloseAndReopen:
         assert fn(p, FakeTicket()) is False
 
     @pytest.mark.parametrize("fn", [rbac.can_close, rbac.can_reopen])
-    def test_external_requester_email_can(self, fn):
+    def test_external_requester_email_cannot_without_assignment(self, fn):
         p = make_principal(user_id="u-ben", roles=(ROLE_EXTERNAL_USER,), user_type="external")
         t = FakeTicket(beneficiary_type="external", requester_email="u-ben@x")
-        assert fn(p, t) is True
+        assert fn(p, t) is False
 
 
 class TestPrivateComments:
@@ -220,7 +226,8 @@ class TestAdminAndDashboard:
 # ── Self-assignment gate (added 2026-05-09) ──────────────────────────────────
 #
 # Comments and operator-side status transitions require the active-assignee
-# link. Beneficiaries keep requester-side public comments and close/reopen.
+# link. Beneficiaries keep requester-side public comments, but status
+# movement stays assignee-only.
 class TestSelfAssignmentGate:
     def _ticket(self, *, assignee="u-other", status="in_progress",
                creator=None, beneficiary=None, sector="s10"):

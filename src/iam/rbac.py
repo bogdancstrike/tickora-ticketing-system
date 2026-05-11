@@ -134,13 +134,7 @@ def can_mark_done(p: Principal, t: _TicketLike) -> bool:
 
 
 def can_close(p: Principal, t: _TicketLike) -> bool:
-    if _is_requester_by_email(p, t):
-        return True
-    if t.created_by_user_id and t.created_by_user_id == p.user_id:
-        return True
-    if t.beneficiary_user_id and t.beneficiary_user_id == p.user_id:
-        return True
-    return False
+    return _is_assigned_to(p, t)
 
 
 def can_reopen(p: Principal, t: _TicketLike) -> bool:

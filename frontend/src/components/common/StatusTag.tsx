@@ -5,8 +5,6 @@ const STATUS_COLORS: Record<string, string> = {
   assigned_to_sector: 'processing',
   in_progress: 'blue',
   done: 'green',
-  closed: 'success',
-  reopened: 'purple',
   cancelled: 'red',
 }
 
@@ -15,8 +13,6 @@ const STATUS_LABELS: Record<string, string> = {
   assigned_to_sector: 'Assigned · Sector',
   in_progress: 'In Progress',
   done: 'Done',
-  closed: 'Closed',
-  reopened: 'Reopened',
   cancelled: 'Cancelled',
 }
 

@@ -121,7 +121,7 @@ def generate_batch(start_idx, count, users, sectors, beneficiaries, all_statuses
 
         ticket_id = str(uuid.uuid4())
         sector = random.choice(sectors) if (sectors and status != "pending") else None
-        assignee = random.choice(internal_users) if status in ("in_progress", "done", "closed") else None
+        assignee = random.choice(internal_users) if status in ("in_progress", "done") else None
 
         finished_at = (
             created_at + timedelta(hours=random.randint(1, 72))
@@ -144,7 +144,7 @@ def generate_batch(start_idx, count, users, sectors, beneficiaries, all_statuses
             "created_at": created_at,
             "updated_at": finished_at or created_at,
             "done_at":   finished_at if status == "done"   else None,
-            "closed_at": finished_at if status == "closed" else None,
+            "closed_at": None,
             "requester_email":      ben["email"],
             "requester_first_name": ben["first_name"],
             "requester_last_name":  ben["last_name"],

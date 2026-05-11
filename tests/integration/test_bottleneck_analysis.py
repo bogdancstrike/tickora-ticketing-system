@@ -20,17 +20,17 @@ def test_bottleneck_analysis(db_session: Session):
 
     now = datetime.now(timezone.utc)
 
-    # Create a ticket that went through transitions and was closed
-    t = create_ticket(db_session, beneficiary, created_by=requester, current_sector=sector, status="closed")
+    # Create a ticket that went through transitions and reached done
+    t = create_ticket(db_session, beneficiary, created_by=requester, current_sector=sector, status="done")
     t.created_at = now - timedelta(hours=10)
-    t.closed_at = now
+    t.done_at = now
     
     # Transition 1: pending -> in_progress at now - 8h (Spent 2h in pending)
     h1 = TicketStatusHistory(ticket_id=t.id, old_status="pending", new_status="in_progress", created_at=now - timedelta(hours=8))
     # Transition 2: in_progress -> done at now - 2h (Spent 6h in in_progress)
     h2 = TicketStatusHistory(ticket_id=t.id, old_status="in_progress", new_status="done", created_at=now - timedelta(hours=2))
-    # Transition 3: done -> closed at now (Spent 2h in done)
-    h3 = TicketStatusHistory(ticket_id=t.id, old_status="done", new_status="closed", created_at=now)
+    # Transition 3: done timestamp at now (Spent 2h in done)
+    h3 = TicketStatusHistory(ticket_id=t.id, old_status="done", new_status="done", created_at=now)
     
     db_session.add_all([h1, h2, h3])
     db_session.flush()

@@ -69,8 +69,6 @@
     "assigned_to_sector": "Asignat sectorului",
     "in_progress":        "În lucru",
     "done":               "Finalizat",
-    "closed":             "Închis",
-    "reopened":           "Redeschis",
     "cancelled":          "Anulat"
   },
   "priority": {
@@ -133,8 +131,7 @@
       "updated": "Actualizat",
       "assigned": "Asignat",
       "first_response": "Primul răspuns",
-      "done": "Finalizat",
-      "closed": "Închis"
+      "done": "Finalizat"
     },
     "comments": {
       "post": "Trimite",

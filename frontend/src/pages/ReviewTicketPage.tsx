@@ -263,7 +263,7 @@ export function ReviewTicketPage() {
   if (!ticket.data) return <div style={{ padding: 80 }}><Empty /></div>
 
   const t: TicketDto = ticket.data
-  const isOpen = ['pending', 'assigned_to_sector', 'in_progress', 'reopened'].includes(t.status)
+  const isOpen = ['pending', 'assigned_to_sector', 'in_progress'].includes(t.status)
   const sectors = Array.from(new Set([t.current_sector_code, ...(t.sector_codes || [])].filter(Boolean) as string[]))
 
   return (

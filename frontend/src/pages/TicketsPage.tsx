@@ -19,10 +19,10 @@ import {
 } from '@ant-design/icons'
 import { Dropdown } from 'antd'
 import {
-  addAssignee, addSector, assignSector, assignToMe, assignToUser, cancelTicket, changePriority, closeTicket,
+  addAssignee, addSector, assignSector, assignToMe, assignToUser, cancelTicket, changePriority,
   createComment, deleteAttachment, deleteComment, downloadAttachmentUrl, getMe,
   getTicket, getTicketOptions, listAssignableUsers, listAttachments, listComments,
-  listTickets, markDone, registerAttachment, reopenTicket, requestAttachmentUpload,
+  listTickets, markDone, registerAttachment, requestAttachmentUpload,
   deleteTicket, listTicketMetadata, removeAssignee, removeSector,
   type AttachmentDto,
   type TicketDto,
@@ -86,7 +86,7 @@ function canAssignToMe(ticket: TicketDto, user: ReturnType<typeof useSessionStor
   const inSector = !!user.sectors?.some((s) => sectors.includes(s.sectorCode))
   return (isAdmin || inSector)
     && ticketAssigneeIds(ticket).length === 0
-    && ['pending', 'assigned_to_sector', 'reopened'].includes(ticket.status)
+    && ['pending', 'assigned_to_sector', 'done', 'cancelled'].includes(ticket.status)
 }
 
 function canAssignToUser(ticket: TicketDto, user: ReturnType<typeof useSessionStore.getState>['user']) {
@@ -95,7 +95,7 @@ function canAssignToUser(ticket: TicketDto, user: ReturnType<typeof useSessionSt
   const isDistributor = user.roles.includes('tickora_distributor')
   const isChief = !!user.sectors?.some((s) => s.sectorCode === ticket.current_sector_code && s.role === 'chief')
   return (isAdmin || isDistributor || isChief)
-    && ['pending', 'assigned_to_sector', 'in_progress', 'reopened'].includes(ticket.status)
+    && ['pending', 'assigned_to_sector', 'in_progress', 'done', 'cancelled'].includes(ticket.status)
 }
 
 function canAssignSector(ticket: TicketDto, user: ReturnType<typeof useSessionStore.getState>['user']) {
@@ -109,27 +109,13 @@ function canAssignSector(ticket: TicketDto, user: ReturnType<typeof useSessionSt
 function canMarkDone(ticket: TicketDto, user: ReturnType<typeof useSessionStore.getState>['user']) {
   if (!user) return false
   const isAssignee = !!user.id && ticketAssigneeIds(ticket).includes(user.id)
-  return isAssignee && ['in_progress', 'reopened'].includes(ticket.status)
-}
-
-function canClose(ticket: TicketDto, user: ReturnType<typeof useSessionStore.getState>['user']) {
-  if (!user) return false
-  const isRequesterEmail = ticket.beneficiary_type === 'external' && !!user.email && ticket.requester_email === user.email
-  const isRequester = ticket.created_by_user_id === user.id || (!!user.id && ticket.beneficiary_user_id === user.id) || isRequesterEmail
-  return ticket.status === 'done' && isRequester
-}
-
-function canReopen(ticket: TicketDto, user: ReturnType<typeof useSessionStore.getState>['user']) {
-  if (!user) return false
-  const isRequesterEmail = ticket.beneficiary_type === 'external' && !!user.email && ticket.requester_email === user.email
-  const isRequester = ticket.created_by_user_id === user.id || (!!user.id && ticket.beneficiary_user_id === user.id) || isRequesterEmail
-  return ['done', 'closed'].includes(ticket.status) && isRequester
+  return isAssignee && ticket.status !== 'done'
 }
 
 function canCancel(ticket: TicketDto, user: ReturnType<typeof useSessionStore.getState>['user']) {
   if (!user) return false
   const isAssignee = !!user.id && ticketAssigneeIds(ticket).includes(user.id)
-  return isAssignee && ['pending', 'assigned_to_sector'].includes(ticket.status)
+  return isAssignee && ticket.status !== 'cancelled'
 }
 
 function WorkflowActions({ ticket }: { ticket: TicketDto }) {
@@ -152,7 +138,7 @@ function WorkflowActions({ ticket }: { ticket: TicketDto }) {
     staleTime: 60_000,
   })
 
-  const isClosed = ['done', 'closed', 'cancelled'].includes(ticket.status)
+  const isClosed = ['done', 'cancelled'].includes(ticket.status)
 
   const finish = async () => {
     form.resetFields()
@@ -175,8 +161,6 @@ function WorkflowActions({ ticket }: { ticket: TicketDto }) {
         return removeAssignee(ticket.id, user.id)
       }
       if (action === 'mark_done') return markDone(ticket.id, values.resolution)
-      if (action === 'close') return closeTicket(ticket.id)
-      if (action === 'reopen') return reopenTicket(ticket.id, values.reason)
       if (action === 'cancel') return cancelTicket(ticket.id, values.reason)
       if (action === 'priority') return changePriority(ticket.id, values.priority, values.reason)
       if (action === 'delete') return deleteTicket(ticket.id)
@@ -539,96 +523,6 @@ function authorInitials(name: string): string {
   return name.split(/[\s.@]+/).filter(Boolean).slice(0, 2).map(s => s[0]?.toUpperCase()).join('') || '?'
 }
 
-/**
- * Banner shown to the beneficiary (or admin) after the operator marked
- * the ticket as `done`. Forces a clear decision: confirm closure or
- * reopen with a reason that becomes a public comment on the timeline.
- */
-function ClosureApprovalBanner({ ticket }: { ticket: TicketDto }) {
-  const user = useSessionStore((s) => s.user)
-  const queryClient = useQueryClient()
-  const [msg, holder] = message.useMessage()
-  const [reopenOpen, setReopenOpen] = useState(false)
-  const [form] = Form.useForm<{ reason: string }>()
-
-  const showClose = canClose(ticket, user)
-  const showReopen = canReopen(ticket, user)
-  const visible = ticket.status === 'done' && (showClose || showReopen)
-
-  const refresh = async () => {
-    await queryClient.invalidateQueries({ queryKey: ['ticket', ticket.id] })
-    await queryClient.invalidateQueries({ queryKey: ['tickets'] })
-    await queryClient.invalidateQueries({ queryKey: ['comments', ticket.id] })
-  }
-
-  const approve = useMutation({
-    mutationFn: () => closeTicket(ticket.id),
-    onSuccess: async () => { msg.success('Ticket closed'); await refresh() },
-    onError: (err) => msg.error(err.message),
-  })
-  const reopenIt = useMutation({
-    mutationFn: (reason: string) => reopenTicket(ticket.id, reason),
-    onSuccess: async () => {
-      msg.success('Ticket reopened')
-      setReopenOpen(false)
-      form.resetFields()
-      await refresh()
-    },
-    onError: (err) => msg.error(err.message),
-  })
-
-  if (!visible) return null
-
-  return (
-    <>
-      {holder}
-      <Alert
-        type="success"
-        showIcon
-        message="The operator marked this ticket as done."
-        description="Please approve the closure or reopen the ticket with a reason."
-        action={
-          <Space>
-            {showReopen && (
-              <Button danger onClick={() => setReopenOpen(true)}>Reopen…</Button>
-            )}
-            {showClose && (
-              <Button type="primary" loading={approve.isPending}
-                      onClick={() => approve.mutate()}>
-                Approve closure
-              </Button>
-            )}
-          </Space>
-        }
-      />
-      <Modal
-        title="Reopen ticket"
-        open={reopenOpen}
-        okText="Reopen"
-        okButtonProps={{ danger: true }}
-        confirmLoading={reopenIt.isPending}
-        onCancel={() => { setReopenOpen(false); form.resetFields() }}
-        onOk={async () => {
-          const values = await form.validateFields()
-          reopenIt.mutate(values.reason.trim())
-        }}
-        destroyOnHidden
-      >
-        <Form form={form} layout="vertical">
-          <Form.Item
-            name="reason"
-            label="Reason"
-            rules={[{ required: true, min: 3, message: 'A reason of at least 3 characters is required.' }]}
-            extra="Your reason will appear as a public comment on the ticket so the operator knows what to revisit."
-          >
-            <Input.TextArea rows={4} placeholder="What still needs to be fixed?" autoFocus />
-          </Form.Item>
-        </Form>
-      </Modal>
-    </>
-  )
-}
-
 interface SystemCommentPayload {
   kind: string
   actor_user_id?: string
@@ -902,7 +796,7 @@ function CommentBox({
           </Form>
         </div>
       )}
-      {disabled && <Alert type="info" message="Comments are disabled for closed tickets." />}
+      {disabled && <Alert type="info" message="Comments are disabled for finished tickets." />}
       {!disabled && !canPostAtAll && (
         <Alert
           type="info"
@@ -1125,7 +1019,6 @@ function TicketSidebar({ ticket }: { ticket: TicketDto }) {
           <Descriptions.Item label="Assigned">{fmt(ticket.assigned_at)}</Descriptions.Item>
           <Descriptions.Item label="First response">{fmt(ticket.first_response_at)}</Descriptions.Item>
           <Descriptions.Item label="Done">{fmt(ticket.done_at)}</Descriptions.Item>
-          <Descriptions.Item label="Closed">{fmt(ticket.closed_at)}</Descriptions.Item>
         </Descriptions>
       </Card>
       <TicketLinksPanel ticketId={ticket.id} />
@@ -1154,7 +1047,7 @@ function TicketDetails({ ticketId }: { ticketId?: string }) {
     enabled: !!ticketId,
   })
 
-  const isClosed = ticket ? ['done', 'closed', 'cancelled'].includes(ticket.status) : false
+  const isClosed = ticket ? ['done', 'cancelled'].includes(ticket.status) : false
 
   if (error) {
     return (
@@ -1207,8 +1100,6 @@ function TicketDetails({ ticketId }: { ticketId?: string }) {
         </Flex>
         <WorkflowActions ticket={ticket} />
       </div>
-
-      <ClosureApprovalBanner ticket={ticket} />
 
       {/* Two-column body */}
       <Row gutter={[16, 16]}>

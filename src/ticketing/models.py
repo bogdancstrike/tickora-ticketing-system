@@ -432,7 +432,7 @@ class TicketEndorsement(Base):
     a specific avizator (``assigned_to_user_id`` set) or the avizator
     pool (``assigned_to_user_id IS NULL`` — any user with the
     ``tickora_avizator`` realm role can decide). A pending row blocks the
-    ticket from moving to ``done`` / ``closed``; once a decision is
+    ticket from moving to ``done``; once a decision is
     recorded (approved or rejected, either is fine) the block lifts.
     """
     __tablename__ = "ticket_endorsements"

@@ -174,7 +174,7 @@ class TestDriveStatusMatrix:
         ("chief_s10", False),               # tightened: must self-assign first
         ("member_s10", True),               # active assignee
         ("member_s2", False),
-        ("beneficiary", False),             # uses close/reopen, not drive
+        ("beneficiary", False),
         ("external_user", False),
     ])
     def test_drive_status(self, persona, expected):
@@ -200,7 +200,7 @@ class TestMarkDoneMatrix:
         ) is expected
 
 
-# ── Beneficiary-side close/reopen ───────────────────────────────────────────
+# ── Legacy close/reopen wrappers follow assignee-only status policy ──────────
 
 class TestCloseReopenMatrix:
     @pytest.mark.parametrize("persona,expected", [
@@ -208,9 +208,9 @@ class TestCloseReopenMatrix:
         ("auditor", False),
         ("distributor", False),
         ("chief_s10", False),
-        ("member_s10", False),               # operators don't close
+        ("member_s10", True),
         ("member_s2", False),
-        ("beneficiary", True),               # creator/beneficiary path
+        ("beneficiary", False),
         ("external_user", False),
     ])
     def test_close(self, persona, expected):
@@ -223,9 +223,9 @@ class TestCloseReopenMatrix:
         ("auditor", False),
         ("distributor", False),
         ("chief_s10", False),
-        ("member_s10", False),
+        ("member_s10", True),
         ("member_s2", False),
-        ("beneficiary", True),
+        ("beneficiary", False),
         ("external_user", False),
     ])
     def test_reopen(self, persona, expected):

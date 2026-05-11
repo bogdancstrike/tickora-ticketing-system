@@ -11,7 +11,7 @@ from src.ticketing.models import TicketStatusHistory
 from .conftest import create_beneficiary, create_sector, create_ticket, create_user, principal_for
 
 
-def test_closed_today_counts_done_and_closed_tickets(db_session: Session):
+def test_closed_today_counts_done_tickets(db_session: Session):
     admin_user = create_user(db_session, "refine-admin")
     requester = create_user(db_session, "refine-requester")
     sector = create_sector(db_session, "refine1")
@@ -28,15 +28,15 @@ def test_closed_today_counts_done_and_closed_tickets(db_session: Session):
     )
     done_today.done_at = datetime.now(timezone.utc)
     
-    # 2. Closed today
-    closed_today = create_ticket(
+    # 2. Another done today
+    done_today_2 = create_ticket(
         db_session,
         beneficiary,
         created_by=requester,
         current_sector=sector,
-        status="closed",
+        status="done",
     )
-    closed_today.closed_at = datetime.now(timezone.utc)
+    done_today_2.done_at = datetime.now(timezone.utc)
     
     # 3. Pending (active)
     create_ticket(
@@ -50,11 +50,6 @@ def test_closed_today_counts_done_and_closed_tickets(db_session: Session):
     db_session.flush()
 
     kpis = monitor_service.monitor_global(db_session, admin)["kpis"]
-    
-    # CURRENT BEHAVIOR: closed_today uses _closed_timestamp which currently is:
-    # func.coalesce(Ticket.closed_at, case((Ticket.status == "closed", Ticket.updated_at), else_=None))
-    # It does NOT include "done" status unless closed_at is set.
-    # In my test, done_today has done_at set but status is "done".
     
     assert kpis["closed_today"] == 2
 

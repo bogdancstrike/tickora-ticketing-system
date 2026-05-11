@@ -1,59 +1,31 @@
 import { useMemo, useState } from 'react'
-import { Dropdown, Modal, Form, Input, Button, Select, Space, message } from 'antd'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { Dropdown, Modal, Form, Input, Button, Space, message } from 'antd'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { DownOutlined, SwapOutlined } from '@ant-design/icons'
-import { assignSector, changeTicketStatus, getTicketOptions, type TicketDto } from '@/api/tickets'
+import { changeTicketStatus, type TicketDto } from '@/api/tickets'
 import { useSessionStore } from '@/stores/sessionStore'
 import { StatusTag } from './StatusTag'
 
 interface Transition { to: string; label: string }
 
-// These mirror the backend state_machine.TRANSITIONS exactly. Stay in lockstep
-// with src/ticketing/state_machine.py — adding an option here without an
-// allowed transition there results in a runtime error.
-const STAFF_TRANSITIONS: Record<string, Transition[]> = {
-  pending: [
-    { to: 'in_progress',        label: 'Take ownership' },
-    { to: 'assigned_to_sector', label: 'Route to sector' },
-    { to: 'cancelled',          label: 'Cancel' },
-  ],
-  assigned_to_sector: [
-    { to: 'in_progress', label: 'Take ownership' },
-    { to: 'cancelled',   label: 'Cancel' },
-  ],
-  in_progress: [
-    { to: 'done',               label: 'Mark done' },
-    { to: 'assigned_to_sector', label: 'Unassign · back to sector' },
-  ],
-  reopened: [
-    { to: 'in_progress', label: 'Take ownership' },
-    { to: 'done',        label: 'Mark done' },
-  ],
-  done: [
-    { to: 'closed',   label: 'Close ticket' },
-    { to: 'reopened', label: 'Reopen' },
-  ],
-  closed: [
-    { to: 'reopened', label: 'Reopen' },
-  ],
-}
+const STATUSES: Transition[] = [
+  { to: 'pending', label: 'Pending' },
+  { to: 'assigned_to_sector', label: 'Assigned to sector' },
+  { to: 'in_progress', label: 'In progress' },
+  { to: 'done', label: 'Done' },
+  { to: 'cancelled', label: 'Cancelled' },
+]
 
-// Beneficiaries (the requester / external user) only acknowledge or reopen.
-const REQUESTER_TRANSITIONS: Record<string, Transition[]> = {
-  done:   [{ to: 'closed', label: 'Acknowledge & close' }, { to: 'reopened', label: 'Reopen' }],
-  closed: [{ to: 'reopened', label: 'Reopen' }],
-}
-
-const REQUIRES_REASON = new Set(['cancelled', 'reopened'])
+const REQUIRES_REASON = new Set<string>()
 // Optional but prompted: ask the operator to leave a closing note even though
 // the backend is happy with empty.
-const OPTIONAL_REASON = new Set(['done', 'closed', 'assigned_to_sector'])
+const OPTIONAL_REASON = new Set(['pending', 'assigned_to_sector', 'in_progress', 'done', 'cancelled'])
 
 const REASON_LABELS: Record<string, { label: string; placeholder?: string }> = {
+  pending:            { label: 'Reason (optional)',             placeholder: 'Why is this ticket going back to pending?' },
   done:               { label: 'Resolution (optional)',         placeholder: 'How was this ticket resolved?' },
-  closed:             { label: 'Closing note (optional)',       placeholder: 'Anything to add before closing?' },
   cancelled:          { label: 'Cancellation reason',           placeholder: 'Why is this ticket being cancelled?' },
-  reopened:           { label: 'Reopen reason',                 placeholder: 'Why is this ticket being reopened?' },
+  in_progress:        { label: 'Reason (optional)',             placeholder: 'Why is this ticket moving to in progress?' },
   assigned_to_sector: { label: 'Reason (optional)',             placeholder: 'Why are you releasing this ticket?' },
 }
 
@@ -80,44 +52,28 @@ export function StatusChanger({
 }) {
   const [pending, setPending] = useState<string | null>(null)
   const [step, setStep] = useState<1 | 2>(1)
-  const [form] = Form.useForm<{ reason?: string; sector_code?: string }>()
+  const [form] = Form.useForm<{ reason?: string }>()
   const [msg, holder] = message.useMessage()
   const queryClient = useQueryClient()
   const user = useSessionStore((s) => s.user)
-  const options = useQuery({
-    queryKey: ['ticketOptions'],
-    queryFn: getTicketOptions,
-    staleTime: 300_000,
-  })
-
   const transitions = useMemo<Transition[]>(() => {
     if (!user) return []
     const isAssignee = !!user.id && (
       ticket.assignee_user_id === user.id
       || (ticket.assignee_user_ids || []).includes(user.id)
     )
-    const isRequester = (
-      ticket.created_by_user_id === user.id
-      || (!!user.id && ticket.beneficiary_user_id === user.id)
-      || (ticket.beneficiary_type === 'external' && !!user.email && ticket.requester_email === user.email)
-    )
 
     // Operators must be assigned to drive status. Admin/chief/distributor
     // users can route or assign through explicit assignment actions, but
     // status changes require an assignee link.
-    if (isAssignee) return STAFF_TRANSITIONS[ticket.status] || []
-
-    // Requester / beneficiary path
-    if (isRequester) return REQUESTER_TRANSITIONS[ticket.status] || []
+    if (isAssignee) return STATUSES.filter((s) => s.to !== ticket.status)
 
     return []
   }, [ticket, user])
 
   const change = useMutation({
-    mutationFn: ({ status, reason, sectorCode }: { status: string; reason?: string; sectorCode?: string }) =>
-      status === 'assigned_to_sector' && sectorCode
-        ? assignSector(ticket.id, sectorCode, reason)
-        : changeTicketStatus(ticket.id, status, reason),
+    mutationFn: ({ status, reason }: { status: string; reason?: string }) =>
+      changeTicketStatus(ticket.id, status, reason),
     onSuccess: async () => {
       msg.success('Status changed')
       setPending(null)
@@ -193,29 +149,10 @@ export function StatusChanger({
               const reasonMeta = REASON_LABELS[pending]
               const showField = REQUIRES_REASON.has(pending) || OPTIONAL_REASON.has(pending)
               const required = REQUIRES_REASON.has(pending)
-              const requiresSector = pending === 'assigned_to_sector'
               return (
                 <>
                   <p>You are about to change <code>{ticket.ticket_code}</code> from <b>{ticket.status}</b> to <b>{pending}</b>.</p>
-                  <Form form={form} layout="vertical" initialValues={{ sector_code: ticket.current_sector_code || undefined }}>
-                    {requiresSector && (
-                      <Form.Item
-                        name="sector_code"
-                        label="Target sector"
-                        rules={[{ required: true, message: 'Select the sector that should receive this ticket' }]}
-                      >
-                        <Select
-                          showSearch
-                          optionFilterProp="label"
-                          loading={options.isLoading}
-                          placeholder="Select sector"
-                          options={(options.data?.sectors || []).map((s) => ({
-                            value: s.code,
-                            label: `${s.code} · ${s.name}`,
-                          }))}
-                        />
-                      </Form.Item>
-                    )}
+                  <Form form={form} layout="vertical">
                     {showField && (
                       <Form.Item
                         name="reason"
@@ -229,7 +166,7 @@ export function StatusChanger({
                   <Space style={{ marginTop: 8 }}>
                     <Button onClick={() => { setPending(null); form.resetFields() }}>Cancel</Button>
                     <Button type="primary" onClick={async () => {
-                      if (required || requiresSector) {
+                      if (required) {
                         try { await form.validateFields() } catch { return }
                       }
                       setStep(2)
@@ -247,7 +184,6 @@ export function StatusChanger({
                           onClick={() => change.mutate({
                             status: pending,
                             reason: form.getFieldValue('reason'),
-                            sectorCode: form.getFieldValue('sector_code'),
                           })}>
                     Yes, confirm change
                   </Button>

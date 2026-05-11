@@ -11,17 +11,15 @@ PENDING             = "pending"
 ASSIGNED_TO_SECTOR  = "assigned_to_sector"
 IN_PROGRESS         = "in_progress"
 DONE                = "done"
-CLOSED              = "closed"
-REOPENED            = "reopened"
 CANCELLED           = "cancelled"
 
 ALL_STATUSES = frozenset({
     PENDING, ASSIGNED_TO_SECTOR, IN_PROGRESS,
-    DONE, CLOSED, REOPENED, CANCELLED,
+    DONE, CANCELLED,
 })
 
-ACTIVE_STATUSES = (PENDING, ASSIGNED_TO_SECTOR, IN_PROGRESS, REOPENED)
-DONE_STATUSES = (DONE, CLOSED)
+ACTIVE_STATUSES = (PENDING, ASSIGNED_TO_SECTOR, IN_PROGRESS)
+DONE_STATUSES = (DONE,)
 
 # Actions
 ACTION_ASSIGN_SECTOR    = "assign_sector"
@@ -33,6 +31,7 @@ ACTION_MARK_DONE        = "mark_done"
 ACTION_CLOSE            = "close"
 ACTION_REOPEN           = "reopen"
 ACTION_CANCEL           = "cancel"
+ACTION_CHANGE_STATUS    = "change_status"
 
 
 @dataclass(frozen=True)
@@ -44,15 +43,15 @@ class Transition:
 
 # from_status × action → to_status
 TRANSITIONS: list[Transition] = [
-    Transition(ACTION_ASSIGN_SECTOR,   frozenset({PENDING, ASSIGNED_TO_SECTOR}),                          ASSIGNED_TO_SECTOR),
-    Transition(ACTION_ASSIGN_TO_ME,    frozenset({PENDING, ASSIGNED_TO_SECTOR, REOPENED}),                IN_PROGRESS),
-    Transition(ACTION_ASSIGN_TO_USER,  frozenset({PENDING, ASSIGNED_TO_SECTOR, IN_PROGRESS, REOPENED}),   IN_PROGRESS),
-    Transition(ACTION_REASSIGN,        frozenset({IN_PROGRESS, REOPENED, ASSIGNED_TO_SECTOR}),            IN_PROGRESS),
-    Transition(ACTION_UNASSIGN,        frozenset({IN_PROGRESS, REOPENED, ASSIGNED_TO_SECTOR}),            ASSIGNED_TO_SECTOR),
-    Transition(ACTION_MARK_DONE,       frozenset({IN_PROGRESS, REOPENED}),                                DONE),
-    Transition(ACTION_CLOSE,           frozenset({DONE}),                                                 CLOSED),
-    Transition(ACTION_REOPEN,          frozenset({DONE, CLOSED}),                                         REOPENED),
-    Transition(ACTION_CANCEL,          frozenset({PENDING, ASSIGNED_TO_SECTOR}),                          CANCELLED),
+    Transition(ACTION_ASSIGN_SECTOR,   ALL_STATUSES, ASSIGNED_TO_SECTOR),
+    Transition(ACTION_ASSIGN_TO_ME,    ALL_STATUSES, IN_PROGRESS),
+    Transition(ACTION_ASSIGN_TO_USER,  ALL_STATUSES, IN_PROGRESS),
+    Transition(ACTION_REASSIGN,        ALL_STATUSES, IN_PROGRESS),
+    Transition(ACTION_UNASSIGN,        ALL_STATUSES, ASSIGNED_TO_SECTOR),
+    Transition(ACTION_MARK_DONE,       ALL_STATUSES, DONE),
+    Transition(ACTION_CLOSE,           ALL_STATUSES, DONE),
+    Transition(ACTION_REOPEN,          ALL_STATUSES, IN_PROGRESS),
+    Transition(ACTION_CANCEL,          ALL_STATUSES, CANCELLED),
 ]
 
 _BY_ACTION: dict[str, Transition] = {t.action: t for t in TRANSITIONS}

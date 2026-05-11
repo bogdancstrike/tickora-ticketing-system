@@ -8,9 +8,7 @@ const STATUS_LANES = [
   'pending',
   'assigned_to_sector',
   'in_progress',
-  'reopened',
   'done',
-  'closed',
   'cancelled',
 ] as const
 
@@ -18,9 +16,7 @@ const STATUS_COLORS: Record<string, string> = {
   pending: '#8c8c8c',
   assigned_to_sector: '#1677ff',
   in_progress: '#2f54eb',
-  reopened: '#722ed1',
   done: '#52c41a',
-  closed: '#13a8a8',
   cancelled: '#cf1322',
 }
 
@@ -39,9 +35,9 @@ function deriveStatus(e: AuditEventDto): string | null {
   if (m) {
     const a = m[1].toLowerCase()
     if (a === 'marked_done') return 'done'
-    if (a === 'closed') return 'closed'
+    if (a === 'closed') return 'done'
     if (a === 'cancelled') return 'cancelled'
-    if (a === 'reopened') return 'reopened'
+    if (a === 'reopened') return 'in_progress'
     if (a === 'assigned_to_sector' || a === 'reassigned_to_sector') return 'assigned_to_sector'
     if (a === 'assigned_to_user' || a === 'reassigned' || a === 'assigned_to_me') return 'in_progress'
     if (a === 'unassigned') return 'assigned_to_sector'

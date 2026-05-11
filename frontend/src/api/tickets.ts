@@ -454,16 +454,6 @@ export const changePriority = async (ticketId: string, priority: string, reason?
   return data
 }
 
-export const closeTicket = async (ticketId: string): Promise<TicketDto> => {
-  const { data } = await apiClient.post(`/api/tickets/${ticketId}/close`)
-  return data
-}
-
-export const reopenTicket = async (ticketId: string, reason: string): Promise<TicketDto> => {
-  const { data } = await apiClient.post(`/api/tickets/${ticketId}/reopen`, { reason })
-  return data
-}
-
 export const cancelTicket = async (ticketId: string, reason: string): Promise<TicketDto> => {
   const { data } = await apiClient.post(`/api/tickets/${ticketId}/cancel`, { reason })
   return data

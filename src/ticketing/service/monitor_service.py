@@ -377,7 +377,7 @@ def monitor_personal(db: Session, principal: Principal, user_id: str) -> dict[st
                 (Ticket.created_by_user_id == user_id) & Ticket.status.in_(ACTIVE_STATUSES), 1
             ), else_=0)),
             func.sum(case((
-                (Ticket.created_by_user_id == user_id) & (Ticket.status == "closed"), 1
+                (Ticket.created_by_user_id == user_id) & (Ticket.status == "done"), 1
             ), else_=0)),
             func.sum(case((
                 (
@@ -400,7 +400,7 @@ def monitor_personal(db: Session, principal: Principal, user_id: str) -> dict[st
     req_stmt = (
         select(
             func.sum(case((Ticket.status.in_(ACTIVE_STATUSES), 1), else_=0)),
-            func.sum(case((Ticket.status == "closed", 1), else_=0)),
+            func.sum(case((Ticket.status == "done", 1), else_=0)),
             func.sum(case((Ticket.status == "done", 1), else_=0)),
             func.sum(case((Ticket.reopened_count > 0, 1), else_=0)),
         )
@@ -471,7 +471,7 @@ def _closed_timestamp():
     return func.coalesce(
         Ticket.done_at,
         Ticket.closed_at,
-        case((Ticket.status == "closed", Ticket.updated_at), else_=None),
+        case((Ticket.status == "done", Ticket.updated_at), else_=None),
     ).label("closed_timestamp")
 
 
@@ -747,7 +747,7 @@ def _stale_tickets(db: Session, principal: Principal, *, sector_id: str | None =
 def _bottleneck_analysis(db: Session, sector_id: str | None = None, days: int = 30) -> list[dict[str, Any]]:
     """Analyzes status transition history to identify stages where tickets linger longest.
 
-    Calculates average time spent in each status for recently closed tickets.
+    Calculates average time spent in each status for recently done tickets.
 
     Args:
         db: Database session.
@@ -778,8 +778,8 @@ def _bottleneck_analysis(db: Session, sector_id: str | None = None, days: int = 
             duration_sec.label("duration")
         )
         .join(t, t.c.id == h.c.ticket_id)
-        .where(t.c.status == "closed")
-        .where(t.c.closed_at >= threshold)
+        .where(t.c.status == "done")
+        .where(func.coalesce(t.c.done_at, t.c.updated_at) >= threshold)
         .where(t.c.is_deleted.is_(False))
     )
 

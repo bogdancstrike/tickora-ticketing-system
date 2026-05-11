@@ -36,13 +36,13 @@ def test_stale_tickets_metrics(db_session: Session):
     db_session.add(c3)
     
     # 4. IS stale: created long ago, last comment is also old
-    t4 = create_ticket(db_session, beneficiary, created_by=requester, current_sector=sector, status="reopened")
+    t4 = create_ticket(db_session, beneficiary, created_by=requester, current_sector=sector, status="in_progress")
     t4.created_at = now - timedelta(hours=72)
     c4 = TicketComment(ticket_id=t4.id, author_user_id=admin_user.id, visibility="private", body="old", created_at=now - timedelta(hours=48))
     db_session.add(c4)
     
-    # 5. NOT stale: closed, even if old
-    t5 = create_ticket(db_session, beneficiary, created_by=requester, current_sector=sector, status="closed")
+    # 5. NOT stale: done, even if old
+    t5 = create_ticket(db_session, beneficiary, created_by=requester, current_sector=sector, status="done")
     t5.created_at = now - timedelta(hours=48)
     
     db_session.flush()

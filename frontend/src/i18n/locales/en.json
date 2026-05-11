@@ -69,8 +69,6 @@
     "assigned_to_sector": "Assigned to sector",
     "in_progress":        "In progress",
     "done":               "Done",
-    "closed":             "Closed",
-    "reopened":           "Reopened",
     "cancelled":          "Cancelled"
   },
   "priority": {
@@ -133,8 +131,7 @@
       "updated": "Updated",
       "assigned": "Assigned",
       "first_response": "First response",
-      "done": "Done",
-      "closed": "Closed"
+      "done": "Done"
     },
     "comments": {
       "post": "Post",
