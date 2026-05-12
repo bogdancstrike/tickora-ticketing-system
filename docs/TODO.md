@@ -36,3 +36,7 @@ I fixed a substantial first wave of the security gaps, but I’m blocked from fi
 
   Also note: there are staged deletions I did not create or touch: docs/TODO.md, docs/brd.md, docs/
   implementation_plan.md.
+
+---
+
+sse_ticket in redis holds the jwt (unsecure)
