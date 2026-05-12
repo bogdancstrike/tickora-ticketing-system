@@ -2,6 +2,8 @@
 from flask import request as flask_request
 from pydantic import BaseModel, ConfigDict, Field, ValidationError as PydValidationError
 
+from src.config import Config
+from src.common import rate_limiter
 from src.common.db import get_db
 from src.common.errors import ValidationError
 from src.iam.decorators import require_authenticated
@@ -49,6 +51,12 @@ def list_comments(app, operation, request, *, principal: Principal, **kwargs):
 
 @require_authenticated
 def create_comment(app, operation, request, *, principal: Principal, **kwargs):
+    rate_limiter.check(
+        bucket="comments",
+        identity=principal.user_id or "anon",
+        limit=Config.RATE_LIMIT_COMMENTS_PER_MIN,
+        window_s=60,
+    )
     body = _parse(_CreateCommentIn, _payload())
     with get_db() as db:
         comment = comment_service.create(

@@ -42,6 +42,11 @@ def stub_object_storage(monkeypatch):
         lambda bucket, key, **kw: f"https://stub.example/{bucket}/{key}",
     )
     monkeypatch.setattr(object_storage, "object_exists", lambda bucket, key: True)
+    monkeypatch.setattr(
+        object_storage,
+        "object_info",
+        lambda bucket, key: {"ContentLength": 200 if "report" in key else 10},
+    )
 
 
 @pytest.fixture
@@ -159,6 +164,18 @@ class TestRegister:
         assert att.id is not None
         assert att.comment_id == world["public_comment"].id
 
+    def test_register_rejects_declared_size_mismatch(self, db_session, world, monkeypatch):
+        from src.common import object_storage
+        monkeypatch.setattr(object_storage, "object_info", lambda b, k: {"ContentLength": 999})
+        key = self._upload(db_session, world)
+
+        with pytest.raises(ValidationError, match="size does not match"):
+            attachment_service.register(
+                db_session, world["principals"]["assignee"], world["ticket"].id,
+                storage_key=key, file_name="report.pdf",
+                size_bytes=200, comment_id=world["public_comment"].id,
+            )
+
     def test_register_rejects_foreign_storage_key(self, db_session, world):
         with pytest.raises(ValidationError, match="not valid for this ticket"):
             attachment_service.register(
@@ -170,13 +187,37 @@ class TestRegister:
 
     def test_register_rejects_missing_object(self, db_session, world, monkeypatch):
         from src.common import object_storage
-        monkeypatch.setattr(object_storage, "object_exists", lambda b, k: False)
+        monkeypatch.setattr(object_storage, "object_info", lambda b, k: None)
         key = self._upload(db_session, world)
         with pytest.raises(ValidationError, match="not found"):
             attachment_service.register(
                 db_session, world["principals"]["assignee"], world["ticket"].id,
                 storage_key=key, file_name="x.pdf",
                 size_bytes=10, comment_id=world["public_comment"].id,
+            )
+
+    def test_beneficiary_cannot_attach_to_private_comment(self, db_session, world):
+        key = attachment_service.request_upload_url(
+            db_session, world["principals"]["beneficiary"], world["ticket"].id,
+            file_name="private.pdf", content_type=None, size_bytes=10,
+        )["storage_key"]
+
+        with pytest.raises(PermissionDeniedError):
+            attachment_service.register(
+                db_session, world["principals"]["beneficiary"], world["ticket"].id,
+                storage_key=key, file_name="private.pdf",
+                size_bytes=10, comment_id=world["private_comment"].id,
+            )
+
+    def test_register_rejects_deleted_comment(self, db_session, world):
+        world["public_comment"].is_deleted = True
+        key = self._upload(db_session, world)
+
+        with pytest.raises(ValidationError, match="invalid comment_id"):
+            attachment_service.register(
+                db_session, world["principals"]["assignee"], world["ticket"].id,
+                storage_key=key, file_name="report.pdf",
+                size_bytes=200, comment_id=world["public_comment"].id,
             )
 
     def test_register_rejects_wrong_ticket_comment(self, db_session, world):

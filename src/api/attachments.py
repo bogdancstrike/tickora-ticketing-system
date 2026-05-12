@@ -2,6 +2,8 @@
 from flask import redirect, request as flask_request
 from pydantic import BaseModel, ConfigDict, Field, ValidationError as PydValidationError
 
+from src.config import Config
+from src.common import rate_limiter
 from src.common.db import get_db
 from src.common.errors import ValidationError
 from src.iam.decorators import require_authenticated
@@ -48,6 +50,12 @@ def _parse(model_cls, raw: dict):
 
 @require_authenticated
 def request_upload_url(app, operation, request, *, principal: Principal, **kwargs):
+    rate_limiter.check(
+        bucket="attachments",
+        identity=principal.user_id or "anon",
+        limit=Config.RATE_LIMIT_ATTACHMENTS_PER_MIN,
+        window_s=60,
+    )
     body = _parse(_UploadUrlIn, _payload())
     with get_db() as db:
         out = attachment_service.request_upload_url(
@@ -63,6 +71,12 @@ def request_upload_url(app, operation, request, *, principal: Principal, **kwarg
 
 @require_authenticated
 def register_attachment(app, operation, request, *, principal: Principal, **kwargs):
+    rate_limiter.check(
+        bucket="attachments",
+        identity=principal.user_id or "anon",
+        limit=Config.RATE_LIMIT_ATTACHMENTS_PER_MIN,
+        window_s=60,
+    )
     body = _parse(_RegisterIn, _payload())
     with get_db() as db:
         attachment = attachment_service.register(

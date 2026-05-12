@@ -179,13 +179,16 @@ def update_user(db: Session, principal: Principal, user_id: str, payload: dict[s
     old = _serialize_user(user, _memberships_by_user(db, [user.id]).get(user.id, []), _keycloak_roles(user.keycloak_subject))
 
     if "is_active" in payload:
-        user.is_active = bool(payload["is_active"])
-        _try_keycloak(lambda kc: kc.set_user_enabled(user.keycloak_subject, user.is_active), "set_user_enabled")
+        new_active = bool(payload["is_active"])
+        _run_keycloak(lambda kc: kc.set_user_enabled(user.keycloak_subject, new_active), "set_user_enabled")
+        user.is_active = new_active
     for field in ("user_type", "first_name", "last_name", "email", "username"):
         if field in payload and payload[field] is not None:
             setattr(user, field, str(payload[field]).strip())
 
     if "roles" in payload:
+        if not principal.has_root_group:
+            raise PermissionDeniedError("root /tickora group required to manage realm roles")
         _set_realm_roles(user.keycloak_subject, payload["roles"])
 
     db.flush()
@@ -741,17 +744,32 @@ def _keycloak_roles(subject: str) -> list[str]:
     return sorted(set(roles))
 
 
+def _keycloak_roles_strict(subject: str) -> list[str]:
+    roles: list[str] = []
+
+    def run(kc: KeycloakAdminClient) -> None:
+        nonlocal roles
+        roles = [r.get("name") for r in kc.get_user_realm_roles(subject) if r.get("name") in ADMIN_ROLES]
+
+    _run_keycloak(run, "get_user_realm_roles")
+    return sorted(set(roles))
+
+
 def _set_realm_roles(subject: str, roles: Any) -> None:
     if not isinstance(roles, list):
         raise ValidationError("roles must be a list")
-    desired = {str(r) for r in roles if str(r) in ADMIN_ROLES}
-    current = set(_keycloak_roles(subject))
+    requested = {str(r) for r in roles}
+    invalid = requested - ADMIN_ROLES
+    if invalid:
+        raise ValidationError("unknown realm role", details={"roles": sorted(invalid)})
+    desired = requested
+    current = set(_keycloak_roles_strict(subject))
     for role in desired - current:
-        _try_keycloak(lambda kc, role=role: kc.assign_realm_role(subject, role), "assign_realm_role")
+        _run_keycloak(lambda kc, role=role: kc.assign_realm_role(subject, role), "assign_realm_role")
     for role in current - desired:
         if role == ROLE_ADMIN:
             continue
-        _try_keycloak(lambda kc, role=role: kc.remove_realm_role(subject, role), "remove_realm_role")
+        _run_keycloak(lambda kc, role=role: kc.remove_realm_role(subject, role), "remove_realm_role")
 
 
 def _sync_keycloak_membership(subject: str, sector_code: str, role: str, *, add: bool) -> None:
@@ -796,6 +814,17 @@ def _try_keycloak(fn, operation: str) -> None:
         fn(KeycloakAdminClient.get())
     except Exception as exc:
         logger.warning("keycloak admin operation failed", extra={"operation": operation, "error": str(exc)})
+
+
+def _run_keycloak(fn, operation: str) -> None:
+    try:
+        fn(KeycloakAdminClient.get())
+    except Exception as exc:
+        logger.warning("keycloak admin operation failed", extra={"operation": operation, "error": str(exc)})
+        raise BusinessRuleError(
+            f"keycloak admin operation failed: {operation}",
+            details={"operation": operation},
+        ) from exc
 
 
 def _validate_membership_role(role: str) -> str:

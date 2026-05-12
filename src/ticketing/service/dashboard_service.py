@@ -245,8 +245,11 @@ def upsert_widget(db: Session, p: Principal, dashboard_id: str, payload: dict[st
 def delete_widget(db: Session, p: Principal, dashboard_id: str, widget_id: str) -> None:
     """Remove a specific widget from a dashboard."""
     _check_dashboard_access(p)
+    d = db.get(CustomDashboard, dashboard_id)
+    if d is None or d.owner_user_id != p.user_id:
+        raise NotFoundError("dashboard not found")
     w = db.get(DashboardWidget, widget_id)
-    if w is None or w.dashboard_id != dashboard_id:
+    if w is None or w.dashboard_id != d.id:
         raise NotFoundError("widget not found")
     db.delete(w)
     db.flush()

@@ -5,20 +5,33 @@ from src.ticketing import state_machine as sm
 
 
 class TestTargetStatus:
-    @pytest.mark.parametrize("action,expected", [
-        (sm.ACTION_ASSIGN_SECTOR,   sm.ASSIGNED_TO_SECTOR),
-        (sm.ACTION_ASSIGN_TO_ME,    sm.IN_PROGRESS),
-        (sm.ACTION_ASSIGN_TO_USER,  sm.IN_PROGRESS),
-        (sm.ACTION_REASSIGN,        sm.IN_PROGRESS),
-        (sm.ACTION_UNASSIGN,        sm.ASSIGNED_TO_SECTOR),
-        (sm.ACTION_MARK_DONE,       sm.DONE),
-        (sm.ACTION_CLOSE,           sm.DONE),
-        (sm.ACTION_REOPEN,          sm.IN_PROGRESS),
-        (sm.ACTION_CANCEL,          sm.CANCELLED),
+    @pytest.mark.parametrize("action,from_status,expected", [
+        (sm.ACTION_ASSIGN_SECTOR,   sm.PENDING,            sm.ASSIGNED_TO_SECTOR),
+        (sm.ACTION_ASSIGN_SECTOR,   sm.IN_PROGRESS,        sm.ASSIGNED_TO_SECTOR),
+        (sm.ACTION_ASSIGN_SECTOR,   sm.DONE,               None),
+        (sm.ACTION_ASSIGN_TO_ME,    sm.PENDING,            sm.IN_PROGRESS),
+        (sm.ACTION_ASSIGN_TO_ME,    sm.ASSIGNED_TO_SECTOR, sm.IN_PROGRESS),
+        (sm.ACTION_ASSIGN_TO_ME,    sm.DONE,               None),
+        (sm.ACTION_ASSIGN_TO_USER,  sm.PENDING,            sm.IN_PROGRESS),
+        (sm.ACTION_ASSIGN_TO_USER,  sm.IN_PROGRESS,        sm.IN_PROGRESS),
+        (sm.ACTION_ASSIGN_TO_USER,  sm.CANCELLED,          None),
+        (sm.ACTION_REASSIGN,        sm.ASSIGNED_TO_SECTOR, sm.IN_PROGRESS),
+        (sm.ACTION_REASSIGN,        sm.IN_PROGRESS,        sm.IN_PROGRESS),
+        (sm.ACTION_UNASSIGN,        sm.IN_PROGRESS,        sm.ASSIGNED_TO_SECTOR),
+        (sm.ACTION_UNASSIGN,        sm.PENDING,            None),
+        (sm.ACTION_MARK_DONE,       sm.IN_PROGRESS,        sm.DONE),
+        (sm.ACTION_MARK_DONE,       sm.ASSIGNED_TO_SECTOR, None),
+        (sm.ACTION_CLOSE,           sm.IN_PROGRESS,        sm.DONE),
+        (sm.ACTION_CLOSE,           sm.PENDING,            None),
+        (sm.ACTION_REOPEN,          sm.DONE,               sm.IN_PROGRESS),
+        (sm.ACTION_REOPEN,          sm.CANCELLED,          sm.IN_PROGRESS),
+        (sm.ACTION_REOPEN,          sm.PENDING,            None),
+        (sm.ACTION_CANCEL,          sm.PENDING,            sm.CANCELLED),
+        (sm.ACTION_CANCEL,          sm.IN_PROGRESS,        sm.CANCELLED),
+        (sm.ACTION_CANCEL,          sm.DONE,               None),
     ])
-    def test_actions_are_valid_from_every_status(self, action, expected):
-        for from_status in sm.ALL_STATUSES:
-            assert sm.target_status(action, from_status) == expected
+    def test_target_status_matrix(self, action, from_status, expected):
+        assert sm.target_status(action, from_status) == expected
 
     def test_unknown_action(self):
         assert sm.target_status("frobnicate", sm.PENDING) is None

@@ -1,5 +1,7 @@
 from sqlalchemy.orm import Session
+import pytest
 
+from src.common.errors import NotFoundError
 from src.iam.principal import ROLE_ADMIN, SectorMembership
 from src.ticketing.service import attachment_service, audit_service, comment_service
 
@@ -40,7 +42,9 @@ def test_private_comments_are_hidden_from_beneficiary(db_session: Session):
 
 def test_attachment_visibility_and_audit(monkeypatch, db_session: Session):
     ticket, beneficiary, member = _ticket_context(db_session)
-    monkeypatch.setattr(attachment_service.object_storage, "object_exists", lambda bucket, key: True)
+    monkeypatch.setattr(attachment_service.object_storage, "object_info", lambda bucket, key: {"ContentLength": 100})
+    public_comment = comment_service.create(db_session, member, ticket.id, body="public update", visibility="public")
+    private_comment = comment_service.create(db_session, member, ticket.id, body="private sector note", visibility="private")
 
     private_attachment = attachment_service.register(
         db_session,
@@ -50,7 +54,7 @@ def test_attachment_visibility_and_audit(monkeypatch, db_session: Session):
         file_name="private.txt",
         size_bytes=100,
         content_type="text/plain",
-        visibility="private",
+        comment_id=private_comment.id,
     )
     public_attachment = attachment_service.register(
         db_session,
@@ -60,7 +64,7 @@ def test_attachment_visibility_and_audit(monkeypatch, db_session: Session):
         file_name="public.txt",
         size_bytes=100,
         content_type="text/plain",
-        visibility="public",
+        comment_id=public_comment.id,
     )
     db_session.commit()
 
@@ -81,3 +85,15 @@ def test_global_audit_requires_admin(db_session: Session):
     events = audit_service.list_(db_session, admin, ticket_id=ticket.id)
 
     assert any(e.action == "COMMENT_CREATED" for e in events)
+
+
+def test_ticket_audit_requires_staff_audit_visibility(db_session: Session):
+    ticket, beneficiary, member = _ticket_context(db_session)
+    comment_service.create(db_session, member, ticket.id, body="audit me", visibility="public")
+    db_session.commit()
+
+    with pytest.raises(NotFoundError):
+        audit_service.get_for_ticket(db_session, beneficiary, ticket.id)
+
+    events = audit_service.get_for_ticket(db_session, member, ticket.id)
+    assert events

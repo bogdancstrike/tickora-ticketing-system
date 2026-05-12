@@ -4,6 +4,7 @@ from src.iam.models import User
 from src.iam.principal import ROLE_ADMIN, ROLE_DISTRIBUTOR
 from src.iam import service as iam_service
 from src.iam import token_verifier
+from src.common.errors import AuthenticationError
 
 
 class FakeRedis:
@@ -48,6 +49,7 @@ def test_principal_from_claims_uses_redis_until_token_expiry(monkeypatch):
 
     monkeypatch.setattr(iam_service, "get_redis", lambda: redis)
     monkeypatch.setattr(iam_service, "get_or_create_user_from_claims", fake_get_or_create)
+    monkeypatch.setattr(iam_service, "_assert_user_active", lambda user_id: None)
 
     claims = {
         "sub": "kc-sub-1",
@@ -65,6 +67,34 @@ def test_principal_from_claims_uses_redis_until_token_expiry(monkeypatch):
     assert second.is_distributor
     assert second.is_member_of("s10")
     assert next(iter(redis.ttls.values())) <= 120
+
+
+def test_principal_from_claims_rejects_inactive_local_user(monkeypatch):
+    monkeypatch.setattr(iam_service, "get_redis", lambda: None)
+    monkeypatch.setattr(iam_service, "get_or_create_user_from_claims", lambda claims: User(
+        id="user-1",
+        keycloak_subject=claims["sub"],
+        username="alice",
+        email="alice@example.test",
+        first_name="Alice",
+        last_name="User",
+        user_type="internal",
+        is_active=False,
+    ))
+
+    claims = {
+        "sub": "kc-sub-disabled",
+        "exp": int(time.time()) + 120,
+        "realm_access": {"roles": []},
+        "groups": [],
+    }
+
+    try:
+        iam_service.principal_from_claims(claims)
+    except AuthenticationError as exc:
+        assert "disabled" in exc.message
+    else:
+        raise AssertionError("inactive local users must not hydrate a principal")
 
 
 def _principal_from_groups(monkeypatch, groups, roles=()):

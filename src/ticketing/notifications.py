@@ -197,6 +197,11 @@ def notify_comment(payload: Dict[str, Any]):
             include_requester=visibility == "public",
             include_assignees=True,
         )
+        if visibility == "private":
+            recipients = {
+                uid for uid in recipients
+                if _user_can_see_private_comments(db, uid, ticket)
+            }
         recipients.discard(actor_user_id)
 
         for uid in recipients:
@@ -403,10 +408,9 @@ def _participant_recipient_ids(
 ) -> set[str]:
     """Collect notification recipients for a ticket event.
 
-    Watchers (Phase 7) are folded in by default — they opted in to
-    follow the ticket and shouldn't have to be assigned to receive
-    updates. Visibility is still enforced when the recipient eventually
-    reads the comment, so this isn't a leak.
+    Watchers are folded in by default. Private-comment callers must filter the
+    resulting set through `_user_can_see_private_comments` before sending, so
+    the notification itself does not leak private activity.
     """
     recipients: set[str] = set()
     if include_requester:
@@ -417,6 +421,43 @@ def _participant_recipient_ids(
         from src.ticketing.service.watcher_service import watcher_user_ids
         recipients.update(watcher_user_ids(db, ticket.id))
     return recipients
+
+
+def _user_can_see_private_comments(db: Session, user_id: str, ticket: Ticket) -> bool:
+    from src.iam import rbac as _rbac
+    from src.iam.principal import Principal as _Principal
+    from src.iam.principal import SectorMembership as _SectorMembership
+    from src.iam.principal import ROLE_INTERNAL_USER as _ROLE_INTERNAL_USER
+
+    user = db.get(IAMUser, user_id)
+    if user is None or not user.is_active:
+        return False
+    sector_code = None
+    if ticket.current_sector_id:
+        sector_code = db.scalar(select(Sector.code).where(Sector.id == ticket.current_sector_id))
+    setattr(ticket, "current_sector_code", sector_code)
+    setattr(ticket, "sector_codes", [sector_code] if sector_code else [])
+    memberships = tuple(
+        _SectorMembership(sector_code=sc, role=role)
+        for (sc, role) in db.execute(
+            select(Sector.code, SectorMembership.membership_role)
+            .join(Sector, Sector.id == SectorMembership.sector_id)
+            .where(
+                SectorMembership.user_id == user.id,
+                SectorMembership.is_active.is_(True),
+            )
+        ).all()
+    )
+    principal = _Principal(
+        user_id=user.id,
+        keycloak_subject=user.keycloak_subject or "",
+        username=user.username,
+        email=user.email,
+        user_type=user.user_type,
+        global_roles=frozenset({_ROLE_INTERNAL_USER}),
+        sector_memberships=memberships,
+    )
+    return _rbac.can_see_private_comments(principal, ticket)
 
 
 def _requester_user_ids(db: Session, ticket: Ticket) -> set[str]:

@@ -7,6 +7,7 @@ from typing import Any
 from sqlalchemy import select
 
 from src.common.db import get_db
+from src.common.errors import AuthenticationError
 from src.common.redis_client import get_redis
 from src.iam.models import User
 from src.iam.principal import (
@@ -39,6 +40,7 @@ def _sector_membership_from_parts(parts: list[str]) -> list[SectorMembership]:
     if len(parts) == 1 and parts[0]:
         code = _normalize_sector_code(parts[0])
         return [
+            SectorMembership(sector_code=code, role="member"),
             SectorMembership(sector_code=code, role="chief"),
         ]
     if len(parts) != 2:
@@ -232,6 +234,13 @@ def _principal_from_cache(raw: str) -> Principal:
     )
 
 
+def _assert_user_active(user_id: str) -> None:
+    with get_db() as db:
+        is_active = db.scalar(select(User.is_active).where(User.id == user_id))
+    if is_active is False:
+        raise AuthenticationError("user account is disabled")
+
+
 def get_or_create_user_from_claims(claims: dict[str, Any]) -> User:
     """
     Upsert a `users` row keyed on `keycloak_subject`.
@@ -274,6 +283,8 @@ def get_or_create_user_from_claims(claims: dict[str, Any]) -> User:
             user.first_name = claims.get("given_name")         or user.first_name
             user.last_name  = claims.get("family_name")        or user.last_name
             user.user_type  = _user_type_from_claims(claims)
+            if not user.is_active:
+                raise AuthenticationError("user account is disabled")
         db.flush()
         # Detach a lightweight copy
         return User(
@@ -311,11 +322,15 @@ def principal_from_claims(claims: dict[str, Any]) -> Principal:
         if rds is not None:
             cached = rds.get(cache_key)
             if cached and _seconds_until_expiry(claims) > 0:
-                return _principal_from_cache(cached)
+                principal = _principal_from_cache(cached)
+                _assert_user_active(principal.user_id)
+                return principal
     except Exception:
         pass
 
     user = get_or_create_user_from_claims(claims)
+    if not user.is_active:
+        raise AuthenticationError("user account is disabled")
     groups = _groups_for_claims(claims)
     realm_roles = _effective_roles_from_claims(claims, groups)
     memberships = _dedupe_memberships(_parse_sector_groups(groups))

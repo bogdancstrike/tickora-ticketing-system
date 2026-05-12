@@ -84,8 +84,14 @@ def register(
         raise PermissionDeniedError("not allowed to register attachments")
     
     comment = db.get(TicketComment, comment_id)
-    if comment is None or comment.ticket_id != ticket.id:
+    if comment is None or comment.ticket_id != ticket.id or comment.is_deleted:
         raise ValidationError("invalid comment_id")
+    if comment.visibility == "private":
+        if not rbac.can_post_private_comment(principal, ticket):
+            raise PermissionDeniedError("not allowed to attach to private comments")
+    else:
+        if not rbac.can_post_public_comment(principal, ticket):
+            raise PermissionDeniedError("not allowed to attach to this comment")
 
     file_name = _safe_filename(file_name)
     if size_bytes <= 0:
@@ -94,8 +100,15 @@ def register(
         raise ValidationError("attachment too large")
     if not storage_key.startswith(f"tickets/{ticket.id}/"):
         raise ValidationError("storage_key is not valid for this ticket")
-    if not object_storage.object_exists(Config.S3_BUCKET_ATTACHMENTS, storage_key):
+    info = object_storage.object_info(Config.S3_BUCKET_ATTACHMENTS, storage_key)
+    if info is None:
         raise ValidationError("uploaded object was not found")
+    actual_size = info.get("ContentLength")
+    if actual_size is not None and int(actual_size) != size_bytes:
+        raise ValidationError("uploaded object size does not match declared size")
+    actual_content_type = info.get("ContentType")
+    if content_type and actual_content_type and actual_content_type.split(";", 1)[0] != content_type:
+        raise ValidationError("uploaded object content type does not match declared content type")
 
     attachment = TicketAttachment(
         ticket_id=ticket.id,

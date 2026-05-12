@@ -180,10 +180,7 @@ def get_for_ticket(db: Session, principal: Principal, ticket_id: str, *, limit: 
                 "per-ticket audit requires a ticket resolver "
                 "(audit.service.set_ticket_resolver) or global audit role"
             )
-        if not (
-            (ticket.current_sector_code and rbac.can_view_sector_audit(principal, ticket.current_sector_code))
-            or rbac.can_view_ticket(principal, ticket)
-        ):
+        if not rbac.can_view_audit_tab(principal, ticket):
             raise NotFoundError("ticket not found")
         ticket_obj_id = ticket.id
 

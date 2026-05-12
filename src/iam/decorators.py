@@ -27,6 +27,8 @@ def _extract_bearer() -> str:
     # Uses a short-lived one-time ticket from Redis.
     ticket = flask_request.args.get("sse_ticket")
     if ticket:
+        if not flask_request.path.rstrip("/").endswith("/api/notifications/stream"):
+            raise AuthenticationError("sse_ticket is only valid for notification streams")
         from src.common.redis_client import get_redis
         redis = get_redis()
         if redis:

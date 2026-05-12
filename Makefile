@@ -16,7 +16,8 @@ worker:
 	ROLE=worker $(PYTHON) worker.py
 
 sla-checker:
-	ROLE=sla_checker $(PYTHON) sla_checker.py
+	@echo "SLA checker was removed with the SLA subsystem; this target is intentionally disabled."
+	@exit 1
 
 # ── Infrastructure ───────────────────────────────────────────────────────────
 infra:

@@ -89,6 +89,20 @@ class TestOwnerOnlyAccess:
                 db_session, world["other"], d["id"], {"title": "hijacked"},
             )
 
+    def test_other_user_cannot_delete_widget_by_guessing_ids(self, db_session, world):
+        d = dashboard_service.create_dashboard(
+            db_session, world["owner"], {"title": "private"},
+        )
+        w = dashboard_service.upsert_widget(
+            db_session, world["owner"], d["id"], {"type": "ticket_list"},
+        )
+
+        with pytest.raises(NotFoundError):
+            dashboard_service.delete_widget(db_session, world["other"], d["id"], w["id"])
+
+        full = dashboard_service.get_dashboard(db_session, world["owner"], d["id"])
+        assert [widget["id"] for widget in full["widgets"]] == [w["id"]]
+
     def test_admin_is_not_implicitly_authorised(self, db_session, world):
         # Admins manage *the catalogue*, not other users' personal dashboards.
         d = dashboard_service.create_dashboard(

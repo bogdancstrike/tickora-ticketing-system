@@ -538,7 +538,7 @@ export const setTicketMetadata = async (
 }
 
 export const deleteTicketMetadata = async (ticketId: string, key: string): Promise<void> => {
-  await apiClient.delete(`/api/tickets/${ticketId}/metadata/${key}`)
+  await apiClient.delete(`/api/tickets/${ticketId}/metadata`, { params: { key } })
 }
 
 export interface AttachmentDto {

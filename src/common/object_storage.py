@@ -48,11 +48,14 @@ def ensure_bucket(bucket: str) -> None:
 
 
 def object_exists(bucket: str, key: str) -> bool:
+    return object_info(bucket, key) is not None
+
+
+def object_info(bucket: str, key: str) -> dict | None:
     try:
-        get_s3_client().head_object(Bucket=bucket, Key=key)
-        return True
+        return get_s3_client().head_object(Bucket=bucket, Key=key)
     except ClientError:
-        return False
+        return None
 
 
 def presigned_put_url(bucket: str, key: str, *, content_type: str | None, expires: int) -> str:

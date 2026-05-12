@@ -21,7 +21,7 @@ import json
 from datetime import datetime, timezone
 from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
 from src.common.errors import (
@@ -32,7 +32,8 @@ from src.common.errors import (
 )
 from src.iam import rbac
 from src.iam.models import User
-from src.iam.principal import Principal
+from src.iam.keycloak_admin import KeycloakAdminClient
+from src.iam.principal import Principal, ROLE_AVIZATOR
 from src.audit import events as audit_events
 from src.audit import service as audit_service
 from src.ticketing.models import Ticket, TicketComment, TicketEndorsement
@@ -72,6 +73,8 @@ def request(
         target = db.get(User, assigned_to_user_id)
         if target is None or not target.is_active:
             raise ValidationError("assigned_to_user_id is unknown or inactive")
+        if not _user_has_avizator_role(target):
+            raise ValidationError("assigned_to_user_id must reference an avizator")
 
     row = TicketEndorsement(
         ticket_id=ticket.id,
@@ -187,8 +190,21 @@ def claim(
         )
         raise PermissionDeniedError("not allowed to claim this endorsement")
 
-    row.assigned_to_user_id = principal.user_id
-    db.flush()
+    res = db.execute(
+        update(TicketEndorsement)
+        .where(
+            TicketEndorsement.id == endorsement_id,
+            TicketEndorsement.status == "pending",
+            TicketEndorsement.assigned_to_user_id.is_(None),
+        )
+        .values(assigned_to_user_id=principal.user_id)
+        .returning(TicketEndorsement.id)
+    )
+    if res.first() is None:
+        raise BusinessRuleError("endorsement is already assigned or no longer pending")
+    row = db.get(TicketEndorsement, endorsement_id)
+    if row is None:
+        raise NotFoundError("endorsement not found")
 
     _system_comment(db, principal, row.ticket_id,
                     kind="endorsement_claimed",
@@ -295,3 +311,11 @@ def _system_comment(db: Session, principal: Principal, ticket_id: str, *, kind: 
         comment_type="system",
         body=body,
     ))
+
+
+def _user_has_avizator_role(user: User) -> bool:
+    try:
+        roles = KeycloakAdminClient.get().get_user_realm_roles(user.keycloak_subject)
+    except Exception as exc:
+        raise BusinessRuleError("could not verify avizator role for target user") from exc
+    return any((role.get("name") == ROLE_AVIZATOR) for role in roles)

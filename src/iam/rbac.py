@@ -182,6 +182,8 @@ def can_drive_status(p: Principal, t: _TicketLike) -> bool:
 def can_see_private_comments(p: Principal, t: _TicketLike) -> bool:
     if p.is_admin or p.is_auditor or p.is_distributor:
         return True
+    if _is_assigned_to(p, t):
+        return True
     if _sector_codes(t).intersection(p.all_sectors):
         return True
     return False

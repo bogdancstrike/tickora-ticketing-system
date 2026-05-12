@@ -139,6 +139,8 @@ def _apply_status(
     resolution: str | None = None,
     audit_action: str | None = None,
     require_drive: bool = True,
+    allowed_from: frozenset[str] | set[str] | tuple[str, ...] | None = None,
+    reason_required: bool = False,
 ) -> Ticket:
     """Set any of the five ticket statuses from any current status.
 
@@ -163,6 +165,10 @@ def _apply_status(
             t.resolution = resolution
             db.flush()
         return _load(db, ticket_id)
+    if allowed_from is not None and old_status not in set(allowed_from):
+        raise BusinessRuleError(f"cannot change status from {old_status} to {target_status}")
+    if reason_required and not (reason or "").strip():
+        raise BusinessRuleError("reason is required for this status change")
 
     now = datetime.now(timezone.utc)
     values = {"status": target_status}
@@ -182,7 +188,7 @@ def _apply_status(
 
     res = db.execute(
         update(Ticket)
-        .where(Ticket.id == ticket_id, Ticket.is_deleted.is_(False))
+        .where(Ticket.id == ticket_id, Ticket.status == old_status, Ticket.is_deleted.is_(False))
         .values(**values)
         .returning(Ticket.id)
     )
@@ -408,7 +414,7 @@ def _assign_to_me(db: Session, p: Principal, ticket_id: str) -> Ticket:
             Ticket.current_sector_id == t.current_sector_id,
             Ticket.is_deleted.is_(False),
             Ticket.assignee_user_id.is_(None),
-            Ticket.status.in_(tuple(sm.ALL_STATUSES)),
+            Ticket.status.in_(tuple(sm._BY_ACTION[sm.ACTION_ASSIGN_TO_ME].from_statuses)),
         )
         .values(
             assignee_user_id              = p.user_id,
@@ -656,14 +662,34 @@ def change_status(
     *,
     reason: str | None = None,
 ) -> Ticket:
-    """Set any supported status directly.
+    """Set a supported status through the generic status endpoint.
 
-    The current workflow model has five statuses and permits moving from any
-    one to any other. Assignment/routing endpoints still exist for changing
-    ownership and sector metadata, but this endpoint only changes status.
+    This endpoint is intentionally narrower than the named workflow actions:
+    it cannot move tickets back to ``pending`` and it requires reasons for
+    reopen/cancel-style changes so callers cannot bypass the dedicated
+    endpoints' invariants.
     """
     with span("workflow.change_status", username=p.username, user_id=p.user_id, ticket_id=ticket_id, target_status=target_status) as current:
-        ticket = _apply_status(db, p, ticket_id, target_status, reason=reason)
+        if target_status == sm.PENDING:
+            raise BusinessRuleError("cannot move tickets back to pending")
+        allowed_from = {
+            sm.ASSIGNED_TO_SECTOR: {sm.IN_PROGRESS},
+            sm.IN_PROGRESS: {sm.PENDING, sm.ASSIGNED_TO_SECTOR, sm.DONE, sm.CANCELLED},
+            sm.DONE: {sm.IN_PROGRESS},
+            sm.CANCELLED: {sm.PENDING, sm.ASSIGNED_TO_SECTOR, sm.IN_PROGRESS},
+        }.get(target_status)
+        if allowed_from is None:
+            raise BusinessRuleError(f"unknown status {target_status!r}")
+        reason_required = target_status == sm.CANCELLED or target_status == sm.IN_PROGRESS
+        ticket = _apply_status(
+            db,
+            p,
+            ticket_id,
+            target_status,
+            reason=reason,
+            allowed_from=allowed_from,
+            reason_required=reason_required,
+        )
         set_attr(current, "ticket.status", ticket.status)
         return ticket
 
@@ -755,6 +781,7 @@ def _mark_done(db: Session, p: Principal, ticket_id: str, *, resolution: str | N
         db, p, ticket_id, sm.DONE,
         resolution=resolution, audit_action=audit_events.TICKET_DONE,
         require_drive=False,
+        allowed_from=sm._BY_ACTION[sm.ACTION_MARK_DONE].from_statuses,
     )
     return ticket
 
@@ -776,6 +803,7 @@ def _close(db: Session, p: Principal, ticket_id: str, *, feedback: dict | None =
         db, p, ticket_id, sm.DONE,
         audit_action=audit_events.TICKET_CLOSED,
         require_drive=False,
+        allowed_from=sm._BY_ACTION[sm.ACTION_CLOSE].from_statuses,
     )
     if feedback:
         audit_service.record(
@@ -818,6 +846,8 @@ def _reopen(db: Session, p: Principal, ticket_id: str, *, reason: str) -> Ticket
         db, p, ticket_id, sm.IN_PROGRESS,
         reason=reason, audit_action=audit_events.TICKET_REOPENED,
         require_drive=False,
+        allowed_from=sm._BY_ACTION[sm.ACTION_REOPEN].from_statuses,
+        reason_required=True,
     )
     if target_assignee and ticket.assignee_user_id != target_assignee:
         db.execute(
@@ -861,6 +891,8 @@ def _cancel(db: Session, p: Principal, ticket_id: str, *, reason: str) -> Ticket
         db, p, ticket_id, sm.CANCELLED,
         reason=reason, audit_action=audit_events.TICKET_CANCELLED,
         require_drive=False,
+        allowed_from=sm._BY_ACTION[sm.ACTION_CANCEL].from_statuses,
+        reason_required=True,
     )
     return ticket
 
@@ -884,6 +916,7 @@ def _change_priority(db: Session, p: Principal, ticket_id: str, priority: str, *
     if t.priority == priority:
         return t
 
+    old_priority = t.priority
     res = db.execute(
         update(Ticket).where(Ticket.id == ticket_id, Ticket.priority == t.priority)
         .values(priority=priority).returning(Ticket.id)
@@ -897,7 +930,7 @@ def _change_priority(db: Session, p: Principal, ticket_id: str, priority: str, *
     audit_service.record(
         db, actor=p, action=audit_events.TICKET_PRIORITY_CHANGED,
         entity_type="ticket", entity_id=ticket_id, ticket_id=ticket_id,
-        old_value={"priority": t.priority}, new_value={"priority": priority},
+        old_value={"priority": old_priority}, new_value={"priority": priority},
         metadata={"reason": reason} if reason else None,
     )
     publish("notify_ticket_event", {
