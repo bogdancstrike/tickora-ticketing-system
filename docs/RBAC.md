@@ -1,498 +1,368 @@
 # Tickora RBAC
 
-_Last refreshed: 2026-05-12._
+_Last refreshed: 2026-05-12. Current branch snapshot._
 
-This document is the **authoritative reference** for Tickora's authorization
-model. It covers the identity provider topology, realm roles, organizational
-groups, the predicate matrix, and the per-feature enforcement summary.
+This document describes the authorization model implemented in the current
+codebase. It is not just the intended product model. Where the implementation
+has drifted or contains a bug, the drift is called out explicitly.
 
-Backend RBAC is the source of truth. The frontend may hide buttons for
-ergonomics, but every endpoint re-checks permissions server-side and returns
-`403 Forbidden` (or `404 Not Found` where existence must not leak).
+Backend RBAC is authoritative. Frontend route guards, hidden buttons, and page
+visibility are only convenience. Every security-sensitive decision must be made
+by the API/service layer.
 
----
+## 1. Identity Topology
 
-## 1. Identity provider topology
-
-Application identity lives in the custom Keycloak realm `tickora`. **Do not
-create Tickora business clients, roles, groups, or users in the `master`
-realm.** The `master` realm is reserved for Keycloak administration; the
-bootstrap script (`scripts/keycloak_bootstrap.py`) actively cleans Tickora
-artifacts out of `master` if they were accidentally created there.
-
-### Clients
+Tickora identity lives in the Keycloak realm `tickora`.
 
 | Client | Type | Purpose |
 |---|---|---|
-| `tickora-spa` | Public · PKCE | Browser login, access-token acquisition, refresh. Token claims include `groups` (full path) via the `tickora-groups` mapper. |
-| `tickora-api` | Confidential · service account | Backend API audience and admin-side surface (user lookup, group/role administration, password resets). Calls Keycloak Admin REST with realm-management roles: `query-users`, `query-groups`, `view-users`, `view-realm`, `manage-users`. |
+| `tickora-spa` | Public, PKCE | Browser login and access-token acquisition. |
+| `tickora-api` | Confidential service account | Backend audience and Keycloak Admin REST access for users, groups, roles, and password reset. |
 
-The SPA token also carries the `tickora-api-audience` mapper so a single
-access token is accepted by both the API and Keycloak.
+The backend accepts Keycloak access tokens, verifies signature/issuer/audience,
+then hydrates a local `Principal`.
 
-### Realm roles
+### Principal Inputs
 
-Realm roles gate **feature modules** — what areas of the UI/API a user can
-even attempt to use. They are **not** used to model organizational structure;
-that is done via groups (§1.1).
-
-| Role | Purpose |
+| Source | Used for |
 |---|---|
-| `tickora_admin` | Platform administrator. Can view/administer every entity, override every workflow predicate. Implied by membership in the `/tickora` root group. |
-| `tickora_auditor` | Read-only oversight. Sees the full audit ledger, every ticket (including private comments and attachments), and every dashboard, but should not mutate operational data. |
-| `tickora_distributor` | Initial triage and routing. Sees pending and sector-assigned tickets, reviews tickets via `POST /api/tickets/<id>/review`, sets triage metadata, assigns to sectors/users, cancels pending tickets, changes priority, and writes private triage comments. |
-| `tickora_avizator` | Endorsement reviewer (Romanian: _avizator_). Can claim and decide ticket endorsements requested by assigned operators. Sees the endorsement inbox at `/avizator`. |
-| `tickora_internal_user` | Internal beneficiary/requester. Default for any user with a sector membership or generic staff access. Can create tickets, view their own, post public comments, close their own done tickets. |
-| `tickora_external_user` | External beneficiary/requester. Public ticket surface only — private comments, private attachments, and the audit tab are hidden. |
-| `tickora_service_account` | Reserved for automation/system integrations. Never assigned to human seed users. |
+| JWT `sub` | Stable Keycloak subject. Also used for `SUPER_ADMIN_SUBJECTS`. |
+| JWT username/email | Local user upsert, display, requester matching. |
+| `realm_access.roles` | Global application roles. |
+| `groups` claim | Root group, sector groups, beneficiary groups. |
+| Keycloak Admin REST | Fallback group lookup when token groups are incomplete. |
+| Local `users` table | Internal user id and profile data. |
 
-The bootstrap script removes two historical roles if found:
-`tickora_sector_member` and `tickora_sector_chief` are **deprecated** — sector
-membership and sector leadership are now encoded entirely via Keycloak groups
-(§1.1), never via realm roles.
+Important implementation notes:
 
-### 1.1 Organizational groups
+- A first-seen Keycloak subject is provisioned into the local `users` table.
+- `Config.PRINCIPAL_CACHE_TTL` exists, but principal cache TTL follows the
+  remaining token lifetime rather than that setting.
+- Local `users.is_active = false` is not currently enforced during principal
+  hydration. If Keycloak still issues a valid token, the user can authenticate.
+- Admin user disable/enable attempts may update Keycloak, but some Keycloak
+  failures are swallowed. Treat local deactivation alone as insufficient.
 
-Sector access is encoded in Keycloak's group tree. The structure is
-**dynamic** — the bootstrap script seeds a configurable list of sectors and
-Tickora reads the live tree at runtime, so adding a sector (`/tickora/sectors/s42`)
-in Keycloak requires no code change.
+## 2. Global Roles
 
-| Group pattern | Meaning |
+| Role | Current behavior |
 |---|---|
-| `/tickora` | Super-admin root. Full platform access across every sector. Treated as implicit `tickora_admin` and as visibility into every sector. |
-| `/tickora/beneficiaries/internal` | Internal beneficiary cohort — typically combined with `tickora_internal_user`. |
-| `/tickora/beneficiaries/external` | External beneficiary cohort — typically combined with `tickora_external_user`. |
-| `/tickora/sectors/<code>` | **Effective chief + member** for the named sector. Equivalent to belonging to both child groups. Most internal staff use a single sector parent group. |
-| `/tickora/sectors/<code>/member` | Operational member of `<code>`. Can claim tickets in the sector, mark them done, post comments once assigned. |
-| `/tickora/sectors/<code>/chief` | Sector chief for `<code>`. Adds: see other sector members' work, reassign within the sector, change priority on sector tickets, manage sector users via the admin UI, view sector audit. |
+| `tickora_admin` | Platform-level role. Grants broad visibility and many write predicates. Hard delete still requires `is_super_admin`. Some admin endpoints require `/tickora` root group, not only this role. |
+| `tickora_auditor` | Global read-only oversight. Can view all tickets and global audit. Should not mutate operational data. |
+| `tickora_distributor` | Intake/review role. Sees `pending` and `assigned_to_sector` tickets globally. Can route/assign and change priority through service predicates. |
+| `tickora_avizator` | Endorsement reviewer. Can see the endorsement inbox and decide/claim allowed endorsement requests. |
+| `tickora_internal_user` | Default internal requester/staff marker. Used for UI and dashboard/widget eligibility. Does not by itself grant sector access. |
+| `tickora_external_user` | External requester marker. External ticket visibility is primarily email-matched. |
+| `tickora_service_account` | Reserved for automation; not intended for human seed users. |
 
-`Principal.all_sectors` resolves to the union of every sector implied by the
-groups above (both `member` and `chief` rolled up). `Principal.chief_sectors`
-is the strict subset where the user is a chief.
+Deprecated historical roles `tickora_sector_member` and
+`tickora_sector_chief` should not be used. Sector structure is encoded by
+Keycloak groups.
 
-### 1.2 Profile expansion
+## 3. Keycloak Groups
 
-`GET /api/me` returns the user's effective roles and sector memberships
-**after group-tree expansion**. For `/tickora` users the API expands sector
-visibility from the live Keycloak `/tickora/sectors` children and only falls
-back to the database when Keycloak is briefly unreachable. The Profile page
-renders this as an access tree so the user can see *why* they have the
-permissions they do, instead of having to infer from raw group paths.
-
----
-
-## 2. Roles cheat-sheet
-
-| Role / group | Can read | Can write | Restricted from |
-|---|---|---|---|
-| `/tickora` (super-admin) | Everything | Everything (incl. hard delete if subject is in `SUPER_ADMIN_SUBJECTS`) | — |
-| `tickora_admin` | Everything | Everything except hard delete | Hard delete unless super-admin |
-| `tickora_auditor` | Everything (incl. private comments/attachments) | Nothing operational | All ticket workflow actions |
-| `tickora_distributor` | All pending + sector-assigned tickets globally | Triage review, sector/user assignment, priority change, cancel; private comments during triage | Operator-side status pushes unless self-assigned |
-| `tickora_avizator` | Endorsement inbox + tickets that have a request assigned to them | Endorsement decision (approve/reject/claim) | Anything outside endorsement scope unless also internal user |
-| Sector chief `/tickora/sectors/s10/chief` | Tickets in `s10`, sector audit, sector members | Reassign within `s10`, change priority, remove sector, set/delete metadata; can manage `s10` users in admin UI | Other sectors |
-| Sector member `/tickora/sectors/s10/member` | Tickets in `s10` | Self-assign; post comments / drive status once assigned | Other sectors; status pushes / comments unless actively assigned |
-| `tickora_internal_user` | Own tickets, own watchlist, mentions | Create tickets, comment on own tickets (public), close own done tickets, reopen own | Anything cross-user |
-| `tickora_external_user` | Own tickets via email-matched identity | Create tickets (external surface) | Private comments, private attachments, audit tab |
-
----
-
-## 3. Predicate matrix
-
-Every check goes through pure predicate functions in `src/iam/rbac.py`. Each
-function takes a `Principal` plus the entity (ticket/comment/endorsement) and
-returns `bool`. No DB calls, no HTTP — they are trivially unit-testable.
-
-### 3.1 Ticket visibility
-
-`can_view_ticket(p, t)`
-
-| Condition | Grants visibility |
+| Group path | Current parser behavior |
 |---|---|
-| `p.is_admin` or `p.is_auditor` | Yes |
-| Email-matched external requester (`p.email == t.requester_email`, `t.beneficiary_type == 'external'`) | Yes |
-| `t.created_by_user_id == p.user_id` | Yes |
-| `t.beneficiary_user_id == p.user_id` | Yes |
-| Sector intersection (`t.sector_codes ∩ p.all_sectors`) | Yes |
-| `p.is_distributor` **and** `t.status ∈ {pending, assigned_to_sector}` | Yes |
-| Otherwise | No |
+| `/tickora` | Root platform group. Sets `has_root_group` and effectively implies admin behavior. |
+| `/tickora/beneficiaries/internal` | Beneficiary cohort marker. User type is still primarily role-derived. |
+| `/tickora/beneficiaries/external` | External beneficiary cohort marker. User type is still primarily role-derived. |
+| `/tickora/sectors/<code>` | Parsed as chief access for `<code>`. It is not currently stored as both member and chief. |
+| `/tickora/sectors/<code>/member` or `/members` | Parsed as member access for `<code>`. |
+| `/tickora/sectors/<code>/chief` or `/chiefs` | Parsed as chief access for `<code>`. |
 
-A failed visibility check from a list endpoint silently filters the ticket
-out. A failed visibility check on a `GET /api/tickets/<id>` returns `404` to
-avoid leaking existence.
+`Principal.all_sectors` includes both member and chief sectors. Most visibility
+checks use `all_sectors`, so a chief still sees the sector even if the bare
+group is not duplicated as a member group.
 
-### 3.2 Ticket mutation
+`GET /api/me` performs extra profile expansion for display. In particular, a
+root `/tickora` user may be shown a full sector tree by querying Keycloak. That
+display expansion is not the same thing as the `Principal` object used inside
+RBAC predicates.
 
-`can_modify_ticket(p, t)`: admin **or** chief of current sector **or** active
-assignee.
+## 4. Super Admin
 
-`can_update_ticket(p, t)`: admin **or** distributor **or** chief of current
-sector (used during triage edits like priority/category).
+`is_super_admin(p)` returns true only when:
 
-### 3.3 Workflow transitions
+- `p.is_admin` is true; and
+- `p.keycloak_subject` is listed in `Config.SUPER_ADMIN_SUBJECTS`.
 
-| Action | Predicate | Allowed |
+The default config contains a seed subject UUID. Hard delete is the main
+operation behind this gate. This should move to a Keycloak group or deployment
+secret before production.
+
+## 5. Ticket Visibility
+
+`can_view_ticket(p, t)` grants visibility when any condition is true:
+
+| Condition | Result |
+|---|---|
+| `p.is_admin` | Can view. |
+| `p.is_auditor` | Can view. |
+| External requester email matches `t.requester_email` and ticket beneficiary type is external | Can view. |
+| `t.created_by_user_id == p.user_id` | Can view. |
+| `t.beneficiary_user_id == p.user_id` | Can view. |
+| Ticket sector intersects `p.all_sectors` | Can view. |
+| `p.is_distributor` and status is `pending` or `assigned_to_sector` | Can view. |
+
+Assignment alone is not a visibility grant. The assignment services should
+therefore avoid assigning users who do not have sector/requester visibility.
+
+Ticket list endpoints use a SQL visibility filter instead of post-filtering
+after loading rows. Direct ticket reads return `404` on visibility miss.
+
+## 6. Ticket Mutation Predicates
+
+| Predicate | Current allowed callers |
+|---|---|
+| `can_modify_ticket` | admin, chief of current sector, or active assignee. |
+| `can_update_ticket` | admin, distributor, or chief of current sector. Used by ticket patch/update. |
+| `can_assign_sector` | admin, distributor, or chief of current sector. |
+| `can_assign_to_me` | admin or caller whose sectors intersect the ticket sectors. |
+| `can_assign_to_user` | admin, distributor, or chief of current sector. |
+| `can_change_priority` | admin, distributor, or chief of current sector. |
+| `can_delete_ticket` | super-admin only. |
+
+Service-level add/remove assignee logic adds extra constraints around target
+sector membership and self-removal.
+
+## 7. Workflow Actions
+
+Statuses currently in code:
+
+- `pending`
+- `assigned_to_sector`
+- `in_progress`
+- `done`
+- `cancelled`
+
+There is no separate `closed` database status. The close endpoint lands on
+`done`.
+
+| Endpoint/action | Current gate | Notes |
 |---|---|---|
-| `assign_sector` | `can_assign_sector` | admin, distributor, chief of current sector |
-| `assign_to_me` | `can_assign_to_me` | admin, anyone whose sectors intersect the ticket's |
-| `assign_to_user` / `reassign` | `can_assign_to_user` | admin, distributor, chief of current sector |
-| `add_assignee` | service-level check | `can_assign_to_user` + target user in current sector (unless admin) |
-| `remove_assignee` | service-level check | admin, chief of current sector, or removing self |
-| `unassign` | (workflow_service) | active assignee or admin/chief |
-| `mark_done` / `close` / `cancel` / `reopen` | `can_drive_status` | active assignee only (admin via assign-then-act) |
-| `change_priority` | `can_change_priority` | admin, distributor, chief of current sector |
-| `change_status` | composite | depends on target status — close/reopen for beneficiary, otherwise driver predicate |
-| `delete_ticket` (soft) | `can_delete_ticket` | super-admin only (`is_super_admin`) |
+| `assign-sector` | `can_assign_sector` | Sets/changes current sector. |
+| `assign-to-me` | `can_assign_to_me` | Bug: current SQL accepts all statuses, including `done` and `cancelled`. |
+| `assign-to-user` / `reassign` | `can_assign_to_user` | Target validation must ensure user can actually see/work the sector. |
+| `add-assignee` | `can_assign_to_user` plus target sector rules | Multi-assignee support. |
+| `remove-assignee` | admin, chief, or removing self | Depends on service branch. |
+| `unassign` | active assignee or admin/chief | Returns ticket to sector assignment. |
+| `mark-done` | active assignee | Blocks pending endorsements. |
+| `close` | active assignee | Sets status to `done`; beneficiaries do not currently close tickets through this predicate. |
+| `reopen` | active assignee plus reason path | Sets status to `in_progress`. |
+| `cancel` | active assignee plus reason path | Sets status to `cancelled`. |
+| `change-status` | active assignee for drive-style changes | Bug: target status graph is too permissive. |
 
-**Self-assignment policy.** Operator-side actions — driving status,
-writing comments — require the caller to be the **active assignee**. A chief
-who needs to push a ticket through state must first claim it via
-`assign_to_me`. This makes every write attributable to a real owner. Admin
-override is preserved.
+Important drift: older docs described beneficiary close/reopen or distributor
+cancel behavior. The current predicates are assignee-owned. The review endpoint
+can attempt private-comment or cancel branches, but those branches can fail
+because the downstream comment/workflow services require active assignment.
 
-### 3.4 Comments
+## 8. Comments
 
-| Predicate | Allowed |
+| Predicate | Current allowed callers |
 |---|---|
-| `can_see_private_comments` | admin, auditor, distributor, members/chiefs of current sector |
-| `can_post_public_comment` | active assignee, creator, beneficiary user, email-matched external requester |
-| `can_post_private_comment` | active assignee only (admin override via prior self-assign) |
+| `can_see_private_comments` | admin, auditor, distributor, and sector members/chiefs for the ticket sector. |
+| `can_post_public_comment` | active assignee, creator, beneficiary user, or email-matched external requester. |
+| `can_post_private_comment` | active assignee only. |
 
-Bystander chiefs and distributors **read** but do not **write** on tickets
-they are not actively working. The 15-minute edit window is enforced server-
-side in `comment_service`.
+Comments have a server-side edit window (`COMMENT_EDIT_WINDOW`, default 15
+minutes). Edit/delete is author-scoped inside that window except where admin
+paths explicitly override.
 
-### 3.5 Attachments
+Private comment risk: notification recipient selection should be filtered
+through `can_see_private_comments()`. Current watcher fanout can leak that a
+private comment occurred.
 
-| Predicate | Allowed |
+## 9. Attachments
+
+| Operation | Current gate |
 |---|---|
-| `can_upload_attachment` | Same as `can_view_ticket` |
-| `can_download_attachment(t, "public")` | Same as `can_view_ticket` |
-| `can_download_attachment(t, "private")` | Same as `can_see_private_comments` |
+| Upload URL | `can_view_ticket` via `can_upload_attachment`. |
+| Register metadata | Ticket visibility and object existence checks; comment ownership/visibility checks are incomplete. |
+| List | Ticket visibility, with private visibility derived from parent comment. |
+| Download public attachment | `can_view_ticket`. |
+| Download private attachment | `can_see_private_comments`. |
+| Delete | Uploader or admin. |
 
-Bytes never transit the API: upload uses pre-signed PUT URLs to MinIO,
-download returns a 302 to a 60-second signed GET URL. Backend authorizes
-before issuing either URL.
+Signed URL TTL defaults to 60 seconds for both upload and download.
 
-### 3.6 Audit / dashboards
+Security gaps:
 
-| Predicate | Allowed |
+- Object size is not verified against the actual uploaded object.
+- Checksum is not verified.
+- MIME/magic bytes are not enforced.
+- AV scanning is a stub.
+- Attachment registration can target comments the caller should not mutate if
+  the comment id is known.
+
+## 10. Audit
+
+| Endpoint | Current gate |
 |---|---|
-| `can_view_global_audit` | admin, auditor |
-| `can_view_sector_audit(sector)` | admin, auditor, chief of `sector` |
-| `can_view_audit_tab(t)` | admin, auditor, distributor, sector members/chiefs of current sector |
-| `can_view_global_dashboard` | admin, auditor |
-| `can_view_sector_dashboard(sector)` | admin, auditor, chief of `sector`, member of `sector` |
+| `GET /api/audit` | admin or auditor. |
+| `GET /api/users/<id>/audit` | admin or auditor. |
+| `GET /api/tickets/<id>/audit` | Current implementation allows ordinary ticket viewers through ticket visibility. This is too broad. |
 
-The personal monitor (`GET /api/monitor/users/<id>`) is gated by a
-`_can_view_user_dashboard` helper at the service layer — self, admin, or
-auditor.
+`can_view_audit_tab(t)` exists and allows admin, auditor, distributor, and
+sector members/chiefs. The per-ticket audit endpoint should enforce it, or a
+stricter predicate, before returning audit rows.
 
-### 3.7 Endorsements (avizare suplimentară)
+## 11. Endorsements
 
-| Predicate | Allowed |
+| Operation | Current gate |
 |---|---|
-| `can_request_endorsement(t)` | active assignee of `t` |
-| `can_decide_endorsement(e)` | admin, any avizator on a pool request, or the targeted avizator on a direct request |
+| Request endorsement | Active assignee of the ticket. |
+| List inbox | Admin sees all; avizators see pool requests, direct-to-me requests, and decisions they made. |
+| Claim | Avizator on a pool request. Current implementation is read-then-write, not an atomic conditional update. |
+| Decide | Admin, pool avizator, or targeted avizator. |
 
-The endorsement inbox at `/avizator` lists open requests filtered by the
-caller's role: pool requests are visible to every avizator, direct requests
-only to the named avizator.
+Gaps:
 
-### 3.8 Widget catalogue
+- Direct request target validation checks active user existence but not the
+  `tickora_avizator` role.
+- Claim should be a conditional `UPDATE ... WHERE assigned_to_user_id IS NULL`.
 
-The widget catalogue (`widget_definitions`) has a `required_roles` JSONB
-column. The list endpoint `GET /api/admin/widget-definitions` filters the
-returned catalogue by the caller's roles:
+## 12. Admin And Configuration
 
-- **Admin** / **auditor**: see every active widget (they manage the catalogue
-  and audit configurations).
-- **Anyone else**: see widgets where `required_roles` is empty (universally
-  available) **or** they hold at least one matching role.
-
-`upsert_widget` re-checks the same gate at write time
-(`_check_widget_required_roles`). `auto_configure_dashboard` pre-loads the
-catalogue and skips any widget the caller is not authorized for, so a
-beneficiary's auto-configured dashboard never silently includes admin widgets.
-
-The current beneficiary-visible catalogue is:
-
-`ticket_list`, `profile_card`, `recent_comments`, `shortcuts`, `clock`,
-`welcome_banner`, `notification_feed`, `my_watchlist`, `my_mentions`,
-`my_requests`, `requester_status`.
-
-Sector members/chiefs additionally see operational widgets (`sector_stats`,
-`user_workload`, `stale_tickets`, `workload_balancer`, `bottleneck_analysis`,
-`my_assigned`, `assignment_age`, `throughput_trend`, `priority_mix`,
-`oldest_active`, `monitor_kpi`, `linked_tickets`). Distributors add
-`audit_stream`, `not_reviewed`, `reviewed_today`, `global_kpi`,
-`backlog_by_sector`. Admins add `task_health`, `recent_failures`,
-`active_sessions`, `system_health`.
-
-### 3.9 Snippets (procedures)
-
-Snippets are admin-authored procedures with audience scoping. The visibility
-rule:
-
-- Empty audiences → public (every signed-in user).
-- Otherwise → visible if at least one audience row matches the caller's
-  sectors, realm roles, or beneficiary type.
-- Admin / `/tickora` users always see every snippet.
-
-Writes (`POST/PATCH/DELETE /api/snippets[/<id>]`) are admin-only
-(`_require_admin`). Reads return `404` (not `403`) on visibility mismatch to
-avoid leaking existence.
-
-### 3.10 Dashboards (custom)
-
-Dashboards are owner-only:
-
-- `GET / PATCH / DELETE /api/dashboards/<id>`: `owner_user_id == p.user_id`,
-  else `404`.
-- Widget add/update/delete and `auto-configure`: same ownership gate.
-
-Widget `config` is validated at write time
-(`dashboard_service._validate_widget_config`): unknown `scope`, foreign
-`sector_code`, and invisible `ticketId` references are rejected up front.
-Data fetch endpoints behind each widget re-check the same predicates as
-direct API calls — defence in depth.
-
----
-
-## 4. Endpoint gates (audit table)
-
-Every backend endpoint passes through `@require_authenticated` (which builds
-the `Principal` from the bearer JWT). The table below documents the
-**additional** gate enforced by the service layer.
-
-### Tickets
-
-| Endpoint | Method | Service gate |
-|---|---|---|
-| `/api/tickets` | GET | `ticket_service._visibility_filter` per role |
-| `/api/tickets` | POST | All authenticated users (creates a ticket they own) |
-| `/api/tickets/<id>` | GET | `can_view_ticket` → 404 on miss |
-| `/api/tickets/<id>` | PATCH | `can_modify_ticket` |
-| `/api/tickets/<id>` | DELETE | `can_delete_ticket` (super-admin) |
-| `/api/tickets/<id>/assign-sector` | POST | `can_assign_sector` |
-| `/api/tickets/<id>/assign-to-me` | POST | `can_assign_to_me` |
-| `/api/tickets/<id>/assign-to-user` | POST | `can_assign_to_user` |
-| `/api/tickets/<id>/reassign` | POST | `can_assign_to_user` |
-| `/api/tickets/<id>/unassign` | POST | active assignee, chief, or admin |
-| `/api/tickets/<id>/change-status` | POST | `can_drive_status` (action-specific) |
-| `/api/tickets/<id>/sectors/add` | POST | `can_assign_sector` |
-| `/api/tickets/<id>/sectors/remove` | POST | `can_remove_sector` |
-| `/api/tickets/<id>/assignees/add` | POST | `can_assign_to_user` + sector membership |
-| `/api/tickets/<id>/assignees/remove` | POST | admin, chief, or removing self |
-| `/api/tickets/<id>/mark-done` | POST | `can_mark_done` (active assignee) |
-| `/api/tickets/<id>/close` | POST | `can_close` (active assignee or beneficiary) |
-| `/api/tickets/<id>/reopen` | POST | `can_reopen` |
-| `/api/tickets/<id>/cancel` | POST | `can_cancel` |
-| `/api/tickets/<id>/change-priority` | POST | `can_change_priority` |
-| `/api/tickets/<id>/review` | POST | `is_admin or is_distributor` |
-
-### Comments / attachments / metadata / watchers / links
-
-| Endpoint | Method | Service gate |
-|---|---|---|
-| `/api/tickets/<id>/comments` | GET | `can_see_private_comments` filters private rows |
-| `/api/tickets/<id>/comments` | POST | `can_post_public_comment` or `can_post_private_comment` per visibility |
-| `/api/comments/<id>` | PATCH/DELETE | author-only + 15-minute edit window |
-| `/api/tickets/<id>/attachments/upload-url` | POST | `can_upload_attachment` |
-| `/api/tickets/<id>/attachments` | POST/GET | `can_view_ticket` + comment access (if private) |
-| `/api/attachments/<id>` | DELETE | uploader or admin |
-| `/api/attachments/<id>/download` | GET | `can_download_attachment` (per visibility) |
-| `/api/tickets/<id>/metadata` | GET | `can_view_ticket` (via service) |
-| `/api/tickets/<id>/metadata` | POST/DELETE | `can_modify_ticket` |
-| `/api/tickets/<id>/watchers` | GET | `can_view_ticket` |
-| `/api/tickets/<id>/watchers` | POST | self-subscribe, admin to subscribe others |
-| `/api/tickets/<id>/watchers/<user_id>` | DELETE | self-remove, admin to remove others |
-| `/api/tickets/<id>/links` | GET | `can_modify_ticket` on source |
-| `/api/tickets/<id>/links` | POST | source modifiable + target visible |
-| `/api/links/<id>` | DELETE | source-ticket modifiable |
-
-### Endorsements / audit / reference
-
-| Endpoint | Method | Service gate |
-|---|---|---|
-| `/api/tickets/<id>/endorsements` | POST | `can_request_endorsement` |
-| `/api/tickets/<id>/endorsements` | GET | `can_view_ticket` |
-| `/api/endorsements/<id>/decide` (+ approve/reject) | POST | `can_decide_endorsement` |
-| `/api/endorsements/<id>/claim` | POST | avizator on a pool request |
-| `/api/endorsements` | GET | filters by avizator + targeting |
-| `/api/audit` | GET | `can_view_global_audit` |
-| `/api/tickets/<id>/audit` | GET | viewer of the ticket; chief on sector |
-| `/api/users/<id>/audit` | GET | `can_view_global_audit` |
-| `/api/reference/ticket-options` | GET | authenticated |
-| `/api/reference/assignable-users` | GET | admin/distributor/chief/member (sector_code required for non-admin) |
-
-### Admin / config
-
-| Endpoint | Method | Service gate |
-|---|---|---|
-| `/api/admin/overview` | GET | `require_admin` |
-| `/api/admin/users` | GET | admin or sector chief (chiefs see only users in their sectors) |
-| `/api/admin/users/<id>` | GET/PATCH | `require_admin_or_chief` |
-| `/api/admin/users/<id>/reset-password` | POST | `require_admin_or_chief`; backend generates the password, returned once to the caller |
-| `/api/admin/sectors` (+ membership / group-hierarchy / metadata-keys / system-settings / ticket-metadatas / categories / subcategories / subcategory-fields) | all | `require_admin` |
-| `/api/admin/widget-definitions` | GET | filtered by caller's roles (no admin gate by design) |
-| `/api/admin/widget-definitions/upsert` | POST | `is_admin` |
-| `/api/admin/widget-definitions/sync` | POST | `is_admin` |
-
-### Notifications / tasks / monitor / dashboards / snippets
-
-| Endpoint | Method | Service gate |
-|---|---|---|
-| `/api/notifications` | GET | scoped to `principal.user_id` |
-| `/api/notifications/mark-read`, `<id>/mark-read` | POST | scoped to `principal.user_id` |
-| `/api/notifications/stream-ticket` | POST | trades JWT for a 30-second one-time SSE ticket in Redis |
-| `/api/notifications/stream` | GET | Redis pubsub channel scoped to `notifications:{user_id}` |
-| `/api/tasks`, `/api/tasks/<id>` | GET | admin only |
-| `/api/monitor/overview` | GET | data scoped by role (admin/auditor → global; sector users → sector; others → personal) |
-| `/api/monitor/global` | GET | `can_view_global_dashboard` |
-| `/api/monitor/sectors` | GET | filtered by membership |
-| `/api/monitor/sectors/<code>` | GET | `can_view_sector_dashboard` |
-| `/api/monitor/users/<id>` | GET | self, admin, or auditor |
-| `/api/monitor/timeseries` | GET | data scoped by visibility filter |
-| `/api/dashboards` | GET/POST | owner scope |
-| `/api/dashboards/<id>` (+ widgets, auto-configure) | all | owner scope |
-| `/api/snippets` | GET | audience filter |
-| `/api/snippets[/<id>]` | POST/PATCH/DELETE | admin only |
-
-### Public
-
-`/health`, `/liveness`, `/readiness` — no authentication. Used by k8s probes
-and the docker-compose health checks.
-
----
-
-## 5. Defence in depth
-
-Three checks protect every read:
-
-1. **SQL.** `ticket_service._visibility_filter` baked into the `SELECT`. A
-   buggy controller cannot leak via the list endpoint.
-2. **Service.** RBAC predicate before returning the entity.
-3. **Serializer.** `serialize_ticket` strips internal fields when
-   `can_see_internal` is false (sectors, request IP, source channel, internal
-   user IDs).
-
-For writes:
-
-1. **Decorator.** `@require_authenticated` populates the `Principal`.
-2. **Service predicate.** Action-specific check + state-machine transition.
-3. **Atomic UPDATE.** Workflow transitions use `UPDATE … WHERE …` clauses
-   that encode the precondition; concurrent attempts get
-   `ConcurrencyConflictError` (409).
-4. **Audit.** `audit_service.record(db, …)` writes in the same transaction
-   so audit and state changes commit or roll back together. Access-denied
-   attempts emit `ACCESS_DENIED` events with the failing rule name.
-
----
-
-## 6. Seed users
-
-Run the bootstrap stack:
-
-```bash
-make keycloak-bootstrap   # realm, clients, roles, group tree
-make migrate              # database schema
-make seed                 # users, sectors, sample tickets, dashboards, snippets
-```
-
-All seeded users share the development password `Tickora123!`.
-
-| Username | Type | Roles | Sector groups | Typical use |
-|---|---|---|---|---|
-| `admin` | Internal | implied by `/tickora` | `/tickora` | Full platform administration |
-| `bogdan` | Internal | implied by `/tickora` | `/tickora` | Super-admin seed user |
-| `auditor` | Internal | `tickora_auditor`, `tickora_internal_user` | none | Read-only audit / dashboards |
-| `distributor` | Internal | `tickora_distributor`, `tickora_internal_user` | none | Triage / review queue |
-| `avizator` | Internal | `tickora_avizator`, `tickora_internal_user` | none | Endorsement inbox |
-| `chief.s10` | Internal | `tickora_internal_user` | `/tickora/sectors/s10/chief` | Sector chief — manage `s10` users, reassign, audit |
-| `member.s10` | Internal | `tickora_internal_user` | `/tickora/sectors/s10/member` | Sector operator |
-| `member.s2` | Internal | `tickora_internal_user` | `/tickora/sectors/s2/member` | Cross-sector visibility tests |
-| `beneficiary` | Internal | `tickora_internal_user` | `/tickora/beneficiaries/internal` | Internal requester |
-| `external.user` | External | `tickora_external_user` | `/tickora/beneficiaries/external` | External requester (email-matched identity) |
-
-### Seeded sectors
-
-| Code | Name |
+| Area | Current gate |
 |---|---|
-| `s1` | Service Desk |
-| `s2` | Network Operations |
-| `s3` | Infrastructure |
-| `s4` | Applications |
-| `s5` | Security |
-| `s10` | Field Operations |
+| Admin overview | `require_admin()`; this requires `/tickora` root group. |
+| User list | Admin or sector chief. Chiefs are scoped to users in managed sectors. |
+| User get/update/reset-password | Admin or sector chief scoped to managed users. |
+| Sectors, memberships, metadata keys, categories, subcategories, system settings | `require_admin()` root group. |
+| Widget definitions list | Authenticated and role-filtered by `required_roles`. |
+| Widget definition upsert/sync | `principal.is_admin`. |
+| Tasks | Admin only. |
 
-Additional sectors (`s6`–`s9`) are provisioned in Keycloak by the bootstrap
-script and can be activated by creating database rows; the group tree is
-dynamic.
+Critical gap: chief-scoped user update must not be allowed to mutate realm
+roles. Treat role assignment as a separate root-admin operation.
 
----
+## 13. Dashboards And Widgets
 
-## 7. Ticket state machine
+Custom dashboards are intended to be owner-only:
 
-States: `pending`, `assigned_to_sector`, `in_progress`, `done`, `cancelled`.
-There is no longer a separate `closed` state — closing simply lands on
-`done`. The legacy `reopened` state was folded back into `in_progress` to
-keep the transition table small.
+- list/create returns dashboards owned by `principal.user_id`;
+- get/update/delete checks owner and returns `404` on mismatch;
+- widget upsert validates the parent dashboard owner;
+- auto-configure validates the parent dashboard owner;
+- widget catalog is role-filtered.
 
-Actions (with the predicate they ultimately call):
+Known bug: widget delete only validates that the widget belongs to the supplied
+dashboard id. It does not verify that the dashboard belongs to the caller.
 
-| Action | Predicate | Target status |
+Schema reality:
+
+- `custom_dashboards.is_public` still exists in the model. The migration named
+  `drop_is_public_dashboards` is a no-op.
+- `dashboard_shares` was dropped.
+- `user_dashboard_settings` exists, but parts of the API/frontend contract are
+  not fully wired.
+- Unknown widget types can be persisted because the widget type is not a
+  database-enforced foreign key to `widget_definitions`.
+
+## 14. Snippets
+
+Snippets are admin-authored procedures with audience scoping.
+
+Read visibility:
+
+- empty audience means visible to every signed-in user;
+- otherwise at least one audience row must match caller sector, role, or
+  beneficiary type;
+- admin/root users see all snippets;
+- invisible snippets return `404` on direct read.
+
+Writes are admin-only.
+
+## 15. Notifications
+
+| Endpoint | Current gate |
+|---|---|
+| `GET /api/notifications` | Current user's notifications only. |
+| Mark read | Current user's notification rows only. |
+| `POST /api/notifications/stream-ticket` | Authenticated; stores a one-time 30-second Redis ticket containing the raw JWT. |
+| `GET /api/notifications/stream` | Redeems SSE ticket and subscribes to `notifications:{user_id}`. |
+
+SSE ticket warning: the bearer extractor accepts `sse_ticket` on all
+authenticated endpoints. It should be restricted to the stream route or bound
+to path/method.
+
+## 16. Endpoint Gate Summary
+
+The endpoint map currently registers 111 method operations across 87 unique
+URLs. Public endpoints are:
+
+- `GET /health`
+- `GET /liveness`
+- `GET /readiness`
+
+Every `/api/*` handler currently imports and uses `@require_authenticated`.
+Additional gates are service-level and domain-specific:
+
+| Domain | Main service gate |
+|---|---|
+| Tickets | SQL visibility filter for list; `can_view_ticket` for detail; mutation predicates for writes. |
+| Workflow | RBAC predicate plus status logic in `workflow_service`. |
+| Review | Top-level admin/distributor, then downstream workflow/comment gates. |
+| Comments | Comment visibility plus post/edit predicates. |
+| Attachments | Ticket/comment visibility plus uploader/admin delete. |
+| Metadata | Ticket visibility for read, `can_modify_ticket` for write/delete. |
+| Watchers | Ticket visibility; self/admin watcher mutation. |
+| Links | Source ticket modifiable; target ticket visible. |
+| Audit | Global admin/auditor; per-ticket currently too broad. |
+| Admin | Mixed root-admin, `is_admin`, and admin-or-chief gates. |
+| Monitor | Role-aware/global/sector/self gates. |
+| Dashboards | Owner scope, except widget-delete bug. |
+| Endorsements | Active assignee for request; avizator/admin for claim/decision. |
+| Notifications | Current user scope. |
+| Snippets | Audience filters for reads; admin for writes. |
+| Tasks | Admin only. |
+
+## 17. Seed Users
+
+All seeded users use `Tickora123!` in development.
+
+| Username | Roles/groups | Typical use |
 |---|---|---|
-| `assign_sector` | `can_assign_sector` | `assigned_to_sector` |
-| `assign_to_me` | `can_assign_to_me` | `in_progress` |
-| `assign_to_user` / `reassign` | `can_assign_to_user` | `in_progress` |
-| `unassign` | active assignee, chief, or admin | `assigned_to_sector` |
-| `mark_done` / `close` | `can_drive_status` (active assignee) | `done` |
-| `reopen` | `can_drive_status` | `in_progress` |
-| `cancel` | `can_cancel` | `cancelled` |
+| `admin` | `/tickora`, `tickora_admin` | Root platform admin. |
+| `bogdan` | `/tickora`, `tickora_admin` | Seed super-admin subject in default config. |
+| `auditor` | `tickora_auditor`, `tickora_internal_user` | Global audit/read-only review. |
+| `distributor` | `tickora_distributor`, `tickora_internal_user` | Intake triage and routing. |
+| `avizator` | `tickora_avizator`, `tickora_internal_user` | Endorsement inbox. |
+| `chief.s10` | `/tickora/sectors/s10`, `tickora_internal_user` | Sector chief for `s10`. |
+| `member.s10` | `/tickora/sectors/s10/member`, `tickora_internal_user` | Sector operator. |
+| `member.s2` | `/tickora/sectors/s2/member`, `tickora_internal_user` | Cross-sector test user. |
+| `beneficiary` | `tickora_internal_user`, internal beneficiary group | Internal requester. |
+| `external.user` | `tickora_external_user`, external beneficiary group | External requester. |
 
-Each transition is implemented as a single atomic `UPDATE … WHERE … RETURNING`
-in `workflow_service`, so concurrent attempts collapse to exactly one
-winner. The losing call sees `rowcount == 0` and raises
-`ConcurrencyConflictError`.
+## 18. Known Authorization Defects
 
----
+Fix these before treating the matrix as production-grade:
 
-## 8. Authorization-related audit events
+1. Sector chiefs can potentially grant privileged realm roles through the user
+   update path.
+2. Ticket audit is exposed to ordinary ticket viewers.
+3. Local inactive users are not rejected during principal hydration.
+4. `assign_to_me` and generic status changes accept too many status paths.
+5. Assignment alone is not visibility; assignment services must prevent
+   non-visible assignees.
+6. Attachment registration does not fully authorize target comments.
+7. Dashboard widget delete lacks parent owner verification.
+8. Private comment notifications can leak activity to unprivileged watchers.
+9. SSE tickets can authenticate one arbitrary request within their TTL.
+10. Endorsement direct targets are not role-validated and claim is not atomic.
+11. Admin gates are inconsistent between `/tickora` root group and
+    `tickora_admin` role.
 
-`access_denied` is emitted whenever a service call short-circuits with
-`PermissionDeniedError` and a target entity can be identified. The audit row
-carries the failing rule name (e.g. `rule: can_post_private_comment`), the
-ticket id, and the actor. Auditors can query these via `GET /api/audit?action=access_denied`.
+## 19. Regression Tests To Add
 
-Successful writes are audited too: `ticket_created`, `ticket_updated`,
-`ticket_assigned_to_sector`, `ticket_assigned_to_user`, `ticket_reassigned`,
-`ticket_unassigned`, `ticket_marked_done`, `ticket_closed`,
-`ticket_cancelled`, `ticket_reopened`, `ticket_priority_changed`,
-`ticket_reviewed`, `ticket_deleted`, `comment_created`, `comment_deleted`,
-`attachment_uploaded`, `attachment_deleted`, `ticket_metadata_set`,
-`ticket_metadata_deleted`, `config_changed`. Each row records actor user id +
-username, request IP (via `request_metadata.client_ip` — trusted-proxy
-aware), user-agent, the old/new value snapshot, and the correlation id of
-the request that produced it.
-
----
-
-## 9. Operational notes
-
-- **Private comments and private attachments must never be exposed to
-  beneficiaries.** Three layers of enforcement; auditors are the only
-  read-only role with full visibility.
-- **404 vs 403.** Unauthorized reads of a specific ticket return `404` so
-  existence cannot be enumerated. Authorization failures on writes return
-  `403` with the rule name in the body.
-- **Sector chief admin scope.** A chief can manage users in their sectors
-  via the admin UI (list/get/update/reset-password), but cannot administer
-  global config (sectors, metadata keys, categories, widget catalogue, etc.).
-- **External requester identity.** `can_close` / `can_reopen` match by email
-  when `beneficiary_type == 'external'`. If a recipient's email rotates,
-  consider pinning `beneficiary_user_id` on first contact instead.
-- **`SUPER_ADMIN_SUBJECTS`** (env-driven, comma-separated Keycloak subject
-  UUIDs) gates hard delete (`can_delete_ticket`). Default empty in dev;
-  rotate during deploy.
+- Matrix tests for every persona against every workflow action.
+- Ticket audit negative tests for beneficiary, external requester, watcher, and
+  unrelated sector member.
+- Chief user-management tests proving chiefs cannot add `tickora_admin`,
+  `tickora_auditor`, `tickora_distributor`, or root-equivalent groups.
+- Disabled-user authentication test.
+- Attachment registration tests around private/deleted comments.
+- Dashboard widget delete IDOR test.
+- SSE ticket path binding test.
+- Endorsement target role and concurrent claim tests.
