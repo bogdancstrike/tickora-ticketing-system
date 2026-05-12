@@ -1,6 +1,5 @@
 """Admin HTTP endpoints."""
 from flask import request as flask_request
-from sqlalchemy import select
 
 from src.common.db import get_db
 from src.common.errors import PermissionDeniedError, ValidationError
@@ -168,8 +167,7 @@ def upsert_system_setting(app, operation, request, *, principal: Principal, **kw
 @require_authenticated
 def list_widget_definitions(app, operation, request, *, principal: Principal, **kwargs):
     with get_db() as db:
-        stmt = select(WidgetDefinition).order_by(WidgetDefinition.type)
-        items = list(db.scalars(stmt))
+        items = dashboard_service.list_widget_definitions(db, principal)
         return ({"items": [_serialize_widget_definition(i) for i in items]}, 200)
 
 

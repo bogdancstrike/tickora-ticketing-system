@@ -34,6 +34,37 @@ def _check_dashboard_access(p: Principal) -> None:
     pass
 
 
+def list_widget_definitions(db: Session, p: Principal) -> list[dict[str, Any]]:
+    """Return only widget definitions the calling principal is allowed to use.
+
+    Admins and auditors see the full catalogue (they need it for demos and
+    inspection). Everyone else sees only widgets where ``required_roles`` is
+    null/empty (universally available) or where the principal holds at least
+    one of the listed roles.
+
+    Sector chiefs get the same access as internal users — they carry
+    ``tickora_internal_user`` in their global roles so the role gate works
+    without a separate chief-specific role.
+    """
+    stmt = (
+        select(WidgetDefinition)
+        .where(WidgetDefinition.is_active.is_(True))
+        .order_by(WidgetDefinition.display_name)
+    )
+    rows = list(db.scalars(stmt))
+
+    if p.is_admin or p.is_auditor:
+        return rows
+
+    def _can_use(wd: WidgetDefinition) -> bool:
+        required = wd.required_roles or []
+        if not required:
+            return True
+        return p.has_any(required)
+
+    return [wd for wd in rows if _can_use(wd)]
+
+
 def list_dashboards(db: Session, p: Principal) -> list[dict[str, Any]]:
     """List all dashboards owned by the given principal."""
     _check_dashboard_access(p)
@@ -231,7 +262,7 @@ def sync_widget_catalogue(db: Session) -> None:
     """
     catalogue = [
         ("ticket_list", "Ticket List", "Versatile ticket list with customizable filters", "UnorderedListOutlined", []),
-        ("monitor_kpi", "KPI Statistic", "Key performance indicators and metrics", "BarChartOutlined", []),
+        ("monitor_kpi", "KPI Statistic", "Key performance indicators and metrics", "BarChartOutlined", ["tickora_admin", "tickora_auditor", "tickora_distributor", "tickora_internal_user"]),
         ("audit_stream", "Audit Log", "Real-time stream of system events", "AuditOutlined", ["tickora_admin", "tickora_auditor", "tickora_distributor"]),
         ("profile_card", "My Profile", "Quick access to your user profile and settings", "UserOutlined", []),
         ("recent_comments", "Recent Comments", "Latest updates on tickets you follow", "MessageOutlined", []),
@@ -251,7 +282,7 @@ def sync_widget_catalogue(db: Session) -> None:
         ("my_mentions", "My Mentions", "Comments where you were @mentioned", "BellOutlined", []),
         ("my_assigned", "My Assigned", "Tickets currently assigned to you", "UserOutlined", ["tickora_internal_user", "tickora_distributor", "tickora_admin"]),
         ("my_requests", "My Requests", "Tickets where you're the requester or beneficiary", "SendOutlined", []),
-        ("linked_tickets", "Linked Tickets", "Parent / child / blocked-by relationships involving you", "LinkOutlined", []),
+        ("linked_tickets", "Linked Tickets", "Parent / child / blocked-by relationships involving you", "LinkOutlined", ["tickora_admin", "tickora_auditor", "tickora_distributor", "tickora_internal_user"]),
         # ── Operations ───────────────────────────────────────────────────
         ("task_health", "Task Health", "Counts of running / pending / failed background tasks", "DatabaseOutlined", ["tickora_admin"]),
         ("recent_failures", "Recent Task Failures", "Most recent failed background-task rows", "ExclamationCircleOutlined", ["tickora_admin"]),
@@ -405,7 +436,7 @@ def _recipe_chief(sector_code: str) -> list[dict[str, Any]]:
         {"type": "stale_tickets",       "size": "md",   "config": {**cfg, "hours": 24}},
         {"type": "bottleneck_analysis", "size": "wide", "config": {**cfg, "days": 14}},
         {"type": "sector_stats",        "size": "md",   "config": cfg},
-        {"type": "audit_stream",        "size": "md",   "config": {"sector_code": sector_code, "limit": 20}},
+        {"type": "my_assigned",         "size": "md",   "config": cfg},
     ]
 
 
@@ -518,8 +549,25 @@ def auto_configure_dashboard(db: Session, p: Principal, dashboard_id: str, mode:
     for w in watcher_placed:
         w["y"] += recipe_max_y
 
-    # Step 4: persist.
+    # Pre-load the role catalogue so we can filter widgets the principal
+    # isn't allowed to use without hitting the DB per widget.
+    all_defs: dict[str, WidgetDefinition] = {
+        wd.type: wd for wd in db.scalars(select(WidgetDefinition)).all()
+    }
+
+    def _principal_can_use(widget_type: str) -> bool:
+        if p.is_admin or p.is_auditor:
+            return True
+        wd = all_defs.get(widget_type)
+        if wd is None:
+            return True  # unknown type — soft-pass, let DB constraints decide
+        required = wd.required_roles or []
+        return not required or p.has_any(required)
+
+    # Step 4: persist (only widgets the principal is authorised to use).
     for w in placed + watcher_placed:
+        if not _principal_can_use(w["type"]):
+            continue
         db.add(DashboardWidget(
             dashboard_id=d.id,
             type=w["type"],
