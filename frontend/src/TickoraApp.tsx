@@ -8,7 +8,7 @@ import {
 import {
   LineChartOutlined, UnorderedListOutlined, CheckSquareOutlined, AuditOutlined, SettingOutlined,
   BgColorsOutlined, MenuFoldOutlined, MenuUnfoldOutlined, UserOutlined, LogoutOutlined,
-  IdcardOutlined, AppstoreOutlined, MenuOutlined, SafetyCertificateOutlined,
+  IdcardOutlined, AppstoreOutlined, MenuOutlined, SafetyCertificateOutlined, ReadOutlined,
 } from '@ant-design/icons'
 import { useQuery, QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { useKeycloak } from '@react-keycloak/web'
@@ -24,6 +24,7 @@ import { DashboardPage } from '@/pages/DashboardPage'
 import { ProfilePage } from '@/pages/ProfilePage'
 import { AdminPage } from '@/pages/AdminPage'
 import { AvizatorPage } from '@/pages/AvizatorPage'
+import { ProceduresPage } from '@/pages/ProceduresPage'
 import { RequireRole } from '@/auth/RequireRole'
 import { NotificationDropdown } from '@/components/common/NotificationDropdown'
 import { LanguageSwitcher } from '@/components/common/LanguageSwitcher'
@@ -64,6 +65,9 @@ const NAV_ITEMS = [
     roles: [ROLE_ADMIN, ROLE_AVIZATOR],
     section: 'ticketing',
   },
+
+  // Procedures (visible to all authenticated users)
+  { key: '/procedures', labelKey: 'nav.snippets', icon: <ReadOutlined />, section: 'ticketing' },
 
   // Monitoring section
   { key: '/monitor', labelKey: 'nav.monitor', icon: <LineChartOutlined />, section: 'monitoring' },
@@ -347,7 +351,8 @@ function Shell() {
               <Route path="/dashboard" element={<DashboardPage />} />
               <Route path="/tickets"   element={<TicketsPage />} />
               <Route path="/tickets/:ticketId" element={<TicketDetailPage />} />
-              <Route path="/create"    element={<CreateTicketPage />} />
+              <Route path="/create"      element={<CreateTicketPage />} />
+              <Route path="/procedures" element={<ProceduresPage />} />
               <Route path="/profile"   element={<ProfilePage />} />
               <Route
                 path="/review"

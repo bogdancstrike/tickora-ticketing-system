@@ -235,7 +235,7 @@ def ensure_api_service_account_access(kc: KeycloakAdmin, *, api_uuid: str) -> No
     if not realm_management_uuid:
         raise RuntimeError("realm-management client not found")
     service_account = kc.get_client_service_account_user(api_uuid)
-    wanted = ("query-groups", "query-users", "view-users", "view-realm")
+    wanted = ("query-groups", "query-users", "view-users", "view-realm", "manage-users")
     roles = []
     for role in wanted:
         try:

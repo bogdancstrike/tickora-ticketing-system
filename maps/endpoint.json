@@ -896,6 +896,46 @@
       "request_method": ["POST"],
       "api_url": "/api/notifications/<notification_id>/mark-read",
       "exec_method": { "module_name": "api.notifications", "method_name": "mark_notification_read" }
+    },
+    {
+      "namespace": "tickora",
+      "operation_name": "snippets_list",
+      "model_name": "Empty",
+      "request_method": ["GET"],
+      "api_url": "/api/snippets",
+      "exec_method": { "module_name": "api.snippets", "method_name": "list_snippets" }
+    },
+    {
+      "namespace": "tickora",
+      "operation_name": "snippets_get",
+      "model_name": "Empty",
+      "request_method": ["GET"],
+      "api_url": "/api/snippets/<snippet_id>",
+      "exec_method": { "module_name": "api.snippets", "method_name": "get_snippet" }
+    },
+    {
+      "namespace": "tickora",
+      "operation_name": "snippets_create",
+      "model_name": "Empty",
+      "request_method": ["POST"],
+      "api_url": "/api/snippets",
+      "exec_method": { "module_name": "api.snippets", "method_name": "create_snippet" }
+    },
+    {
+      "namespace": "tickora",
+      "operation_name": "snippets_update",
+      "model_name": "Empty",
+      "request_method": ["PATCH"],
+      "api_url": "/api/snippets/<snippet_id>",
+      "exec_method": { "module_name": "api.snippets", "method_name": "update_snippet" }
+    },
+    {
+      "namespace": "tickora",
+      "operation_name": "snippets_delete",
+      "model_name": "Empty",
+      "request_method": ["DELETE"],
+      "api_url": "/api/snippets/<snippet_id>",
+      "exec_method": { "module_name": "api.snippets", "method_name": "delete_snippet" }
     }
   ]
 }

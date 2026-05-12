@@ -116,8 +116,9 @@ export const updateAdminUser = async (
   return data
 }
 
-export const resetAdminPassword = async (userId: string, password: string): Promise<void> => {
-  await apiClient.post(`/api/admin/users/${userId}/reset-password`, { password })
+export const resetAdminPassword = async (userId: string, reason?: string): Promise<{ temporary_password: string }> => {
+  const { data } = await apiClient.post(`/api/admin/users/${userId}/reset-password`, { reason: reason || undefined })
+  return data
 }
 
 export const listAdminSectors = async (): Promise<{ items: AdminSector[] }> => {

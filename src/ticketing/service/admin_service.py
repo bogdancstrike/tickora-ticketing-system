@@ -203,24 +203,39 @@ def update_user(db: Session, principal: Principal, user_id: str, payload: dict[s
     return new
 
 
-def reset_password(db: Session, principal: Principal, user_id: str, password: str) -> None:
+def reset_password(db: Session, principal: Principal, user_id: str, reason: str | None = None) -> str:
+    """Generate a random temporary password, push it to Keycloak, and return it so the
+    caller can display it once to the admin performing the reset.
+
+    Unlike other Keycloak operations this one raises on failure — a silent
+    swallow here would return a password to the admin that was never set.
+    """
+    import secrets
+    import string
+
     require_admin_or_chief(db, principal, user_id)
     user = db.get(User, user_id)
     if user is None:
         raise NotFoundError("user not found")
 
-    _try_keycloak(
-        lambda kc: kc.reset_password(user.keycloak_subject, password, temporary=True),
-        "reset_password",
-    )
+    alphabet = string.ascii_letters + string.digits + "!@#$%^&*"
+    password = "".join(secrets.choice(alphabet) for _ in range(16))
+
+    # Propagate the exception so the caller gets a 500 instead of a phantom success.
+    KeycloakAdminClient.get().reset_password(user.keycloak_subject, password, temporary=True)
+
+    meta: dict = {"operation": "admin_reset_password"}
+    if reason:
+        meta["reason"] = reason.strip()[:500]
     audit_service.record(
         db,
         actor=principal,
         action=events.CONFIG_CHANGED,
         entity_type="user",
         entity_id=user.id,
-        metadata={"operation": "admin_reset_password"},
+        metadata=meta,
     )
+    return password
 
 
 def require_admin_or_chief(db: Session, principal: Principal, target_user_id: str) -> None:

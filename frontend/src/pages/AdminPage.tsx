@@ -250,18 +250,47 @@ function UsersTab() {
     onSuccess: () => { message.success('User updated'); qc.invalidateQueries({ queryKey: ['adminUsers'] }) },
   })
   const resetPwd = useMutation({
-    mutationFn: (id: string) => resetAdminPassword(id, 'Parola123@'),
-    onSuccess: () => message.success('Password reset to Parola123@ (temporary)'),
+    mutationFn: ({ id, reason }: { id: string; reason?: string }) => resetAdminPassword(id, reason),
     onError: (e: any) => message.error(e.response?.data?.error || 'Reset failed'),
   })
 
   const handleResetPassword = (u: AdminUser) => {
+    let reason = ''
     Modal.confirm({
       title: `Reset password for ${u.username || u.email}?`,
-      content: 'This will set the password to "Parola123@" and force the user to change it on their next login.',
+      content: (
+        <div style={{ marginTop: 8 }}>
+          <p style={{ marginBottom: 8 }}>A random temporary password will be generated. The user must change it on next login.</p>
+          <Input.TextArea
+            placeholder="Reason (optional)"
+            rows={2}
+            onChange={(e) => { reason = e.target.value }}
+          />
+        </div>
+      ),
       okText: 'Reset Password',
       okType: 'danger',
-      onOk: () => resetPwd.mutateAsync(u.id),
+      onOk: async () => {
+        const result = await resetPwd.mutateAsync({ id: u.id, reason: reason || undefined })
+        Modal.success({
+          title: 'Password reset',
+          content: (
+            <div>
+              <p>Temporary password for <strong>{u.username || u.email}</strong>:</p>
+              <Input value={result.temporary_password} readOnly
+                style={{ fontFamily: 'monospace', marginTop: 8 }}
+                addonAfter={
+                  <Button size="small" type="link" onClick={() => {
+                    navigator.clipboard.writeText(result.temporary_password)
+                    message.success('Copied')
+                  }}>Copy</Button>
+                }
+              />
+              <p style={{ marginTop: 8, color: '#888', fontSize: 12 }}>Share this securely with the user. It cannot be retrieved again.</p>
+            </div>
+          ),
+        })
+      },
     })
   }
 

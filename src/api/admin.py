@@ -48,13 +48,15 @@ def update_user(app, operation, request, *, principal: Principal, **kwargs):
 
 @require_authenticated
 def reset_password(app, operation, request, *, principal: Principal, **kwargs):
+    from keycloak.exceptions import KeycloakError
     user_id = kwargs.get("user_id") or flask_request.view_args.get("user_id")
-    password = _payload().get("password")
-    if not password:
-        raise ValidationError("password is required")
-    with get_db() as db:
-        admin_service.reset_password(db, principal, user_id, password)
-        return ({"status": "success"}, 200)
+    reason = (_payload().get("reason") or "").strip() or None
+    try:
+        with get_db() as db:
+            password = admin_service.reset_password(db, principal, user_id, reason=reason)
+            return ({"status": "success", "temporary_password": password}, 200)
+    except KeycloakError as exc:
+        raise ValidationError(f"Keycloak rejected the password reset: {exc.error_message}") from exc
 
 
 @require_authenticated

@@ -19,11 +19,11 @@ class KeycloakAdminClient:
 
     def __init__(self) -> None:
         conn = KeycloakOpenIDConnection(
-            server_url    = Config.KEYCLOAK_SERVER_URL,
-            realm_name    = Config.KEYCLOAK_REALM,
-            client_id     = Config.KEYCLOAK_API_CLIENT_ID,
-            client_secret = Config.KEYCLOAK_API_CLIENT_SECRET,
-            verify        = True,
+            server_url         = Config.KEYCLOAK_SERVER_URL,
+            realm_name         = Config.KEYCLOAK_REALM,
+            client_id          = Config.KEYCLOAK_API_CLIENT_ID,
+            client_secret_key  = Config.KEYCLOAK_API_CLIENT_SECRET,
+            verify             = True,
         )
         self._kc = KeycloakAdmin(connection=conn)
 
@@ -47,11 +47,14 @@ class KeycloakAdminClient:
         self._kc.update_user(user_id=user_id, payload={"enabled": enabled})
 
     def reset_password(self, user_id: str, password: str, *, temporary: bool = True) -> None:
-        """Reset user password and force update on next login if temporary."""
+        """Reset user password.
+
+        Keycloak's set_user_password with temporary=True natively adds the
+        UPDATE_PASSWORD required action, so no separate update_user call is
+        needed — and that call is the source of intermittent failures because
+        it overwrites all existing required actions.
+        """
         self._kc.set_user_password(user_id, password, temporary=temporary)
-        if temporary:
-            # Force update password action
-            self._kc.update_user(user_id, payload={"requiredActions": ["UPDATE_PASSWORD"]})
 
     def get_user_groups(self, user_id: str) -> list[dict]:
         return self._kc.get_user_groups(user_id=user_id)

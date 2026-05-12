@@ -310,6 +310,26 @@
     "language": "Comută între engleză și română de aici. Alegerea ta e reținută.",
     "info_button": "Arată tutorialul paginii"
   },
+  "procedures": {
+    "title": "Proceduri",
+    "new": "Procedură nouă",
+    "edit": "Editează procedura",
+    "empty": "Nicio procedură disponibilă",
+    "select_hint": "Selectează o procedură din listă",
+    "body": "Conținut (Markdown)",
+    "title_required": "Titlul este obligatoriu",
+    "body_required": "Conținutul este obligatoriu",
+    "audiences_label": "Vizibil pentru (gol = toți)",
+    "audiences_hint": "Fără restricții înseamnă că toți utilizatorii autentificați pot vedea procedura.",
+    "audience_kind": "Tip",
+    "audience_value": "Valoare",
+    "add_audience": "Adaugă restricție de audiență",
+    "visible_to": "Vizibil pentru",
+    "delete_confirm": "Ștergi această procedură?",
+    "created": "Procedură creată",
+    "updated": "Procedură actualizată",
+    "deleted": "Procedură ștearsă"
+  },
   "errors": {
     "generic": "Ceva nu a mers bine.",
     "rate_limited": "Prea multe solicitări, te rog mai încet.",

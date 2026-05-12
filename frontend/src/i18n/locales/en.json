@@ -310,6 +310,26 @@
     "language": "Switch between English and Romanian here. Your choice is remembered.",
     "info_button": "Show page tour"
   },
+  "procedures": {
+    "title": "Procedures",
+    "new": "New procedure",
+    "edit": "Edit procedure",
+    "empty": "No procedures available",
+    "select_hint": "Select a procedure from the list",
+    "body": "Body (Markdown)",
+    "title_required": "Title is required",
+    "body_required": "Body is required",
+    "audiences_label": "Visible to (leave empty = everyone)",
+    "audiences_hint": "Zero audience rows means all authenticated users can see this procedure.",
+    "audience_kind": "Kind",
+    "audience_value": "Value",
+    "add_audience": "Add audience restriction",
+    "visible_to": "Visible to",
+    "delete_confirm": "Delete this procedure?",
+    "created": "Procedure created",
+    "updated": "Procedure updated",
+    "deleted": "Procedure deleted"
+  },
   "errors": {
     "generic": "Something went wrong.",
     "rate_limited": "Too many requests, please slow down.",
