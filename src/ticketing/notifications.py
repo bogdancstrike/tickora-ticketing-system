@@ -6,8 +6,9 @@ from framework.commons.logger import logger
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from src.common.db import get_db
+from src.common.db import get_db, enqueue_after_commit
 from src.config import Config
+from src.iam.keycloak_admin import KeycloakAdminClient
 from src.tasking.registry import register_task
 from src.ticketing.models import Beneficiary, Notification, Ticket, TicketAssignee, SectorMembership, Sector
 from src.iam.models import User as IAMUser
@@ -382,10 +383,13 @@ def _create_in_app_notification(
     )
     db.add(notification)
     logger.info("notification created", extra={"user_id": user_id, "type": type, "ticket_id": ticket_id})
-    
-    # Trigger SSE publish (to be implemented)
-    _publish_to_sse(user_id, notification)
-    
+
+    # Capture fields now (server_default created_at not yet set) and publish after commit.
+    _nid, _uid, _ntype, _ntitle, _nbody, _tid = (
+        notification.id, user_id, type, title, body, ticket_id
+    )
+    enqueue_after_commit(lambda: _publish_to_sse_raw(_uid, _nid, _ntype, _ntitle, _nbody, _tid))
+
     return notification
 
 
@@ -438,31 +442,29 @@ def _assignee_user_ids(db: Session, ticket: Ticket) -> set[str]:
         user_ids.add(ticket.assignee_user_id)
     return user_ids
 
-def _publish_to_sse(user_id: str, notification: Notification):
-    """
-    Publish notification to Redis for SSE delivery.
-
-    Serializes the notification data and publishes it to a Redis channel specific
-    to the user (notifications:{user_id}). This enables real-time delivery to
-    connected frontend clients via Server-Sent Events.
-
-    Args:
-        user_id: The ID of the user to receive the notification.
-        notification: The Notification model instance to publish.
-    """
+def _publish_to_sse_raw(
+    user_id: str,
+    notification_id: str,
+    type: str,
+    title: str,
+    body: str,
+    ticket_id: Optional[str],
+) -> None:
+    """Publish a notification payload to Redis after the DB transaction commits."""
     try:
         from src.common.redis_client import get_redis
         redis = get_redis()
-        channel = f"notifications:{user_id}"
+        if not redis:
+            return
         data = {
-            "id": notification.id,
-            "type": notification.type,
-            "title": notification.title,
-            "body": notification.body,
-            "ticket_id": notification.ticket_id,
-            "created_at": datetime.now(timezone.utc).isoformat()
+            "id": notification_id,
+            "type": type,
+            "title": title,
+            "body": body,
+            "ticket_id": ticket_id,
+            "created_at": datetime.now(timezone.utc).isoformat(),
         }
-        redis.publish(channel, json_dumps(data))
+        redis.publish(f"notifications:{user_id}", json_dumps(data))
     except Exception as e:
         logger.error("failed to publish to sse", extra={"error": str(e)})
 

@@ -3,6 +3,7 @@ import { Badge, Button, Dropdown, Empty, Space, Tag, Tooltip, Typography, theme 
 import { BellOutlined, CheckOutlined, ThunderboltOutlined } from '@ant-design/icons'
 import { useNavigate } from 'react-router-dom'
 import { useSessionStore } from '@/stores/sessionStore'
+import { useSoundStore } from '@/stores/soundStore'
 import { API_BASE, getToken } from '@/api/client'
 
 export interface NotificationItem {
@@ -51,6 +52,7 @@ export function NotificationDropdown() {
   const [api, contextHolder] = notification.useNotification()
 
   const alertSound = useMemo(() => new Audio('/alert.mp3'), [])
+  const soundEnabled = useSoundStore((s) => s.soundEnabled)
 
   // Initial load: fetch persisted notifications via REST
   useEffect(() => {
@@ -104,8 +106,11 @@ export function NotificationDropdown() {
             setNotifications((prev) => [{ ...data, read: false }, ...prev].slice(0, 25))
             setUnreadCount((prev) => prev + 1)
 
-            // Alert for new tickets (Distributors/Admins)
-            if (data.type === 'ticket_created') {
+            // Alert for new tickets (Distributors/Admins) when sound is enabled
+            const canHearAlert = soundEnabled && (
+              user?.roles.includes('tickora_admin') || user?.roles.includes('tickora_distributor')
+            )
+            if (data.type === 'ticket_created' && canHearAlert) {
               alertSound.play().catch(() => { /* user interaction required for some browsers */ })
               api.info({
                 message: data.title || 'New Ticket',
@@ -140,7 +145,7 @@ export function NotificationDropdown() {
       cancelled = true
       if (es) es.close()
     }
-  }, [user?.id, alertSound, api, navigate])
+  }, [user?.id, user?.roles, alertSound, soundEnabled, api, navigate])
 
   const markAllRead = useCallback(async () => {
     setNotifications((prev) => prev.map((n) => ({ ...n, read: true })))

@@ -510,6 +510,8 @@ export const listAudit = async (params: {
   action?: string
   actor_user_id?: string
   actor_username?: string
+  entity_type?: string
+  entity_id?: string
   ticket_id?: string
   correlation_id?: string
   created_after?: string

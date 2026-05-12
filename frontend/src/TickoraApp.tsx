@@ -9,10 +9,12 @@ import {
   LineChartOutlined, UnorderedListOutlined, CheckSquareOutlined, AuditOutlined, SettingOutlined,
   BgColorsOutlined, MenuFoldOutlined, MenuUnfoldOutlined, UserOutlined, LogoutOutlined,
   IdcardOutlined, AppstoreOutlined, MenuOutlined, SafetyCertificateOutlined, ReadOutlined,
+  SoundOutlined, MutedOutlined,
 } from '@ant-design/icons'
 import { useQuery, QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { useKeycloak } from '@react-keycloak/web'
 import { useThemeStore } from '@/stores/themeStore'
+import { useSoundStore } from '@/stores/soundStore'
 import { useSessionStore } from '@/stores/sessionStore'
 import { TicketDetailPage, TicketsPage } from '@/pages/TicketsPage'
 import { AuditExplorerPage } from '@/pages/AuditExplorerPage'
@@ -150,6 +152,9 @@ function AppSidebar() {
   const screens = Grid.useBreakpoint()
   const { visibleItems, menuItems } = useNavigationItems()
   const { mode, toggle } = useThemeStore()
+  const { soundEnabled, toggleSound } = useSoundStore()
+  const user = useSessionStore((s) => s.user)
+  const canHearAlerts = user?.roles.includes('tickora_admin') || user?.roles.includes('tickora_distributor')
 
   const isMobile = !screens.md
   const selectedKey = visibleItems.find((n) => location.pathname.startsWith(n.key))?.key || '/tickets'
@@ -214,6 +219,15 @@ function AppSidebar() {
           <Tooltip title={`Switch to ${mode === 'dark' ? 'light' : 'dark'} mode`}>
             <Button type="text" icon={<BgColorsOutlined />} onClick={toggle} />
           </Tooltip>
+          {canHearAlerts && (
+            <Tooltip title={soundEnabled ? 'Mute ticket alerts' : 'Unmute ticket alerts'}>
+              <Button
+                type="text"
+                icon={soundEnabled ? <SoundOutlined /> : <MutedOutlined />}
+                onClick={toggleSound}
+              />
+            </Tooltip>
+          )}
           <LanguageSwitcher />
         </div>
       </div>

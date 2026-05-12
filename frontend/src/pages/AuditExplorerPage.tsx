@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import dayjs from 'dayjs'
 import {
-  Alert, Button, Drawer, Empty, Flex, Form, Input, Space, Table, Tag, Typography,
+  Alert, Button, Drawer, Empty, Flex, Form, Input, Select, Space, Table, Tag, Typography,
   Descriptions, Card, DatePicker, theme as antTheme,
 } from 'antd'
 import { TicketEvolutionD3 } from '@/components/common/TicketEvolutionD3'
@@ -85,9 +85,19 @@ const ACTION_FILTERS = [
   'ticket_metadata_set', 'ticket_metadata_deleted',
 ].map((v) => ({ text: v, value: v }))
 
+const ENTITY_TYPES = [
+  'ticket', 'user', 'comment', 'attachment', 'snippet',
+  'sector', 'sector_membership', 'category', 'subcategory',
+  'subcategory_field_definition', 'ticket_endorsement', 'ticket_link',
+  'ticket_metadata', 'ticket_watcher', 'metadata_key_definition',
+  'system_setting',
+]
+
 interface AuditFilterState {
   action?: string
   actor_username?: string
+  entity_type?: string
+  entity_id?: string
   ticket_id?: string
   correlation_id?: string
   created_after?: string
@@ -137,8 +147,29 @@ export function AuditExplorerPage() {
     },
     {
       title: 'Entity',
-      width: 180,
-      render: (_, row) => `${row.entity_type}:${row.entity_id || '-'}`,
+      width: 200,
+      render: (_, row) => (
+        <Space size={4} wrap>
+          {row.entity_type && (
+            <Tag
+              color="geekblue"
+              style={{ cursor: 'pointer', fontSize: 11 }}
+              onClick={() => setParams((p) => ({ ...p, entity_type: row.entity_type }))}
+            >
+              {row.entity_type}
+            </Tag>
+          )}
+          <Typography.Text
+            ellipsis
+            style={{ fontSize: 12, maxWidth: 110, cursor: row.entity_id ? 'pointer' : 'default' }}
+            onClick={() => row.entity_id && setParams((p) => ({ ...p, entity_id: row.entity_id! }))}
+          >
+            {row.entity_id || '-'}
+          </Typography.Text>
+        </Space>
+      ),
+      filterDropdown: textFilterDropdown('Entity ID (UUID)'),
+      filteredValue: params.entity_id ? [params.entity_id] : null,
     },
     {
       title: 'Ticket ID',
@@ -173,6 +204,7 @@ export function AuditExplorerPage() {
       }
       next.action = pickFirst('action')
       next.actor_username = pickFirst('actor_username')
+      next.entity_id = pickFirst('entity_id') || pickFirst('Entity')
       next.ticket_id = pickFirst('ticket_id')
       if (s?.order && s.field) {
         next.sort_by = String(s.field)
@@ -225,7 +257,18 @@ export function AuditExplorerPage() {
         <Form layout="inline" onFinish={onFilter}>
           <Form.Item name="q" tooltip="Search ticket ID (UUID) or actor username">
             <Input allowClear placeholder="Quick search · ticket UUID or username"
-                   prefix={<SearchOutlined />} style={{ width: 320 }} />
+                   prefix={<SearchOutlined />} style={{ width: 280 }} />
+          </Form.Item>
+          <Form.Item name="entity_type" label="Entity">
+            <Select
+              allowClear
+              placeholder="All entities"
+              style={{ width: 220 }}
+              options={ENTITY_TYPES.map((e) => ({ value: e, label: e }))}
+              value={params.entity_type || undefined}
+              onChange={(v) => setParams((p) => ({ ...p, entity_type: v || undefined }))}
+              showSearch
+            />
           </Form.Item>
           <Form.Item name="range" label="Date">
             <RangePicker />
@@ -237,8 +280,23 @@ export function AuditExplorerPage() {
             </Space>
           </Form.Item>
         </Form>
-        <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-          Tip: click any column header for column-level sorting and filtering.
+        {(params.entity_type || params.entity_id) && (
+          <Space style={{ marginTop: 8 }} size={4}>
+            <Typography.Text type="secondary" style={{ fontSize: 12 }}>Active:</Typography.Text>
+            {params.entity_type && (
+              <Tag closable color="geekblue" onClose={() => setParams((p) => ({ ...p, entity_type: undefined }))}>
+                type: {params.entity_type}
+              </Tag>
+            )}
+            {params.entity_id && (
+              <Tag closable onClose={() => setParams((p) => ({ ...p, entity_id: undefined }))}>
+                id: {params.entity_id}
+              </Tag>
+            )}
+          </Space>
+        )}
+        <Typography.Text type="secondary" style={{ fontSize: 12, display: 'block', marginTop: 4 }}>
+          Tip: click any entity type tag or ID in the table to filter. Column headers support sorting and per-column search.
         </Typography.Text>
       </Card>
 
