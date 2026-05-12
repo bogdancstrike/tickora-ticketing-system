@@ -156,8 +156,8 @@ def assert_done(db_session: Session, ctx):
     done_comment = db_session.scalar(
         select(TicketComment).where(
             TicketComment.ticket_id == ctx["ticket_id"],
-            TicketComment.comment_type == "system",
-            TicketComment.body == "member changed status from in_progress to done",
+            TicketComment.comment_type == "user_comment",
+            TicketComment.body == "member updated ticket status from in_progress to done",
         )
     )
     assert ticket.status == "done"

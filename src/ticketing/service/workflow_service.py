@@ -83,8 +83,8 @@ def _record_status_change(db, t_id, old, new, p: Principal, reason: str | None =
         ticket_id=t_id,
         author_user_id=p.user_id,
         visibility="public",
-        comment_type="system",
-        body=f"{actor} changed status from {old} to {new}",
+        comment_type="user_comment",
+        body=f"{actor} updated ticket status from {old} to {new}",
     ))
 
 
